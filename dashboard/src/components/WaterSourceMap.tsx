@@ -1,80 +1,92 @@
 import { useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Radio } from 'lucide-react';
 import { WaterSource, waterSources } from '../data/mockData';
 
 const riskStyle = {
-  safe:    { pin: '#22c55e', ring: '#bbf7d0', bg: 'bg-green-50',  text: 'text-green-700',  label: 'Safe'    },
-  warning: { pin: '#f59e0b', ring: '#fde68a', bg: 'bg-amber-50',  text: 'text-amber-700',  label: 'Caution' },
-  danger:  { pin: '#ef4444', ring: '#fecaca', bg: 'bg-red-50',    text: 'text-red-700',    label: 'Danger'  },
+  safe:    { pin: '#22c55e', glow: '#bbf7d0', label: 'Safe',    text: 'text-green-600'  },
+  warning: { pin: '#f59e0b', glow: '#fde68a', label: 'Caution', text: 'text-amber-600'  },
+  danger:  { pin: '#ef4444', glow: '#fecaca', label: 'Danger',  text: 'text-red-600'    },
 };
 
 export default function WaterSourceMap() {
   const [hovered, setHovered] = useState<WaterSource | null>(null);
 
-  const counts = {
-    safe:    waterSources.filter(s => s.risk === 'safe').length,
-    warning: waterSources.filter(s => s.risk === 'warning').length,
-    danger:  waterSources.filter(s => s.risk === 'danger').length,
-  };
-
   return (
-    <div className="card">
+    <div className="bg-white rounded-2xl border border-slate-100 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="section-title mb-0">Monitoring Stations</h2>
-        <div className="flex gap-2 text-xs font-semibold">
-          <span className="badge-safe">{counts.safe} Safe</span>
-          {counts.warning > 0 && <span className="badge-warning">{counts.warning} Caution</span>}
-          {counts.danger  > 0 && <span className="badge-danger">{counts.danger} Danger</span>}
+        <div>
+          <h2 className="text-sm font-bold text-slate-700">Monitoring Stations</h2>
+          <p className="text-xs text-slate-400">Nairobi region · {waterSources.length} active stations</p>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-green-600 font-semibold">
+          <Radio size={12} className="live-dot" />
+          Live
         </div>
       </div>
 
-      {/* Map area — stylised SVG Kenya outline */}
-      <div className="relative rounded-xl overflow-hidden bg-gradient-to-br from-blue-50 to-teal-50 border border-blue-100" style={{ height: 260 }}>
-        {/* Grid lines (decorative) */}
-        <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
-          {[20,40,60,80].map(y => <line key={y} x1="0" y1={`${y}%`} x2="100%" y2={`${y}%`} stroke="#0ea5e9" strokeWidth="1" strokeDasharray="4 4" />)}
-          {[20,40,60,80].map(x => <line key={x} x1={`${x}%`} y1="0" x2={`${x}%`} y2="100%" stroke="#0ea5e9" strokeWidth="1" strokeDasharray="4 4" />)}
+      {/* Map */}
+      <div
+        className="relative rounded-xl overflow-hidden border border-slate-100"
+        style={{
+          height: 220,
+          background: 'linear-gradient(135deg, #e0f2fe 0%, #e6fff9 50%, #dbeafe 100%)',
+        }}
+      >
+        {/* Subtle grid */}
+        <svg className="absolute inset-0 w-full h-full opacity-30" xmlns="http://www.w3.org/2000/svg">
+          {[20, 40, 60, 80].map(v => (
+            <g key={v}>
+              <line x1="0" y1={`${v}%`} x2="100%" y2={`${v}%`} stroke="#93c5fd" strokeWidth="0.5" strokeDasharray="4 6" />
+              <line x1={`${v}%`} y1="0" x2={`${v}%`} y2="100%" stroke="#93c5fd" strokeWidth="0.5" strokeDasharray="4 6" />
+            </g>
+          ))}
         </svg>
 
-        {/* Location label */}
-        <div className="absolute top-2 left-3 text-[10px] text-blue-400 font-semibold tracking-wide">NAIROBI REGION</div>
+        <span className="absolute top-2 left-3 text-[9px] font-bold text-blue-400 tracking-widest uppercase">Nairobi Region</span>
 
-        {/* Station pins */}
+        {/* Pins */}
         {waterSources.map(source => {
           const s = riskStyle[source.risk];
           const isHovered = hovered?.id === source.id;
+
           return (
             <div
               key={source.id}
-              className="absolute cursor-pointer transform -translate-x-1/2 -translate-y-full"
-              style={{ left: `${source.x}%`, top: `${source.y}%` }}
+              className="absolute cursor-pointer"
+              style={{
+                left: `${source.x}%`,
+                top: `${source.y}%`,
+                transform: 'translate(-50%, -100%)',
+              }}
               onMouseEnter={() => setHovered(source)}
               onMouseLeave={() => setHovered(null)}
             >
-              {/* Pulse ring */}
+              {/* Pulse ring for non-safe */}
               {source.risk !== 'safe' && (
                 <span
-                  className="absolute inline-flex rounded-full opacity-40 live-dot"
+                  className="absolute rounded-full live-dot"
                   style={{
-                    width: 24, height: 24,
-                    background: s.ring,
+                    width: 26, height: 26,
+                    background: s.glow,
+                    opacity: 0.5,
                     top: '50%', left: '50%',
                     transform: 'translate(-50%, -50%)',
                   }}
                 />
               )}
               <MapPin
-                size={24}
+                size={22}
                 fill={s.pin}
-                color={s.pin}
-                className={`drop-shadow transition-transform duration-200 ${isHovered ? 'scale-125' : ''}`}
+                color="#fff"
+                strokeWidth={1.5}
+                className={`drop-shadow-sm transition-transform duration-150 ${isHovered ? 'scale-125' : ''}`}
               />
 
-              {/* Tooltip popup */}
+              {/* Tooltip */}
               {isHovered && (
-                <div className={`absolute z-10 bottom-full mb-2 left-1/2 -translate-x-1/2 w-44 rounded-xl shadow-xl border border-slate-100 p-3 bg-white`}>
-                  <p className="font-semibold text-xs text-slate-800 mb-0.5">{source.name}</p>
-                  <p className="text-[10px] text-slate-500 mb-1.5">{source.location}</p>
+                <div className="absolute z-20 bottom-full mb-2 left-1/2 -translate-x-1/2 w-44 bg-white rounded-xl shadow-2xl border border-slate-100 p-3 pointer-events-none">
+                  <p className="text-xs font-bold text-slate-800 leading-tight mb-0.5">{source.name}</p>
+                  <p className="text-[10px] text-slate-500 mb-2">{source.location}</p>
                   <div className="flex items-center justify-between">
                     <span className={`text-[10px] font-bold ${s.text}`}>{s.label}</span>
                     <span className="text-[10px] text-slate-400">{source.lastUpdated}</span>
@@ -86,14 +98,23 @@ export default function WaterSourceMap() {
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 mt-3 flex-wrap">
-        {(['safe','warning','danger'] as const).map(r => (
-          <div key={r} className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: riskStyle[r].pin }} />
-            <span className="text-xs text-slate-500 capitalize">{riskStyle[r].label}</span>
-          </div>
-        ))}
+      {/* Station list */}
+      <div className="mt-3 space-y-1.5">
+        {waterSources.map(source => {
+          const s = riskStyle[source.risk];
+          return (
+            <div key={source.id} className="flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-slate-50 transition-colors">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.pin }} />
+                <span className="text-xs font-medium text-slate-700">{source.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold ${s.text}`}>{s.label}</span>
+                <span className="text-[10px] text-slate-400">{source.lastUpdated}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
