@@ -20,7 +20,7 @@ function Dashboard() {
   const { theme } = useTheme();
 
   return (
-    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark bg-[#0d1117]' : 'bg-[#F5F7FB]'}`}>
+    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#0A0F14' : '#F7FAFC' }}>
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -29,46 +29,41 @@ function Dashboard() {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-6">
 
-            {/* KPIs */}
             <SummaryStats risk={risk} />
 
-            {/* Sensor readings */}
+            {/* Sensors */}
             <section>
               <div className="flex items-center gap-2.5 mb-3">
-                <h2 className="text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.15em]">Live Sensor Readings</h2>
-                <span className="flex items-center gap-1.5 text-[9px] font-bold text-accent bg-accent/8 dark:bg-accent/15 border border-accent/15 px-2 py-0.5 rounded-md">
-                  <span className="w-1.5 h-1.5 rounded-full bg-accent live-dot" />
+                <h2 className="text-2xs font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-[0.12em]">Live Sensor Readings</h2>
+                <span className="flex items-center gap-1.5 text-[9px] font-bold text-ok px-2 py-0.5 rounded-md" style={{ background: 'rgba(60,191,122,0.08)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
                   Updating
                 </span>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
               </div>
             </section>
 
-            {/* Chart + Risk Gauge */}
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-              <div className="xl:col-span-2">
-                <WaterQualityChart />
-              </div>
+            {/* Chart + Risk */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2"><WaterQualityChart /></div>
               <RiskGauge risk={risk} />
             </div>
 
-            {/* Regional AI Predictions */}
+            {/* AI Predictions */}
             <RegionalPredictions />
 
             {/* Stations + Radar */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <WaterSourceMap />
               <ParameterRadar />
             </div>
 
-            {/* Alerts */}
             <AlertsTable />
 
-            {/* Footer */}
-            <footer className="pb-4 text-center text-[10px] text-gray-300 dark:text-gray-600">
-              Uhai WashWise · Water Quality Intelligence Platform · Real sensors: Temperature &amp; Turbidity · Others simulated for demo
+            <footer className="pb-4 text-center text-2xs text-txt-muted dark:text-txt-dark-muted">
+              Uhai WashWise · Water Quality Intelligence · Real sensors: Temperature &amp; Turbidity · Others simulated
             </footer>
           </div>
         </main>

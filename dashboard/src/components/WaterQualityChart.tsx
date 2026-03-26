@@ -13,30 +13,31 @@ interface ParamDef {
   safeMin: number; safeMax: number; explain: string;
 }
 
+// Blue for baseline, green for safe context in chart
 const PARAMS: ParamDef[] = [
-  { key: 'temperature',     label: 'Temperature',      color: '#0B8ED9', unit: '°C',   safeMin: 15,  safeMax: 30,   explain: 'Should stay between 15°C and 30°C. High temps reduce dissolved oxygen and encourage bacteria.' },
-  { key: 'turbidity',       label: 'Turbidity',        color: '#8b5cf6', unit: 'NTU',  safeMin: 0,   safeMax: 5,    explain: 'Measures water cloudiness. Below 5 NTU is considered safe. Higher values signal contamination.' },
-  { key: 'ph',              label: 'pH Level',         color: '#2BB5A0', unit: 'pH',   safeMin: 6.5, safeMax: 8.5,  explain: 'A healthy range is 6.5 to 8.5. Outside this range the water becomes harmful.' },
-  { key: 'dissolvedOxygen', label: 'Dissolved Oxygen', color: '#22c55e', unit: 'mg/L', safeMin: 6,   safeMax: 14,   explain: 'Below 6 mg/L signals pollution. Fish and aquatic life need oxygen-rich water.' },
-  { key: 'nitrates',        label: 'Nitrates',         color: '#ef4444', unit: 'mg/L', safeMin: 0,   safeMax: 10,   explain: 'Fertiliser runoff raises nitrates. Below 10 mg/L is safe. Higher causes harmful algae blooms.' },
+  { key: 'temperature',     label: 'Temperature',      color: '#0F6E8C', unit: '°C',   safeMin: 15,  safeMax: 30,   explain: 'Should stay between 15–30°C. High temps reduce dissolved oxygen and promote bacteria.' },
+  { key: 'turbidity',       label: 'Turbidity',        color: '#0F6E8C', unit: 'NTU',  safeMin: 0,   safeMax: 5,    explain: 'Water cloudiness. Below 5 NTU is safe. Higher values signal possible contamination.' },
+  { key: 'ph',              label: 'pH Level',         color: '#0F6E8C', unit: 'pH',   safeMin: 6.5, safeMax: 8.5,  explain: 'Healthy range is 6.5–8.5. Outside this range, water becomes harmful to drink.' },
+  { key: 'dissolvedOxygen', label: 'Dissolved Oxygen', color: '#0F6E8C', unit: 'mg/L', safeMin: 6,   safeMax: 14,   explain: 'Below 6 mg/L signals pollution. Aquatic life needs oxygen-rich water to survive.' },
+  { key: 'nitrates',        label: 'Nitrates',         color: '#0F6E8C', unit: 'mg/L', safeMin: 0,   safeMax: 10,   explain: 'From fertiliser runoff. Below 10 mg/L is safe. Higher causes harmful algae blooms.' },
 ];
 
 function ChartTooltip({ active, payload, label, param }: any) {
   if (!active || !payload?.length) return null;
   const val = payload[0].value as number;
-  const inSafe = val >= param.safeMin && val <= param.safeMax;
+  const safe = val >= param.safeMin && val <= param.safeMax;
   return (
-    <div className="bg-white dark:bg-[#161b22] border border-[#E8ECF1] dark:border-[#21262d] rounded-2xl shadow-xl p-4 min-w-[170px]">
-      <p className="text-[11px] text-gray-400 font-medium mb-2">{label}</p>
-      <div className="flex items-baseline gap-1.5 mb-2">
-        <span className="text-xl font-extrabold text-gray-900 dark:text-white">{val}</span>
-        <span className="text-xs text-gray-400">{param.unit}</span>
+    <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-2xl shadow-elevated p-4 min-w-[170px]">
+      <p className="text-2xs text-txt-muted dark:text-txt-dark-muted font-medium mb-2">{label}</p>
+      <div className="flex items-baseline gap-1 mb-2">
+        <span className="text-xl font-extrabold text-txt dark:text-txt-dark">{val}</span>
+        <span className="text-xs text-txt-muted dark:text-txt-dark-muted">{param.unit}</span>
       </div>
-      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold ${
-        inSafe ? 'bg-accent/10 text-accent-dark dark:text-accent' : 'bg-red-500/10 text-red-600 dark:text-red-400'
-      }`}>
-        <span className={`w-2 h-2 rounded-full ${inSafe ? 'bg-accent' : 'bg-red-500'}`} />
-        {inSafe ? 'Within safe range' : 'Outside safe range'}
+      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold ${
+        safe ? 'text-ok' : 'text-err'
+      }`} style={{ background: safe ? 'rgba(60,191,122,0.08)' : 'rgba(232,93,93,0.08)' }}>
+        <span className={`w-2 h-2 rounded-full ${safe ? 'bg-ok' : 'bg-err'}`} />
+        {safe ? 'Within safe range' : 'Outside safe range'}
       </div>
     </div>
   );
@@ -48,29 +49,28 @@ export default function WaterQualityChart() {
   const param = PARAMS.find(p => p.key === selected)!;
   const dk = theme === 'dark';
 
-  const values = timeSeriesData.map(d => (d as any)[selected] as number);
-  const yMin = Math.floor(Math.min(Math.min(...values), param.safeMin) * 0.9);
-  const yMax = Math.ceil(Math.max(Math.max(...values), param.safeMax) * 1.1);
+  const vals = timeSeriesData.map(d => (d as any)[selected] as number);
+  const yMin = Math.floor(Math.min(Math.min(...vals), param.safeMin) * 0.9);
+  const yMax = Math.ceil(Math.max(Math.max(...vals), param.safeMax) * 1.1);
   const ticks = timeSeriesData.filter((_, i) => i % 4 === 0).map(d => d.time);
 
   return (
-    <div className="card p-5">
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
+    <div className="card p-6">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-5">
         <div>
-          <h2 className="text-[15px] font-bold text-gray-900 dark:text-white">Water Quality Trend</h2>
-          <p className="text-[12px] text-gray-400 dark:text-gray-500 mt-0.5">24-hour monitoring data</p>
+          <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Water Quality Trend</h2>
+          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">24-hour monitoring data</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {PARAMS.map(p => (
             <button
               key={p.key}
               onClick={() => setSelected(p.key)}
-              className={`px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all duration-150 ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
                 selected === p.key
-                  ? 'text-white shadow-md'
-                  : 'bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  ? 'bg-primary dark:bg-primary-dark text-white shadow-md shadow-primary/15'
+                  : 'bg-surface-subtle dark:bg-surface-subtle-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-txt dark:hover:text-txt-dark'
               }`}
-              style={selected === p.key ? { background: p.color, boxShadow: `0 4px 12px ${p.color}33` } : undefined}
             >
               {p.label}
             </button>
@@ -78,42 +78,42 @@ export default function WaterQualityChart() {
         </div>
       </div>
 
-      {/* Info banner */}
-      <div className="flex items-start gap-2.5 mb-4 px-4 py-3 rounded-xl bg-brand-light/50 dark:bg-brand/5 border border-brand/10">
-        <span className="text-brand text-sm font-bold mt-0.5">i</span>
-        <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-          <strong className="text-gray-700 dark:text-gray-200">How to read:</strong> {param.explain}{' '}
-          The <span className="text-accent font-bold">green area</span> is the safe zone — readings should stay inside it.
+      {/* Explanation */}
+      <div className="flex items-start gap-2.5 mb-5 px-4 py-3 rounded-xl bg-surface-subtle dark:bg-surface-subtle-dark">
+        <span className="text-sm font-bold text-primary dark:text-primary-dark mt-0.5">i</span>
+        <p className="text-xs text-txt-secondary dark:text-txt-dark-secondary leading-relaxed">
+          <strong className="text-txt dark:text-txt-dark">How to read:</strong> {param.explain}{' '}
+          The <span className="text-ok font-bold">green shaded area</span> is the safe zone.
         </p>
       </div>
 
       <ResponsiveContainer width="100%" height={260}>
         <AreaChart data={timeSeriesData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
           <defs>
-            <linearGradient id={`grad-${selected}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={param.color} stopOpacity={0.18} />
-              <stop offset="100%" stopColor={param.color} stopOpacity={0.02} />
+            <linearGradient id={`cg-${selected}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={dk ? '#1CA9C9' : '#0F6E8C'} stopOpacity={0.15} />
+              <stop offset="100%" stopColor={dk ? '#1CA9C9' : '#0F6E8C'} stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={dk ? '#21262d' : '#F0F2F5'} vertical={false} />
-          <ReferenceArea y1={param.safeMin} y2={param.safeMax} fill={dk ? 'rgba(43,181,160,0.04)' : 'rgba(43,181,160,0.07)'} stroke="none" />
-          <ReferenceLine y={param.safeMax} stroke={dk ? '#1e8a7a' : '#2BB5A0'} strokeDasharray="6 4" strokeWidth={1} label={{ value: `Max ${param.safeMax}${param.unit}`, position: 'insideTopLeft', fontSize: 10, fill: '#2BB5A0' }} />
-          <ReferenceLine y={param.safeMin} stroke={dk ? '#1e8a7a' : '#2BB5A0'} strokeDasharray="6 4" strokeWidth={1} label={{ value: `Min ${param.safeMin}${param.unit}`, position: 'insideBottomLeft', fontSize: 10, fill: '#2BB5A0' }} />
-          <XAxis dataKey="time" ticks={ticks} tick={{ fontSize: 10, fill: dk ? '#484f58' : '#9ca3af', fontWeight: 500 }} axisLine={false} tickLine={false} dy={8} />
-          <YAxis domain={[yMin, yMax]} tick={{ fontSize: 10, fill: dk ? '#484f58' : '#9ca3af', fontWeight: 500 }} axisLine={false} tickLine={false} width={46} />
-          <Tooltip content={(props: any) => <ChartTooltip {...props} param={param} />} cursor={{ stroke: dk ? '#30363d' : '#e5e7eb', strokeWidth: 1 }} />
-          <Area type="monotone" dataKey={selected} stroke={param.color} strokeWidth={2.5} fill={`url(#grad-${selected})`} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff', fill: param.color }} />
+          <CartesianGrid strokeDasharray="3 3" stroke={dk ? '#1F2E3A' : '#E3EEF5'} vertical={false} />
+          <ReferenceArea y1={param.safeMin} y2={param.safeMax} fill={dk ? 'rgba(60,191,122,0.04)' : 'rgba(60,191,122,0.06)'} stroke="none" />
+          <ReferenceLine y={param.safeMax} stroke="#3CBF7A" strokeDasharray="6 4" strokeWidth={1} label={{ value: `Safe max ${param.safeMax}${param.unit}`, position: 'insideTopLeft', fontSize: 10, fill: '#3CBF7A' }} />
+          <ReferenceLine y={param.safeMin} stroke="#3CBF7A" strokeDasharray="6 4" strokeWidth={1} label={{ value: `Safe min ${param.safeMin}${param.unit}`, position: 'insideBottomLeft', fontSize: 10, fill: '#3CBF7A' }} />
+          <XAxis dataKey="time" ticks={ticks} tick={{ fontSize: 10, fill: dk ? '#6B8796' : '#9BB3C0', fontWeight: 500 }} axisLine={false} tickLine={false} dy={8} />
+          <YAxis domain={[yMin, yMax]} tick={{ fontSize: 10, fill: dk ? '#6B8796' : '#9BB3C0', fontWeight: 500 }} axisLine={false} tickLine={false} width={46} />
+          <Tooltip content={(props: any) => <ChartTooltip {...props} param={param} />} cursor={{ stroke: dk ? '#1F2E3A' : '#E3EEF5', strokeWidth: 1 }} />
+          <Area type="monotone" dataKey={selected} stroke={dk ? '#1CA9C9' : '#0F6E8C'} strokeWidth={2.5} fill={`url(#cg-${selected})`} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: dk ? '#121A22' : '#FFFFFF', fill: dk ? '#1CA9C9' : '#0F6E8C' }} />
         </AreaChart>
       </ResponsiveContainer>
 
-      <div className="flex items-center gap-5 mt-3 pt-3 border-t border-[#E8ECF1] dark:border-[#21262d]">
+      <div className="flex items-center gap-5 mt-4 pt-3 border-t border-line dark:border-line-dark">
         <div className="flex items-center gap-2">
-          <span className="w-4 h-0.5 rounded-full" style={{ background: param.color }} />
-          <span className="text-[10px] text-gray-400 font-medium">{param.label}</span>
+          <span className="w-4 h-0.5 rounded-full bg-primary dark:bg-primary-dark" />
+          <span className="text-2xs text-txt-muted dark:text-txt-dark-muted font-medium">{param.label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-4 h-2.5 rounded-sm bg-accent/15 border border-accent/25" />
-          <span className="text-[10px] text-gray-400 font-medium">Safe zone</span>
+          <span className="w-4 h-2.5 rounded-sm" style={{ background: 'rgba(60,191,122,0.12)', border: '1px solid rgba(60,191,122,0.2)' }} />
+          <span className="text-2xs text-txt-muted dark:text-txt-dark-muted font-medium">Safe zone</span>
         </div>
       </div>
     </div>

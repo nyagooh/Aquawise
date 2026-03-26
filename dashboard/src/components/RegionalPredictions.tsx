@@ -5,36 +5,33 @@ import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
 const riskCfg = {
-  safe:    { color: '#2BB5A0', bg: 'bg-accent/10', text: 'text-accent-dark dark:text-accent', label: 'Low Risk' },
-  warning: { color: '#f59e0b', bg: 'bg-amber-500/10', text: 'text-amber-600 dark:text-amber-400', label: 'Medium Risk' },
-  danger:  { color: '#ef4444', bg: 'bg-red-500/10', text: 'text-red-600 dark:text-red-400', label: 'High Risk' },
+  safe:    { color: '#3CBF7A', bg: 'rgba(60,191,122,0.08)',  label: 'Low Risk' },
+  warning: { color: '#F4B740', bg: 'rgba(244,183,64,0.08)',  label: 'Medium Risk' },
+  danger:  { color: '#E85D5D', bg: 'rgba(232,93,93,0.08)',   label: 'High Risk' },
 };
 
 const trendIcon = {
-  rising:  <TrendingUp size={12} className="text-red-500" />,
-  falling: <TrendingDown size={12} className="text-emerald-500" />,
-  stable:  <Minus size={12} className="text-amber-500" />,
+  rising:  <TrendingUp size={12} className="text-err" />,
+  falling: <TrendingDown size={12} className="text-ok" />,
+  stable:  <Minus size={12} className="text-warn" />,
 };
 
-function MiniBar({ data, riskLevel }: { data: RegionPrediction['forecastDays']; riskLevel: string }) {
+function MiniBar({ data }: { data: RegionPrediction['forecastDays'] }) {
   const { theme } = useTheme();
   const dk = theme === 'dark';
-  const barColor = (score: number) => score < 25 ? '#2BB5A0' : score < 55 ? '#f59e0b' : '#ef4444';
+  const barColor = (s: number) => s < 25 ? '#3CBF7A' : s < 55 ? '#F4B740' : '#E85D5D';
 
   return (
-    <ResponsiveContainer width="100%" height={70}>
+    <ResponsiveContainer width="100%" height={64}>
       <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="day" tick={{ fontSize: 9, fill: dk ? '#484f58' : '#9ca3af' }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="day" tick={{ fontSize: 9, fill: dk ? '#6B8796' : '#9BB3C0' }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} hide />
         <Tooltip
-          contentStyle={{ fontSize: 10, borderRadius: 10, border: dk ? '1px solid #21262d' : '1px solid #E8ECF1', background: dk ? '#161b22' : '#fff' }}
+          contentStyle={{ fontSize: 10, borderRadius: 10, border: dk ? '1px solid #1F2E3A' : '1px solid #E3EEF5', background: dk ? '#121A22' : '#fff', color: dk ? '#E6F1F5' : '#1A2B34' }}
           formatter={(v: any) => [`${v}/100`, 'Risk']}
-          labelStyle={{ fontWeight: 700, color: dk ? '#c9d1d9' : '#1a1a2e' }}
         />
-        <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={16}>
-          {data.map((entry, i) => (
-            <Cell key={i} fill={barColor(entry.score)} fillOpacity={0.8} />
-          ))}
+        <Bar dataKey="score" radius={[3, 3, 0, 0]} maxBarSize={14}>
+          {data.map((e, i) => <Cell key={i} fill={barColor(e.score)} fillOpacity={0.75} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -45,93 +42,72 @@ export default function RegionalPredictions() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-2.5">
-          <div className="bg-violet-500/10 dark:bg-violet-500/20 rounded-xl p-2.5">
-            <BrainCircuit size={20} className="text-violet-600 dark:text-violet-400" />
-          </div>
-          <div>
-            <h2 className="text-[15px] font-bold text-gray-900 dark:text-white">AI Water Quality Predictions</h2>
-            <p className="text-[12px] text-gray-400 dark:text-gray-500">7-day contamination forecast per region</p>
-          </div>
+    <div className="card p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="rounded-xl p-2.5" style={{ background: 'rgba(15,110,140,0.08)' }}>
+          <BrainCircuit size={20} className="text-primary dark:text-primary-dark" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-txt dark:text-txt-dark">AI Water Quality Predictions</h2>
+          <p className="text-xs text-txt-muted dark:text-txt-dark-muted">7-day contamination forecast per region</p>
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {regionPredictions.map(region => {
           const c = riskCfg[region.riskLevel];
-          const isExpanded = expanded === region.id;
+          const open = expanded === region.id;
 
           return (
-            <div
-              key={region.id}
-              className="rounded-xl border border-[#E8ECF1] dark:border-[#21262d] overflow-hidden transition-all duration-200 hover:shadow-sm"
-            >
-              {/* Row header */}
+            <div key={region.id} className="rounded-xl border border-line dark:border-line-dark overflow-hidden">
               <button
-                onClick={() => setExpanded(isExpanded ? null : region.id)}
-                className="w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+                onClick={() => setExpanded(open ? null : region.id)}
+                className="w-full flex items-center gap-4 px-4 py-3.5 text-left hover:bg-surface-subtle/50 dark:hover:bg-surface-subtle-dark/50 transition-colors"
               >
-                {/* Risk dot */}
-                <span className="w-3 h-3 rounded-full flex-shrink-0 ring-4" style={{ background: c.color, boxShadow: `0 0 0 4px ${c.color}18` }} />
+                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: c.color }} />
 
-                {/* Region */}
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-bold text-gray-800 dark:text-gray-100">{region.region}</p>
-                  <p className="text-[11px] text-gray-400 dark:text-gray-500 truncate">{region.prediction}</p>
+                  <p className="text-sm font-bold text-txt dark:text-txt-dark">{region.region}</p>
+                  <p className="text-2xs text-txt-muted dark:text-txt-dark-muted truncate">{region.prediction}</p>
                 </div>
 
-                {/* Probability gauge */}
-                <div className="hidden sm:flex flex-col items-center gap-0.5 w-16 flex-shrink-0">
-                  <span className="text-[16px] font-extrabold" style={{ color: c.color }}>{region.contaminationProbability}%</span>
-                  <span className="text-[8px] text-gray-400 font-bold uppercase tracking-wider">Prob.</span>
+                <div className="hidden sm:flex flex-col items-center w-14 flex-shrink-0">
+                  <span className="text-md font-extrabold" style={{ color: c.color }}>{region.contaminationProbability}%</span>
+                  <span className="text-[8px] text-txt-muted dark:text-txt-dark-muted font-semibold uppercase">Risk</span>
                 </div>
 
-                {/* Trend */}
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {trendIcon[region.nextRisk]}
-                  <span className="text-[10px] font-bold text-gray-500 capitalize">{region.nextRisk}</span>
+                  <span className="text-2xs font-bold text-txt-secondary dark:text-txt-dark-secondary capitalize">{region.nextRisk}</span>
                 </div>
 
-                {/* Badge */}
-                <span className={`${c.bg} ${c.text} text-[10px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0`}>
-                  {c.label}
-                </span>
+                <span className="text-2xs font-bold px-2 py-0.5 rounded-lg flex-shrink-0" style={{ background: c.bg, color: c.color }}>{c.label}</span>
 
-                {/* Chevron */}
-                <svg className={`w-4 h-4 text-gray-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className={`w-4 h-4 text-txt-muted dark:text-txt-dark-muted transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
 
-              {/* Expanded detail */}
-              {isExpanded && (
-                <div className="px-4 pb-4 border-t border-[#E8ECF1] dark:border-[#21262d] bg-gray-50/30 dark:bg-gray-900/20">
+              {open && (
+                <div className="px-4 pb-4 border-t border-line dark:border-line-dark bg-surface-subtle/30 dark:bg-surface-subtle-dark/30">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
-                    {/* Forecast mini chart */}
                     <div>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">7-Day Risk Forecast</p>
-                      <MiniBar data={region.forecastDays} riskLevel={region.riskLevel} />
+                      <p className="text-2xs font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-wider mb-2">7-Day Forecast</p>
+                      <MiniBar data={region.forecastDays} />
                     </div>
-                    {/* Details */}
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                       <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">AI Assessment</p>
-                        <p className="text-[12px] text-gray-600 dark:text-gray-300 mt-1 leading-relaxed">{region.prediction}</p>
+                        <p className="text-2xs font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-wider">AI Assessment</p>
+                        <p className="text-xs text-txt-secondary dark:text-txt-dark-secondary mt-1 leading-relaxed">{region.prediction}</p>
                       </div>
-                      <div className="flex gap-4">
+                      <div className="flex gap-5">
                         <div>
-                          <p className="text-[10px] text-gray-400 font-bold">Top Concern</p>
-                          <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200">{region.topConcern}</p>
+                          <p className="text-2xs text-txt-muted dark:text-txt-dark-muted font-semibold">Top Concern</p>
+                          <p className="text-sm font-semibold text-txt dark:text-txt-dark">{region.topConcern}</p>
                         </div>
                         <div>
-                          <p className="text-[10px] text-gray-400 font-bold">Risk Score</p>
-                          <p className="text-[12px] font-semibold" style={{ color: c.color }}>{region.riskScore}/100</p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-gray-400 font-bold">Trend</p>
-                          <p className="text-[12px] font-semibold text-gray-700 dark:text-gray-200 capitalize">{region.nextRisk}</p>
+                          <p className="text-2xs text-txt-muted dark:text-txt-dark-muted font-semibold">Score</p>
+                          <p className="text-sm font-bold" style={{ color: c.color }}>{region.riskScore}/100</p>
                         </div>
                       </div>
                     </div>

@@ -1,56 +1,56 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import '@fontsource/geist-sans/400.css';
+@import '@fontsource/geist-sans/500.css';
+@import '@fontsource/geist-sans/600.css';
+@import '@fontsource/geist-sans/700.css';
+@import '@fontsource/geist-sans/800.css';
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --brand-blue: #0B8ED9;
-  --brand-teal: #2BB5A0;
-  --brand-light: #E8F4FD;
-  --brand-light2: #F0FAF8;
-  --canvas: #F5F7FB;
-  --canvas-dark: #0d1117;
-  --surface: #ffffff;
-  --surface-dark: #161b22;
-  --border: #E8ECF1;
-  --border-dark: #21262d;
-}
-
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   html, body, #root { height: 100%; margin: 0; }
   body {
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Geist Sans', 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
-    background: var(--canvas);
-    color: #1a1a2e;
+    -moz-osx-font-smoothing: grayscale;
+    background: #F7FAFC;
+    color: #1A2B34;
+    font-size: 13px;
+    line-height: 1.5;
   }
-  .dark body { background: var(--canvas-dark); color: #c9d1d9; }
+  .dark body {
+    background: #0A0F14;
+    color: #E6F1F5;
+  }
 }
 
-/* ─ Card ─ */
+/* ── Card system ── */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: #FFFFFF;
   border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(15,110,140,0.04), 0 1px 2px rgba(0,0,0,0.03);
   transition: box-shadow 0.2s ease;
 }
-.card:hover { box-shadow: 0 4px 16px rgba(11,142,217,0.06); }
-.dark .card { background: var(--surface-dark); border-color: var(--border-dark); }
-.dark .card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+.card:hover {
+  box-shadow: 0 8px 24px rgba(15,110,140,0.08), 0 2px 8px rgba(0,0,0,0.04);
+}
+.dark .card {
+  background: #121A22;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.1);
+}
+.dark .card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.15);
+}
 
-/* ─ Scrollbar ─ */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #dde1e8; border-radius: 99px; }
-.dark ::-webkit-scrollbar-thumb { background: #30363d; }
+::-webkit-scrollbar-thumb { background: #E3EEF5; border-radius: 99px; }
+.dark ::-webkit-scrollbar-thumb { background: #1F2E3A; }
 
-/* ─ Pulse ─ */
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+/* ── Live pulse ── */
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
 .live-dot { animation: pulse 2s ease-in-out infinite; }
-
-/* Smooth theme transitions */
-.theme-transition, .theme-transition * {
-  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.15s ease !important;
-}
