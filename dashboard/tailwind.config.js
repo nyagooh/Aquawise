@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,25 +8,25 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50:  '#e6f4fb',
-          100: '#cce9f7',
-          200: '#99d3ef',
-          300: '#66bde7',
-          400: '#33a7df',
-          500: '#0091d7',
-          600: '#0074ac',
-          700: '#005781',
-          800: '#003a56',
-          900: '#001d2b',
+        surface: {
+          light: '#ffffff',
+          dark: '#111827',
         },
-        teal: {
-          500: '#00c3a5',
-          600: '#009c84',
+        canvas: {
+          light: '#f8fafc',
+          dark: '#0b0f19',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
+      boxShadow: {
+        card: '0 1px 3px 0 rgba(0,0,0,0.04), 0 1px 2px -1px rgba(0,0,0,0.04)',
+        'card-hover': '0 4px 12px 0 rgba(0,0,0,0.06), 0 2px 4px -1px rgba(0,0,0,0.04)',
+      },
+      borderRadius: {
+        '2xl': '1rem',
+        '3xl': '1.25rem',
       },
     },
   },
