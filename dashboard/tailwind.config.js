@@ -1,33 +1,17 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       colors: {
-        surface: {
-          light: '#ffffff',
-          dark: '#111827',
-        },
-        canvas: {
-          light: '#f8fafc',
-          dark: '#0b0f19',
-        },
+        brand:  { DEFAULT: '#0B8ED9', light: '#E8F4FD', dark: '#076aa3' },
+        accent: { DEFAULT: '#2BB5A0', light: '#F0FAF8', dark: '#1e8a7a' },
+        canvas: { DEFAULT: '#F5F7FB', dark: '#0d1117' },
+        surface:{ DEFAULT: '#ffffff', dark: '#161b22' },
       },
-      fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-      },
-      boxShadow: {
-        card: '0 1px 3px 0 rgba(0,0,0,0.04), 0 1px 2px -1px rgba(0,0,0,0.04)',
-        'card-hover': '0 4px 12px 0 rgba(0,0,0,0.06), 0 2px 4px -1px rgba(0,0,0,0.04)',
-      },
-      borderRadius: {
-        '2xl': '1rem',
-        '3xl': '1.25rem',
-      },
+      fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+      borderRadius: { '2xl': '16px', '3xl': '20px' },
     },
   },
   plugins: [],
