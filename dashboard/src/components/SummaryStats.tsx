@@ -1,11 +1,12 @@
 import { TrendingUp, TrendingDown, Minus, ArrowUpRight } from 'lucide-react';
-import { waterSources, recentAlerts, regionPredictions } from '../data/mockData';
 import { useNavigation } from '../context/NavigationContext';
+import { useData } from '../context/DataContext';
 
 interface Props { selectedRegion: string; }
 
 export default function SummaryStats({ selectedRegion }: Props) {
   const { setActivePage } = useNavigation();
+  const { waterSources, recentAlerts, regionPredictions } = useData();
 
   const stations = selectedRegion === 'all' ? waterSources : waterSources.filter(s => s.regionId === selectedRegion);
   const alerts = selectedRegion === 'all' ? recentAlerts : recentAlerts.filter(a => a.regionId === selectedRegion);
