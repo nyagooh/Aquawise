@@ -1,5 +1,5 @@
-import { waterSources } from '../data/mockData';
 import { ArrowUpRight } from 'lucide-react';
+import { useData } from '../context/DataContext';
 
 interface Props { selectedRegion: string; }
 
@@ -10,6 +10,7 @@ const cfg = {
 };
 
 export default function WaterSourceMap({ selectedRegion }: Props) {
+  const { waterSources } = useData();
   const stations = selectedRegion === 'all' ? waterSources : waterSources.filter(s => s.regionId === selectedRegion);
 
   return (
