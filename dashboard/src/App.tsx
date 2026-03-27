@@ -7,6 +7,7 @@ import SensorCard from './components/SensorCard';
 import WaterSourceMap from './components/WaterSourceMap';
 import AlertsTable from './components/AlertsTable';
 import RegionalPredictions from './components/RegionalPredictions';
+import ParameterChart from './components/ParameterChart';
 import { currentReadings, recentAlerts, waterSources, regionPredictions } from './data/mockData';
 import { useEffect, useRef, useState } from 'react';
 import { MapPin, Droplets, AlertTriangle, Shield, Map } from 'lucide-react';
@@ -134,17 +135,6 @@ function Dashboard() {
                   </div>
                 </div>
 
-                {/* Sensor prompt between overview and content */}
-                <section ref={sensorsRef}>
-                  <div className="card px-6 py-7 flex flex-col items-center justify-center text-center">
-                    <div className="w-11 h-11 rounded-2xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center mb-3">
-                      <Droplets size={20} className="text-primary dark:text-primary-dark" />
-                    </div>
-                    <p className="text-sm font-semibold text-txt dark:text-txt-dark">Select a region to view live sensor readings</p>
-                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Choose a specific region above to see real-time water quality data</p>
-                  </div>
-                </section>
-
                 {/* Alerts */}
                 <section ref={alertsRef}>
                   <AlertsTable selectedRegion={selectedRegion} />
@@ -162,7 +152,7 @@ function Dashboard() {
               </>
             ) : (
               <>
-                {/* Live Sensors — first thing when region selected */}
+                {/* Live sensor cards */}
                 <section ref={sensorsRef}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings — {regionName}</h2>
@@ -175,6 +165,9 @@ function Dashboard() {
                     {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
                   </div>
                 </section>
+
+                {/* Parameter trend chart */}
+                <ParameterChart regionName={regionName!} />
 
                 {/* Alerts */}
                 <section ref={alertsRef}>
