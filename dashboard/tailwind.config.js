@@ -7,13 +7,13 @@ module.exports = {
       colors: {
         bg:      { DEFAULT: '#E8EEF8', dark: '#1A2332' },
         surface: { DEFAULT: '#FFFFFF', dark: '#212B3D', subtle: '#EDF2FB', 'subtle-dark': '#1E2738' },
-        primary: { DEFAULT: '#2563EB', hover: '#1D4FCC', dark: '#60A5FA', 'dark-hover': '#93C5FD' },
+        primary: { DEFAULT: '#2563EB', hover: '#1D4FCC', dark: '#3B82F6', 'dark-hover': '#60A5FA' },
         ok:      { DEFAULT: '#22C55E', soft: '#ECFDF5', 'soft-dark': '#052E16' },
         warn:    { DEFAULT: '#EAB308' },
         err:     { DEFAULT: '#EF4444' },
         txt:     { DEFAULT: '#0F172A', secondary: '#334155', muted: '#64748B',
                    dark: '#F1F5F9', 'dark-secondary': '#CBD5E1', 'dark-muted': '#64748B' },
-        line:    { DEFAULT: '#E2E8F0', dark: '#1E293B' },
+        line:    { DEFAULT: '#E2E8F0', dark: '#293650' },
       },
       fontFamily: {
         sans: ['"Geist Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],

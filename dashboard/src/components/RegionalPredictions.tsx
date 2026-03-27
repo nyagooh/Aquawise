@@ -1,8 +1,6 @@
 import { TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { regionPredictions, RegionPrediction } from '../data/mockData';
 import { useState } from 'react';
-import { useTheme } from '../context/ThemeContext';
 
 interface Props { selectedRegion: string; }
 
@@ -18,25 +16,26 @@ const trendIcon = {
   stable:  <Minus size={13} className="text-txt-muted dark:text-txt-dark-muted" />,
 };
 
-function MiniBar({ data }: { data: RegionPrediction['forecastDays'] }) {
-  const { theme } = useTheme();
-  const dk = theme === 'dark';
-  const barColor = (s: number) => s < 25 ? (dk ? '#60A5FA' : '#2563EB') : s < 55 ? '#EAB308' : '#EF4444';
+function barColor(s: number) {
+  return s < 25 ? '#2563EB' : s < 55 ? '#EAB308' : '#EF4444';
+}
 
+function ForecastBars({ data }: { data: RegionPrediction['forecastDays'] }) {
+  const max = 100;
   return (
-    <ResponsiveContainer width="100%" height={80}>
-      <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="day" tick={{ fontSize: 11, fill: dk ? '#64748B' : '#64748B' }} axisLine={false} tickLine={false} />
-        <YAxis domain={[0, 100]} hide />
-        <Tooltip
-          contentStyle={{ fontSize: 12, borderRadius: 12, border: dk ? '1px solid #1E293B' : '1px solid #E2E8F0', background: dk ? '#131C2E' : '#fff', color: dk ? '#F1F5F9' : '#0F172A' }}
-          formatter={(v: any) => [`${v}/100`, 'Risk Score']}
-        />
-        <Bar dataKey="score" radius={[5, 5, 0, 0]} maxBarSize={18}>
-          {data.map((e, i) => <Cell key={i} fill={barColor(e.score)} fillOpacity={0.85} />)}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="flex items-end gap-2 h-[90px]">
+      {data.map((d, i) => {
+        const h = Math.max(8, (d.score / max) * 100);
+        const color = barColor(d.score);
+        return (
+          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+            <span className="text-[10px] font-bold" style={{ color }}>{d.score}</span>
+            <div className="w-full rounded-t-md" style={{ height: `${h}%`, background: color, opacity: 0.8 }} />
+            <span className="text-[10px] font-medium text-txt-muted dark:text-txt-dark-muted">{d.day}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -91,8 +90,13 @@ export default function RegionalPredictions({ selectedRegion }: Props) {
                 <div className="px-5 pb-5 border-t border-line dark:border-line-dark bg-surface-subtle/30 dark:bg-surface-subtle-dark/30">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
                     <div>
-                      <p className="text-xs font-semibold text-txt-secondary dark:text-txt-dark-secondary mb-3 uppercase tracking-wide">7-Day Forecast</p>
-                      <MiniBar data={region.forecastDays} />
+                      <p className="text-xs font-semibold text-txt-secondary dark:text-txt-dark-secondary mb-3 uppercase tracking-wide">7-Day Risk Forecast</p>
+                      <ForecastBars data={region.forecastDays} />
+                      <div className="flex items-center gap-4 mt-2">
+                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#2563EB' }} /><span className="text-[10px] text-txt-muted dark:text-txt-dark-muted">Low (&lt;25)</span></div>
+                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#EAB308' }} /><span className="text-[10px] text-txt-muted dark:text-txt-dark-muted">Medium</span></div>
+                        <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{ background: '#EF4444' }} /><span className="text-[10px] text-txt-muted dark:text-txt-dark-muted">High (&gt;55)</span></div>
+                      </div>
                     </div>
                     <div className="space-y-4">
                       <div>

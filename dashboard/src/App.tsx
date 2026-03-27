@@ -7,9 +7,9 @@ import SensorCard from './components/SensorCard';
 import WaterSourceMap from './components/WaterSourceMap';
 import AlertsTable from './components/AlertsTable';
 import RegionalPredictions from './components/RegionalPredictions';
-import { currentReadings, recentAlerts, regionPredictions } from './data/mockData';
+import { currentReadings, recentAlerts, waterSources, regionPredictions } from './data/mockData';
 import { useEffect, useRef, useState } from 'react';
-import { MapPin, Droplets } from 'lucide-react';
+import { MapPin, Droplets, AlertTriangle, Shield, Map } from 'lucide-react';
 
 function Dashboard() {
   const { theme } = useTheme();
@@ -27,6 +27,14 @@ function Dashboard() {
   }).length;
 
   const regionName = selectedRegion === 'all' ? null : regionPredictions.find(r => r.id === selectedRegion)?.region;
+
+  // Overview stats for "All Regions" dashboard
+  const totalRegions = regionPredictions.length;
+  const dangerRegions = regionPredictions.filter(r => r.riskLevel === 'danger').length;
+  const warningRegions = regionPredictions.filter(r => r.riskLevel === 'warning').length;
+  const safeRegions = regionPredictions.filter(r => r.riskLevel === 'safe').length;
+  const totalAlerts = recentAlerts.filter(a => a.risk === 'danger' || a.risk === 'warning').length;
+  const safeStations = waterSources.filter(s => s.risk === 'safe').length;
 
   useEffect(() => {
     registerSection('main', mainRef.current);
@@ -61,7 +69,7 @@ function Dashboard() {
                     onClick={() => setSelectedRegion(r.id)}
                     className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       selectedRegion === r.id
-                        ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#1A2332] shadow-lg shadow-primary/25'
+                        ? 'bg-primary dark:bg-primary-dark text-white shadow-lg shadow-primary/25'
                         : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
                     }`}
                   >
@@ -71,10 +79,91 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* Live Sensors — shown when a specific region is selected */}
-            <section ref={sensorsRef}>
-              {selectedRegion !== 'all' ? (
-                <>
+            {selectedRegion === 'all' ? (
+              <>
+                {/* Overview cards — dashboard only */}
+                <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                  <div className="card px-6 py-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center">
+                        <Map size={18} className="text-primary dark:text-primary-dark" />
+                      </div>
+                      <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">Regions Monitored</p>
+                    </div>
+                    <p className="text-2xl font-extrabold text-txt dark:text-txt-dark">{totalRegions}</p>
+                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Kisumu sub-regions</p>
+                  </div>
+
+                  <div className="card px-6 py-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-ok/8 flex items-center justify-center">
+                        <Shield size={18} className="text-ok" />
+                      </div>
+                      <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">Risk Overview</p>
+                    </div>
+                    <div className="flex items-baseline gap-3">
+                      <span className="text-2xl font-extrabold text-ok">{safeRegions}</span>
+                      <span className="text-xs text-txt-muted dark:text-txt-dark-muted">safe</span>
+                      <span className="text-2xl font-extrabold text-warn">{warningRegions}</span>
+                      <span className="text-xs text-txt-muted dark:text-txt-dark-muted">caution</span>
+                      <span className="text-2xl font-extrabold text-err">{dangerRegions}</span>
+                      <span className="text-xs text-txt-muted dark:text-txt-dark-muted">high</span>
+                    </div>
+                  </div>
+
+                  <div className="card px-6 py-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-err/8 flex items-center justify-center">
+                        <AlertTriangle size={18} className="text-err" />
+                      </div>
+                      <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">Active Alerts</p>
+                    </div>
+                    <p className="text-2xl font-extrabold text-txt dark:text-txt-dark">{totalAlerts}</p>
+                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">{totalAlerts > 0 ? 'need attention' : 'all clear'}</p>
+                  </div>
+
+                  <div className="card px-6 py-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center">
+                        <Droplets size={18} className="text-primary dark:text-primary-dark" />
+                      </div>
+                      <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">Stations Safe</p>
+                    </div>
+                    <p className="text-2xl font-extrabold text-txt dark:text-txt-dark">{safeStations}/{waterSources.length}</p>
+                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">monitoring stations</p>
+                  </div>
+                </div>
+
+                {/* Sensor prompt between overview and content */}
+                <section ref={sensorsRef}>
+                  <div className="card px-6 py-7 flex flex-col items-center justify-center text-center">
+                    <div className="w-11 h-11 rounded-2xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center mb-3">
+                      <Droplets size={20} className="text-primary dark:text-primary-dark" />
+                    </div>
+                    <p className="text-sm font-semibold text-txt dark:text-txt-dark">Select a region to view live sensor readings</p>
+                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Choose a specific region above to see real-time water quality data</p>
+                  </div>
+                </section>
+
+                {/* Alerts */}
+                <section ref={alertsRef}>
+                  <AlertsTable selectedRegion={selectedRegion} />
+                </section>
+
+                {/* Predictions */}
+                <section ref={predictionsRef}>
+                  <RegionalPredictions selectedRegion={selectedRegion} />
+                </section>
+
+                {/* Stations */}
+                <section ref={stationsRef}>
+                  <WaterSourceMap selectedRegion={selectedRegion} />
+                </section>
+              </>
+            ) : (
+              <>
+                {/* Live Sensors — first thing when region selected */}
+                <section ref={sensorsRef}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings — {regionName}</h2>
                     <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
@@ -85,32 +174,24 @@ function Dashboard() {
                   <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
                   </div>
-                </>
-              ) : (
-                <div className="card px-6 py-8 flex flex-col items-center justify-center text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center mb-3">
-                    <Droplets size={22} className="text-primary dark:text-primary-dark" />
-                  </div>
-                  <p className="text-sm font-semibold text-txt dark:text-txt-dark">Select a region to view live sensor readings</p>
-                  <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Choose a specific region above to see real-time water quality data</p>
-                </div>
-              )}
-            </section>
+                </section>
 
-            {/* Alerts — filtered by region */}
-            <section ref={alertsRef}>
-              <AlertsTable selectedRegion={selectedRegion} />
-            </section>
+                {/* Alerts */}
+                <section ref={alertsRef}>
+                  <AlertsTable selectedRegion={selectedRegion} />
+                </section>
 
-            {/* Predictions — filtered by region */}
-            <section ref={predictionsRef}>
-              <RegionalPredictions selectedRegion={selectedRegion} />
-            </section>
+                {/* Predictions */}
+                <section ref={predictionsRef}>
+                  <RegionalPredictions selectedRegion={selectedRegion} />
+                </section>
 
-            {/* Stations — filtered by region */}
-            <section ref={stationsRef}>
-              <WaterSourceMap selectedRegion={selectedRegion} />
-            </section>
+                {/* Stations */}
+                <section ref={stationsRef}>
+                  <WaterSourceMap selectedRegion={selectedRegion} />
+                </section>
+              </>
+            )}
 
             <footer className="pb-6 text-center text-xs text-txt-muted dark:text-txt-dark-muted">
               Uhai WashWise · Water Quality Intelligence · Kisumu, Kenya
