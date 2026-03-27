@@ -34,29 +34,31 @@ function Dashboard() {
     registerSection('alerts', alertsRef.current);
   }, [registerSection]);
 
+  const bg = theme === 'dark' ? '#0C1425' : '#D4E0F7';
+
   return (
-    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#0A0E16' : '#F0F4FA' }}>
+    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: bg }}>
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header alertCount={alertCount} />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-[1400px] mx-auto px-8 py-8 space-y-7">
+          <div className="max-w-[1400px] mx-auto px-8 py-7 space-y-6">
 
             {/* Region selector */}
             <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2 text-txt-secondary dark:text-txt-dark-secondary">
+              <div className="flex items-center gap-2">
                 <MapPin size={16} className="text-primary dark:text-primary-dark" />
-                <span className="text-sm font-medium">Select Region</span>
+                <span className="text-sm font-semibold text-txt dark:text-txt-dark">Region</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => setSelectedRegion('all')}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                     selectedRegion === 'all'
-                      ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0A0E16] shadow-md shadow-primary/20'
-                      : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/20 dark:hover:border-primary-dark/20 hover:text-txt dark:hover:text-txt-dark'
+                      ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0C1425] shadow-lg shadow-primary/25'
+                      : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
                   }`}
                 >
                   All Regions
@@ -65,10 +67,10 @@ function Dashboard() {
                   <button
                     key={r.id}
                     onClick={() => setSelectedRegion(r.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                    className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       selectedRegion === r.id
-                        ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0A0E16] shadow-md shadow-primary/20'
-                        : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/20 dark:hover:border-primary-dark/20 hover:text-txt dark:hover:text-txt-dark'
+                        ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0C1425] shadow-lg shadow-primary/25'
+                        : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
                     }`}
                   >
                     {r.region}
@@ -79,11 +81,16 @@ function Dashboard() {
 
             <SummaryStats selectedRegion={selectedRegion} />
 
+            {/* Alerts — prominent, right after KPIs */}
+            <section ref={alertsRef}>
+              <AlertsTable />
+            </section>
+
             {/* Sensors */}
             <section ref={sensorsRef}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-wide">Live Sensor Readings</h2>
-                <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full" style={{ background: 'rgba(34,197,94,0.08)' }}>
+                <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings</h2>
+                <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
                   <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
                   Live
                 </span>
@@ -93,7 +100,7 @@ function Dashboard() {
               </div>
             </section>
 
-            {/* Chart full width */}
+            {/* Chart */}
             <WaterQualityChart />
 
             {/* Predictions */}
@@ -107,10 +114,6 @@ function Dashboard() {
                 <WaterSourceMap />
                 <ParameterRadar />
               </div>
-            </section>
-
-            <section ref={alertsRef}>
-              <AlertsTable />
             </section>
 
             <footer className="pb-6 text-center text-xs text-txt-muted dark:text-txt-dark-muted">

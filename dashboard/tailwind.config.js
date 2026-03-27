@@ -5,14 +5,14 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg:      { DEFAULT: '#F0F4FA', dark: '#0A0E16' },
-        surface: { DEFAULT: '#FFFFFF', dark: '#111722', subtle: '#F6F8FC', 'subtle-dark': '#0D1220' },
+        bg:      { DEFAULT: '#D4E0F7', dark: '#0C1425' },
+        surface: { DEFAULT: '#FFFFFF', dark: '#131C2E', subtle: '#EDF2FB', 'subtle-dark': '#111828' },
         primary: { DEFAULT: '#2563EB', hover: '#1D4FCC', dark: '#60A5FA', 'dark-hover': '#93C5FD' },
         ok:      { DEFAULT: '#22C55E', soft: '#ECFDF5', 'soft-dark': '#052E16' },
         warn:    { DEFAULT: '#EAB308' },
         err:     { DEFAULT: '#EF4444' },
-        txt:     { DEFAULT: '#0F172A', secondary: '#475569', muted: '#94A3B8',
-                   dark: '#E2E8F0', 'dark-secondary': '#94A3B8', 'dark-muted': '#64748B' },
+        txt:     { DEFAULT: '#0F172A', secondary: '#334155', muted: '#64748B',
+                   dark: '#F1F5F9', 'dark-secondary': '#CBD5E1', 'dark-muted': '#64748B' },
         line:    { DEFAULT: '#E2E8F0', dark: '#1E293B' },
       },
       fontFamily: {

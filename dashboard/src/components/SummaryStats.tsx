@@ -24,10 +24,10 @@ export default function SummaryStats({ selectedRegion }: Props) {
     <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
       {stats.map((s, i) => (
         <button key={i} onClick={s.onClick} className="card px-6 py-5 text-left group relative">
-          <ArrowUpRight size={15} className="absolute top-4 right-4 text-txt-muted/30 dark:text-txt-dark-muted/30 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <p className="text-xs font-medium text-txt-muted dark:text-txt-dark-muted">{s.label}</p>
-          <p className="text-2xl font-extrabold text-txt dark:text-txt-dark tracking-tight mt-1.5">{s.value}</p>
-          <div className="flex items-center gap-1.5 mt-2.5">
+          <ArrowUpRight size={15} className="absolute top-4 right-4 text-primary/20 dark:text-primary-dark/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">{s.label}</p>
+          <p className="text-2xl font-extrabold text-txt dark:text-txt-dark tracking-tight mt-1">{s.value}</p>
+          <div className="flex items-center gap-1.5 mt-2">
             <span className={`flex items-center gap-0.5 text-xs font-semibold ${s.up ? 'text-primary dark:text-primary-dark' : 'text-txt-muted dark:text-txt-dark-muted'}`}>
               {s.up ? <TrendingUp size={12} /> : <Minus size={12} />}
               {s.change}

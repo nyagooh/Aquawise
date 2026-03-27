@@ -15,7 +15,7 @@ export default function Header({ alertCount }: Props) {
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
 
   return (
-    <header className="flex items-center px-8 py-5 gap-5 flex-shrink-0" style={{ background: theme === 'dark' ? '#0A0E16' : '#F0F4FA' }}>
+    <header className="flex items-center px-8 py-5 gap-5 flex-shrink-0" style={{ background: theme === 'dark' ? '#0C1425' : '#D4E0F7' }}>
       <div className="flex-shrink-0">
         <h1 className="text-xl font-bold text-txt dark:text-txt-dark">Welcome back, Admin!</h1>
         <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">
@@ -48,7 +48,7 @@ export default function Header({ alertCount }: Props) {
         <button onClick={() => setActivePage('alerts')} className="relative p-3 rounded-xl bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-primary dark:hover:text-primary-dark hover:border-primary/20 transition-all">
           <Bell size={18} />
           {alertCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary dark:bg-primary-dark rounded-full text-white dark:text-[#0A0E16] text-[10px] font-bold flex items-center justify-center ring-2 ring-bg dark:ring-bg-dark">{alertCount}</span>
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary dark:bg-primary-dark rounded-full text-white dark:text-[#0C1425] text-[10px] font-bold flex items-center justify-center ring-2 ring-bg dark:ring-bg-dark">{alertCount}</span>
           )}
         </button>
         <div className="flex items-center gap-3 pl-4 border-l border-line dark:border-line-dark">
