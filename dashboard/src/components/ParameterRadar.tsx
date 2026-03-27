@@ -1,6 +1,7 @@
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
 import { currentReadings } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
+import { Activity } from 'lucide-react';
 
 export default function ParameterRadar() {
   const { theme } = useTheme();
@@ -13,8 +14,15 @@ export default function ParameterRadar() {
 
   return (
     <div className="card p-6">
-      <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Parameter Health</h2>
-      <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5 mb-3">Position within safe range</p>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="rounded-xl p-2.5" style={{ background: 'rgba(15,110,140,0.08)' }}>
+          <Activity size={18} className="text-primary dark:text-primary-dark" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Parameter Health</h2>
+          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">Position within safe range</p>
+        </div>
+      </div>
       <ResponsiveContainer width="100%" height={250}>
         <RadarChart data={data} margin={{ top: 10, right: 30, bottom: 10, left: 30 }}>
           <PolarGrid stroke={dk ? '#1F2E3A' : '#E3EEF5'} />

@@ -1,5 +1,5 @@
 import { RiskScore } from '../utils/riskCalculator';
-import { ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
+import { ShieldCheck, ShieldAlert, ShieldX, Gauge } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 interface Props { risk: RiskScore; }
@@ -20,7 +20,12 @@ export default function RiskGauge({ risk }: Props) {
   return (
     <div className="card p-6 flex flex-col">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Overall Risk</h2>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl p-2.5" style={{ background: 'rgba(15,110,140,0.08)' }}>
+            <Gauge size={18} className="text-primary dark:text-primary-dark" />
+          </div>
+          <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Overall Risk</h2>
+        </div>
         <span className="text-xs font-bold px-2.5 py-1 rounded-lg" style={{ background: c.bg, color: c.color }}>{risk.label}</span>
       </div>
 

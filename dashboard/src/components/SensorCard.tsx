@@ -1,5 +1,7 @@
 import { SensorReading } from '../data/mockData';
 import { getSensorRisk, getSensorPercent } from '../utils/riskCalculator';
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
 interface Props { reading: SensorReading; }
 
@@ -10,21 +12,28 @@ const cfg = {
 };
 
 export default function SensorCard({ reading }: Props) {
+  const [expanded, setExpanded] = useState(false);
   const risk = getSensorRisk(reading);
   const pct  = getSensorPercent(reading);
   const c    = cfg[risk];
 
   return (
-    <div className="card px-4 py-4">
+    <div
+      className="card px-4 py-4 cursor-pointer group transition-all duration-200"
+      onClick={() => setExpanded(!expanded)}
+    >
       {/* Top */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-base leading-none">{reading.icon}</span>
           <span className="text-sm font-bold text-txt dark:text-txt-dark truncate">{reading.name}</span>
         </div>
-        {reading.isReal && (
-          <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: 'rgba(15,110,140,0.08)', color: '#0F6E8C' }}>Sensor</span>
-        )}
+        <div className="flex items-center gap-1">
+          {reading.isReal && (
+            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style={{ background: 'rgba(15,110,140,0.08)', color: '#0F6E8C' }}>Sensor</span>
+          )}
+          <ChevronDown size={12} className={`text-txt-muted dark:text-txt-dark-muted transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+        </div>
       </div>
 
       {/* Value */}
@@ -40,14 +49,15 @@ export default function SensorCard({ reading }: Props) {
       <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(227,238,245,0.6)' }}>
         <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: c.bar }} />
       </div>
-      <div className="dark:opacity-0 hidden" />
       <div className="flex justify-between mt-1.5">
         <span className="text-2xs text-txt-muted dark:text-txt-dark-muted">{reading.safeMin}{reading.unit}</span>
         <span className="text-2xs text-txt-muted dark:text-txt-dark-muted">{reading.safeMax}{reading.unit}</span>
       </div>
 
-      {/* Desc */}
-      <p className="text-2xs text-txt-muted dark:text-txt-dark-muted leading-relaxed mt-2">{reading.description}</p>
+      {/* Expandable description */}
+      <div className={`overflow-hidden transition-all duration-200 ${expanded ? 'max-h-20 mt-2 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <p className="text-2xs text-txt-muted dark:text-txt-dark-muted leading-relaxed">{reading.description}</p>
+      </div>
     </div>
   );
 }

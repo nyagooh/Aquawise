@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { timeSeriesData } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
+import { BarChart3 } from 'lucide-react';
 
 type Param = 'temperature' | 'turbidity' | 'ph' | 'dissolvedOxygen' | 'nitrates';
 
@@ -57,9 +58,14 @@ export default function WaterQualityChart() {
   return (
     <div className="card p-6">
       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-5">
-        <div>
-          <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Water Quality Trend</h2>
-          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">24-hour monitoring data</p>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl p-2.5" style={{ background: 'rgba(15,110,140,0.08)' }}>
+            <BarChart3 size={18} className="text-primary dark:text-primary-dark" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Water Quality Trend</h2>
+            <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">24-hour monitoring data</p>
+          </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {PARAMS.map(p => (
