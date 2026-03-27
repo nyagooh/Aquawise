@@ -33,9 +33,9 @@ export default function SensorCard({ reading }: Props) {
 
       <span className="inline-block text-[10px] font-bold px-2.5 py-0.5 rounded-full mb-4" style={{ background: c.bg, color: c.color }}>{c.label}</span>
 
-      {/* Progress bar */}
+      {/* Progress — use primary color for bar */}
       <div className="h-1.5 rounded-full overflow-hidden bg-surface-subtle dark:bg-surface-subtle-dark">
-        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: c.bar }} />
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: risk === 'safe' ? '#6C5CE7' : c.bar }} />
       </div>
       <div className="flex justify-between mt-1.5">
         <span className="text-2xs text-txt-muted dark:text-txt-dark-muted">{reading.safeMin}</span>

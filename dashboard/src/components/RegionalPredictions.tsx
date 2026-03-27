@@ -19,19 +19,20 @@ const trendIcon = {
 function MiniBar({ data }: { data: RegionPrediction['forecastDays'] }) {
   const { theme } = useTheme();
   const dk = theme === 'dark';
-  const barColor = (s: number) => s < 25 ? '#3CBF7A' : s < 55 ? '#F4B740' : '#E85D5D';
+  // Use primary palette for bars — low=light, med=medium, high=saturated
+  const barColor = (s: number) => s < 25 ? (dk ? '#A29BFE' : '#6C5CE7') : s < 55 ? '#F4B740' : '#E85D5D';
 
   return (
     <ResponsiveContainer width="100%" height={64}>
       <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="day" tick={{ fontSize: 10, fill: dk ? '#5E7A8A' : '#8FA8B8' }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="day" tick={{ fontSize: 10, fill: dk ? '#6B6880' : '#9490AA' }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} hide />
         <Tooltip
-          contentStyle={{ fontSize: 11, borderRadius: 12, border: dk ? '1px solid #1A2730' : '1px solid #E0EBF2', background: dk ? '#111920' : '#fff', color: dk ? '#E6F1F5' : '#1A2B34' }}
+          contentStyle={{ fontSize: 11, borderRadius: 12, border: dk ? '1px solid #1E1C2E' : '1px solid #E8E4F5', background: dk ? '#14131F' : '#fff', color: dk ? '#EEEDF5' : '#1A1A2E' }}
           formatter={(v: any) => [`${v}/100`, 'Risk']}
         />
         <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={14}>
-          {data.map((e, i) => <Cell key={i} fill={barColor(e.score)} fillOpacity={0.75} />)}
+          {data.map((e, i) => <Cell key={i} fill={barColor(e.score)} fillOpacity={0.8} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -76,9 +77,7 @@ export default function RegionalPredictions() {
                   <span className="text-[9px] text-txt-muted dark:text-txt-dark-muted font-medium">Risk</span>
                 </div>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {trendIcon[region.nextRisk]}
-                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">{trendIcon[region.nextRisk]}</div>
 
                 <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0" style={{ background: c.bg, color: c.color }}>{c.label}</span>
 

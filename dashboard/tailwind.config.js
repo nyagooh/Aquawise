@@ -5,16 +5,17 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg:      { DEFAULT: '#F0F5FF', dark: '#080D12' },
-        surface: { DEFAULT: '#FFFFFF', dark: '#111920', subtle: '#F5F8FF', 'subtle-dark': '#0D1318' },
-        primary: { DEFAULT: '#0F6E8C', hover: '#0D5E78', dark: '#1CA9C9', 'dark-hover': '#6FE7DD' },
-        accent:  { DEFAULT: '#6FE7DD' },
+        // ── Unified corporate blue-violet palette ──
+        bg:      { DEFAULT: '#F4F2FF', dark: '#0B0A14' },
+        surface: { DEFAULT: '#FFFFFF', dark: '#14131F', subtle: '#F9F8FF', 'subtle-dark': '#100F1C' },
+        primary: { DEFAULT: '#6C5CE7', hover: '#5A4BD1', dark: '#A29BFE', 'dark-hover': '#C4BFFF',
+                   light: 'rgba(108,92,231,0.08)', 'light-dark': 'rgba(162,155,254,0.08)' },
         ok:      { DEFAULT: '#3CBF7A', soft: '#EEFBF3', 'soft-dark': '#0E2A1F' },
         warn:    { DEFAULT: '#F4B740' },
         err:     { DEFAULT: '#E85D5D' },
-        txt:     { DEFAULT: '#1A2B34', secondary: '#4A6575', muted: '#8FA8B8',
-                   dark: '#E6F1F5', 'dark-secondary': '#9BB3C0', 'dark-muted': '#5E7A8A' },
-        line:    { DEFAULT: '#E0EAF5', dark: '#1A2730' },
+        txt:     { DEFAULT: '#1A1A2E', secondary: '#55526B', muted: '#9490AA',
+                   dark: '#EEEDF5', 'dark-secondary': '#A8A5BE', 'dark-muted': '#6B6880' },
+        line:    { DEFAULT: '#E8E4F5', dark: '#1E1C2E' },
       },
       fontFamily: {
         sans: ['"Geist Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
@@ -29,10 +30,6 @@ module.exports = {
         'xl':  ['20px', '28px'],
         '2xl': ['26px', '34px'],
         '3xl': ['32px', '40px'],
-      },
-      boxShadow: {
-        card: '0 2px 8px rgba(15,80,140,0.04), 0 0 1px rgba(0,0,0,0.04)',
-        elevated: '0 4px 20px rgba(15,80,140,0.06)',
       },
       borderRadius: {
         xl:  '14px',

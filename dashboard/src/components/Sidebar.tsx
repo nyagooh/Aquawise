@@ -46,7 +46,7 @@ export default function Sidebar() {
               }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 ${
                 active
-                  ? 'bg-primary text-white dark:bg-primary-dark dark:text-white font-semibold'
+                  ? 'bg-primary text-white dark:bg-primary-dark dark:text-[#0B0A14] font-semibold shadow-lg shadow-primary/20 dark:shadow-primary-dark/20'
                   : 'text-txt-secondary dark:text-txt-dark-secondary hover:bg-surface-subtle dark:hover:bg-surface-subtle-dark hover:text-txt dark:hover:text-txt-dark'
               }`}
             >

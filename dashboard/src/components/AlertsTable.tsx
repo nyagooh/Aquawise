@@ -6,7 +6,7 @@ const cfg = {
   safe:    { icon: <CheckCircle size={14} />, color: '#3CBF7A', bg: 'rgba(60,191,122,0.06)',  label: 'Resolved' },
   warning: { icon: <AlertTriangle size={14} />, color: '#F4B740', bg: 'rgba(244,183,64,0.06)', label: 'Warning' },
   danger:  { icon: <XCircle size={14} />,       color: '#E85D5D', bg: 'rgba(232,93,93,0.06)',  label: 'Critical' },
-  info:    { icon: <CheckCircle size={14} />,    color: '#0F6E8C', bg: 'rgba(15,110,140,0.06)', label: 'Info' },
+  info:    { icon: <CheckCircle size={14} />,    color: '#6C5CE7', bg: 'rgba(108,92,231,0.06)', label: 'Info' },
 };
 
 type Filter = 'all' | 'danger' | 'warning' | 'safe';
@@ -42,7 +42,7 @@ export default function AlertsTable() {
               onClick={() => { setFilter(f.key); setShowAll(false); }}
               className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f.key
-                  ? 'bg-primary dark:bg-primary-dark text-white'
+                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0B0A14]'
                   : 'bg-surface-subtle dark:bg-surface-subtle-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-txt dark:hover:text-txt-dark'
               }`}
             >

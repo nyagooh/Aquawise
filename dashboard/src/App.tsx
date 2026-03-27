@@ -36,7 +36,7 @@ function Dashboard() {
   }, [registerSection]);
 
   return (
-    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#080D12' : '#F0F5FF' }}>
+    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#0B0A14' : '#F4F2FF' }}>
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -50,7 +50,7 @@ function Dashboard() {
             {/* Sensors */}
             <section ref={sensorsRef}>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-[0.08em]">Live Sensor Readings</h2>
+                <h2 className="text-sm font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-wide">Live Sensor Readings</h2>
                 <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full" style={{ background: 'rgba(60,191,122,0.08)' }}>
                   <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
                   Live

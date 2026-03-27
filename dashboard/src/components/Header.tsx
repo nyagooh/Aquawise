@@ -15,7 +15,7 @@ export default function Header({ alertCount }: Props) {
   useEffect(() => { const t = setInterval(() => setTime(new Date()), 1000); return () => clearInterval(t); }, []);
 
   return (
-    <header className="flex items-center px-8 py-5 gap-5 flex-shrink-0" style={{ background: theme === 'dark' ? '#080D12' : '#F0F5FF' }}>
+    <header className="flex items-center px-8 py-5 gap-5 flex-shrink-0" style={{ background: theme === 'dark' ? '#0B0A14' : '#F4F2FF' }}>
       {/* Left: Welcome */}
       <div className="flex-shrink-0">
         <h1 className="text-xl font-bold text-txt dark:text-txt-dark">Welcome back, Admin!</h1>
@@ -35,7 +35,7 @@ export default function Header({ alertCount }: Props) {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search stations, sensors, alerts..."
-            className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-sm text-txt dark:text-txt-dark placeholder:text-txt-muted/60 dark:placeholder:text-txt-dark-muted/60 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:focus:ring-primary-dark/20 focus:border-primary/30 dark:focus:border-primary-dark/30 transition-all"
+            className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-sm text-txt dark:text-txt-dark placeholder:text-txt-muted/50 dark:placeholder:text-txt-dark-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/25 dark:focus:ring-primary-dark/25 focus:border-primary/30 dark:focus:border-primary-dark/30 transition-all"
           />
         </div>
       </div>
@@ -62,12 +62,12 @@ export default function Header({ alertCount }: Props) {
         >
           <Bell size={18} />
           {alertCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-err rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ring-bg dark:ring-bg-dark">{alertCount}</span>
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary dark:bg-primary-dark rounded-full text-white dark:text-[#0B0A14] text-[10px] font-bold flex items-center justify-center ring-2 ring-bg dark:ring-bg-dark">{alertCount}</span>
           )}
         </button>
 
         <div className="flex items-center gap-3 pl-4 border-l border-line dark:border-line-dark">
-          <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white text-sm font-bold" style={{ background: 'linear-gradient(135deg, #0F6E8C, #1CA9C9)' }}>
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-white text-sm font-bold bg-primary dark:bg-primary-dark">
             A
           </div>
           <div className="hidden xl:block">

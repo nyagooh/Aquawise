@@ -15,6 +15,8 @@ export default function RiskGauge({ risk }: Props) {
   const dk = theme === 'dark';
   const c = levelCfg[risk.level];
   const r = 72, circ = Math.PI * r, off = circ - (risk.score / 100) * circ;
+  // Gauge track uses primary palette for harmony
+  const trackColor = dk ? '#1E1C2E' : '#EBE8F5';
 
   return (
     <div className="card p-7 flex flex-col">
@@ -26,7 +28,7 @@ export default function RiskGauge({ risk }: Props) {
       <div className="flex flex-col items-center my-4">
         <div className="relative">
           <svg width="180" height="100" viewBox="0 0 180 100">
-            <path d="M 11 90 A 79 79 0 0 1 169 90" fill="none" stroke={dk ? '#1A2730' : '#E8EFF5'} strokeWidth="14" strokeLinecap="round" />
+            <path d="M 11 90 A 79 79 0 0 1 169 90" fill="none" stroke={trackColor} strokeWidth="14" strokeLinecap="round" />
             <path d="M 11 90 A 79 79 0 0 1 169 90" fill="none" stroke={c.color} strokeWidth="14" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={off} style={{ transition: 'stroke-dashoffset 1s ease' }} />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-end pb-1">

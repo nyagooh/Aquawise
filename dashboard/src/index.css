@@ -16,14 +16,14 @@
     font-family: 'Geist Sans', 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #F0F5FF;
-    color: #1A2B34;
+    background: #F4F2FF;
+    color: #1A1A2E;
     font-size: 14px;
     line-height: 1.5;
   }
   .dark body {
-    background: #080D12;
-    color: #E6F1F5;
+    background: #0B0A14;
+    color: #EEEDF5;
   }
 }
 
@@ -31,17 +31,17 @@
 .card {
   background: #FFFFFF;
   border-radius: 20px;
-  border: 1px solid rgba(15,80,140,0.05);
-  box-shadow: 0 2px 8px rgba(15,80,140,0.04), 0 0 1px rgba(0,0,0,0.04);
+  border: 1px solid rgba(108,92,231,0.06);
+  box-shadow: 0 2px 8px rgba(108,92,231,0.04), 0 0 1px rgba(0,0,0,0.03);
   transition: box-shadow 0.3s ease, transform 0.3s ease;
 }
 .card:hover {
-  box-shadow: 0 16px 40px rgba(15,80,140,0.08), 0 2px 8px rgba(0,0,0,0.03);
+  box-shadow: 0 16px 40px rgba(108,92,231,0.1), 0 2px 8px rgba(0,0,0,0.02);
   transform: translateY(-2px);
 }
 .dark .card {
-  background: #111920;
-  border: 1px solid rgba(255,255,255,0.04);
+  background: #14131F;
+  border: 1px solid rgba(162,155,254,0.06);
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 .dark .card:hover {
@@ -52,10 +52,10 @@
 /* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #C8D8E8; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #A8BECE; }
-.dark ::-webkit-scrollbar-thumb { background: #1F2E3A; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #2A3D4A; }
+::-webkit-scrollbar-thumb { background: #D8D4EA; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #C0BBDA; }
+.dark ::-webkit-scrollbar-thumb { background: #1E1C2E; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #2A2840; }
 
 /* ── Live pulse ── */
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }

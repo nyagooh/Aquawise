@@ -27,7 +27,7 @@ function ChartTooltip({ active, payload, label, param }: any) {
   const val = payload[0].value as number;
   const safe = val >= param.safeMin && val <= param.safeMax;
   return (
-    <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-2xl shadow-elevated px-4 py-3">
+    <div className="bg-surface dark:bg-surface-dark border border-line dark:border-line-dark rounded-2xl shadow-lg px-4 py-3">
       <p className="text-2xs text-txt-muted dark:text-txt-dark-muted mb-1">{label}</p>
       <div className="flex items-baseline gap-1 mb-2">
         <span className="text-lg font-extrabold text-txt dark:text-txt-dark">{val}</span>
@@ -52,6 +52,9 @@ export default function WaterQualityChart() {
   const yMax = Math.ceil(Math.max(Math.max(...vals), param.safeMax) * 1.1);
   const ticks = timeSeriesData.filter((_, i) => i % 4 === 0).map(d => d.time);
 
+  const lineColor = dk ? '#A29BFE' : '#6C5CE7';
+  const gridColor = dk ? '#1E1C2E' : '#EBE8F5';
+
   return (
     <div className="card p-7">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
@@ -69,7 +72,7 @@ export default function WaterQualityChart() {
               onClick={() => setSelected(p.key)}
               className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all duration-200 ${
                 selected === p.key
-                  ? 'bg-primary dark:bg-primary-dark text-white'
+                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0B0A14]'
                   : 'bg-surface-subtle dark:bg-surface-subtle-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-txt dark:hover:text-txt-dark'
               }`}
             >
@@ -83,18 +86,18 @@ export default function WaterQualityChart() {
         <AreaChart data={timeSeriesData} margin={{ top: 12, right: 12, left: 0, bottom: 4 }}>
           <defs>
             <linearGradient id={`cg-${selected}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={dk ? '#1CA9C9' : '#0F6E8C'} stopOpacity={0.18} />
-              <stop offset="100%" stopColor={dk ? '#1CA9C9' : '#0F6E8C'} stopOpacity={0.01} />
+              <stop offset="0%" stopColor={lineColor} stopOpacity={0.2} />
+              <stop offset="100%" stopColor={lineColor} stopOpacity={0.01} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke={dk ? '#1A2730' : '#E8EFF5'} vertical={false} />
-          <ReferenceArea y1={param.safeMin} y2={param.safeMax} fill={dk ? 'rgba(60,191,122,0.04)' : 'rgba(60,191,122,0.05)'} stroke="none" />
+          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+          <ReferenceArea y1={param.safeMin} y2={param.safeMax} fill={dk ? 'rgba(60,191,122,0.03)' : 'rgba(60,191,122,0.04)'} stroke="none" />
           <ReferenceLine y={param.safeMax} stroke="#3CBF7A" strokeDasharray="6 4" strokeWidth={1} label={{ value: `Max ${param.safeMax}`, position: 'insideTopLeft', fontSize: 10, fill: '#3CBF7A' }} />
           <ReferenceLine y={param.safeMin} stroke="#3CBF7A" strokeDasharray="6 4" strokeWidth={1} label={{ value: `Min ${param.safeMin}`, position: 'insideBottomLeft', fontSize: 10, fill: '#3CBF7A' }} />
-          <XAxis dataKey="time" ticks={ticks} tick={{ fontSize: 11, fill: dk ? '#5E7A8A' : '#8FA8B8', fontWeight: 500 }} axisLine={false} tickLine={false} dy={8} />
-          <YAxis domain={[yMin, yMax]} tick={{ fontSize: 11, fill: dk ? '#5E7A8A' : '#8FA8B8', fontWeight: 500 }} axisLine={false} tickLine={false} width={46} />
-          <Tooltip content={(props: any) => <ChartTooltip {...props} param={param} />} cursor={{ stroke: dk ? '#1A2730' : '#E0EBF2', strokeWidth: 1 }} />
-          <Area type="monotone" dataKey={selected} stroke={dk ? '#1CA9C9' : '#0F6E8C'} strokeWidth={2.5} fill={`url(#cg-${selected})`} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: dk ? '#111920' : '#FFFFFF', fill: dk ? '#1CA9C9' : '#0F6E8C' }} />
+          <XAxis dataKey="time" ticks={ticks} tick={{ fontSize: 11, fill: dk ? '#6B6880' : '#9490AA', fontWeight: 500 }} axisLine={false} tickLine={false} dy={8} />
+          <YAxis domain={[yMin, yMax]} tick={{ fontSize: 11, fill: dk ? '#6B6880' : '#9490AA', fontWeight: 500 }} axisLine={false} tickLine={false} width={46} />
+          <Tooltip content={(props: any) => <ChartTooltip {...props} param={param} />} cursor={{ stroke: gridColor, strokeWidth: 1 }} />
+          <Area type="monotone" dataKey={selected} stroke={lineColor} strokeWidth={2.5} fill={`url(#cg-${selected})`} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: dk ? '#14131F' : '#FFFFFF', fill: lineColor }} />
         </AreaChart>
       </ResponsiveContainer>
 
@@ -104,7 +107,7 @@ export default function WaterQualityChart() {
           <span className="text-xs text-txt-muted dark:text-txt-dark-muted">{param.label}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-5 h-3 rounded-sm" style={{ background: 'rgba(60,191,122,0.1)', border: '1px solid rgba(60,191,122,0.2)' }} />
+          <span className="w-5 h-3 rounded-sm" style={{ background: 'rgba(60,191,122,0.08)', border: '1px solid rgba(60,191,122,0.15)' }} />
           <span className="text-xs text-txt-muted dark:text-txt-dark-muted">Safe zone</span>
         </div>
       </div>
