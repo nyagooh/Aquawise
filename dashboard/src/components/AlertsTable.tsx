@@ -3,10 +3,10 @@ import { recentAlerts } from '../data/mockData';
 import { useState } from 'react';
 
 const cfg = {
-  safe:    { icon: <CheckCircle size={14} />, color: '#3CBF7A', bg: 'rgba(60,191,122,0.06)',  label: 'Resolved' },
-  warning: { icon: <AlertTriangle size={14} />, color: '#F4B740', bg: 'rgba(244,183,64,0.06)', label: 'Warning' },
-  danger:  { icon: <XCircle size={14} />,       color: '#E85D5D', bg: 'rgba(232,93,93,0.06)',  label: 'Critical' },
-  info:    { icon: <CheckCircle size={14} />,    color: '#6C5CE7', bg: 'rgba(108,92,231,0.06)', label: 'Info' },
+  safe:    { icon: <CheckCircle size={14} />, color: '#22C55E', bg: 'rgba(34,197,94,0.06)',  label: 'Resolved' },
+  warning: { icon: <AlertTriangle size={14} />, color: '#EAB308', bg: 'rgba(234,179,8,0.06)', label: 'Warning' },
+  danger:  { icon: <XCircle size={14} />,       color: '#EF4444', bg: 'rgba(239,68,68,0.06)',  label: 'Critical' },
+  info:    { icon: <CheckCircle size={14} />,    color: '#2563EB', bg: 'rgba(37,99,235,0.06)', label: 'Info' },
 };
 
 type Filter = 'all' | 'danger' | 'warning' | 'safe';
@@ -33,7 +33,7 @@ export default function AlertsTable() {
             <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Recent Alerts</h2>
             <ArrowUpRight size={14} className="text-txt-muted dark:text-txt-dark-muted" />
           </div>
-          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">{recentAlerts.length} alerts from stations</p>
+          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">{recentAlerts.length} alerts · Kisumu stations</p>
         </div>
         <div className="hidden sm:flex gap-1.5">
           {filters.map(f => (
@@ -42,7 +42,7 @@ export default function AlertsTable() {
               onClick={() => { setFilter(f.key); setShowAll(false); }}
               className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f.key
-                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0B0A14]'
+                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0A0E16] shadow-sm'
                   : 'bg-surface-subtle dark:bg-surface-subtle-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-txt dark:hover:text-txt-dark'
               }`}
             >
@@ -56,8 +56,8 @@ export default function AlertsTable() {
         {displayed.map(a => {
           const c = cfg[a.risk];
           return (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3.5 rounded-2xl hover:bg-surface-subtle/40 dark:hover:bg-surface-subtle-dark/40 transition-colors">
-              <div className="rounded-xl p-2.5 flex-shrink-0" style={{ background: c.bg }}>
+            <div key={a.id} className="flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-surface-subtle/40 dark:hover:bg-surface-subtle-dark/40 transition-colors">
+              <div className="rounded-lg p-2.5 flex-shrink-0" style={{ background: c.bg }}>
                 <span style={{ color: c.color }}>{c.icon}</span>
               </div>
               <div className="flex-1 min-w-0">
@@ -79,7 +79,7 @@ export default function AlertsTable() {
       {filtered.length > 4 && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="w-full mt-4 py-3 text-xs font-semibold text-primary dark:text-primary-dark hover:text-primary-hover dark:hover:text-primary-dark-hover rounded-2xl hover:bg-surface-subtle/50 dark:hover:bg-surface-subtle-dark/50 transition-colors"
+          className="w-full mt-4 py-3 text-xs font-semibold text-primary dark:text-primary-dark rounded-xl hover:bg-surface-subtle/50 dark:hover:bg-surface-subtle-dark/50 transition-colors"
         >
           {showAll ? 'Show less' : `View all ${filtered.length} alerts`}
         </button>

@@ -16,50 +16,45 @@
     font-family: 'Geist Sans', 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #F4F2FF;
-    color: #1A1A2E;
+    background: #F0F4FA;
+    color: #0F172A;
     font-size: 14px;
     line-height: 1.5;
   }
   .dark body {
-    background: #0B0A14;
-    color: #EEEDF5;
+    background: #0A0E16;
+    color: #E2E8F0;
   }
 }
 
-/* ── Card system ── */
 .card {
   background: #FFFFFF;
   border-radius: 20px;
-  border: 1px solid rgba(108,92,231,0.06);
-  box-shadow: 0 2px 8px rgba(108,92,231,0.04), 0 0 1px rgba(0,0,0,0.03);
-  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 3px rgba(37,99,235,0.02), 0 4px 16px rgba(37,99,235,0.03);
+  transition: box-shadow 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
 }
 .card:hover {
-  box-shadow: 0 16px 40px rgba(108,92,231,0.1), 0 2px 8px rgba(0,0,0,0.02);
+  border-color: rgba(37,99,235,0.15);
+  box-shadow: 0 8px 24px rgba(37,99,235,0.07), 0 20px 48px rgba(37,99,235,0.05);
   transform: translateY(-2px);
 }
 .dark .card {
-  background: #14131F;
-  border: 1px solid rgba(162,155,254,0.06);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  background: #111722;
+  border: 1px solid #1E293B;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 4px 16px rgba(0,0,0,0.08);
 }
 .dark .card:hover {
-  box-shadow: 0 16px 40px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.15);
+  border-color: rgba(96,165,250,0.15);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2), 0 20px 48px rgba(0,0,0,0.15);
   transform: translateY(-2px);
 }
 
-/* ── Scrollbar ── */
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #D8D4EA; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #C0BBDA; }
-.dark ::-webkit-scrollbar-thumb { background: #1E1C2E; }
-.dark ::-webkit-scrollbar-thumb:hover { background: #2A2840; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; }
+.dark ::-webkit-scrollbar-thumb { background: #1E293B; }
 
-/* ── Live pulse ── */
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
 .live-dot { animation: pulse 2s ease-in-out infinite; }
-
-/* ── Smooth scroll ── */
 section { scroll-margin-top: 24px; }

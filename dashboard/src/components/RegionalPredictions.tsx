@@ -4,10 +4,12 @@ import { regionPredictions, RegionPrediction } from '../data/mockData';
 import { useState } from 'react';
 import { useTheme } from '../context/ThemeContext';
 
+interface Props { selectedRegion: string; }
+
 const riskCfg = {
-  safe:    { color: '#3CBF7A', bg: 'rgba(60,191,122,0.06)', label: 'Low' },
-  warning: { color: '#F4B740', bg: 'rgba(244,183,64,0.06)', label: 'Medium' },
-  danger:  { color: '#E85D5D', bg: 'rgba(232,93,93,0.06)',  label: 'High' },
+  safe:    { color: '#22C55E', bg: 'rgba(34,197,94,0.06)', label: 'Low' },
+  warning: { color: '#EAB308', bg: 'rgba(234,179,8,0.06)', label: 'Medium' },
+  danger:  { color: '#EF4444', bg: 'rgba(239,68,68,0.06)', label: 'High' },
 };
 
 const trendIcon = {
@@ -19,19 +21,18 @@ const trendIcon = {
 function MiniBar({ data }: { data: RegionPrediction['forecastDays'] }) {
   const { theme } = useTheme();
   const dk = theme === 'dark';
-  // Use primary palette for bars — low=light, med=medium, high=saturated
-  const barColor = (s: number) => s < 25 ? (dk ? '#A29BFE' : '#6C5CE7') : s < 55 ? '#F4B740' : '#E85D5D';
+  const barColor = (s: number) => s < 25 ? (dk ? '#60A5FA' : '#2563EB') : s < 55 ? '#EAB308' : '#EF4444';
 
   return (
-    <ResponsiveContainer width="100%" height={64}>
+    <ResponsiveContainer width="100%" height={72}>
       <BarChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-        <XAxis dataKey="day" tick={{ fontSize: 10, fill: dk ? '#6B6880' : '#9490AA' }} axisLine={false} tickLine={false} />
+        <XAxis dataKey="day" tick={{ fontSize: 10, fill: dk ? '#64748B' : '#94A3B8' }} axisLine={false} tickLine={false} />
         <YAxis domain={[0, 100]} hide />
         <Tooltip
-          contentStyle={{ fontSize: 11, borderRadius: 12, border: dk ? '1px solid #1E1C2E' : '1px solid #E8E4F5', background: dk ? '#14131F' : '#fff', color: dk ? '#EEEDF5' : '#1A1A2E' }}
+          contentStyle={{ fontSize: 11, borderRadius: 12, border: dk ? '1px solid #1E293B' : '1px solid #E2E8F0', background: dk ? '#111722' : '#fff', color: dk ? '#E2E8F0' : '#0F172A' }}
           formatter={(v: any) => [`${v}/100`, 'Risk']}
         />
-        <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={14}>
+        <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={16}>
           {data.map((e, i) => <Cell key={i} fill={barColor(e.score)} fillOpacity={0.8} />)}
         </Bar>
       </BarChart>
@@ -39,28 +40,30 @@ function MiniBar({ data }: { data: RegionPrediction['forecastDays'] }) {
   );
 }
 
-export default function RegionalPredictions() {
+export default function RegionalPredictions({ selectedRegion }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const regions = selectedRegion === 'all' ? regionPredictions : regionPredictions.filter(r => r.id === selectedRegion);
 
   return (
     <div className="card p-7">
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold text-txt dark:text-txt-dark">AI Water Quality Predictions</h2>
+            <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Water Quality Predictions</h2>
             <ArrowUpRight size={14} className="text-txt-muted dark:text-txt-dark-muted" />
           </div>
-          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">7-day contamination forecast per region</p>
+          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">7-day contamination forecast · Kisumu region</p>
         </div>
+        <span className="text-xs font-medium text-txt-muted dark:text-txt-dark-muted">{regions.length} {regions.length === 1 ? 'area' : 'areas'}</span>
       </div>
 
       <div className="space-y-3">
-        {regionPredictions.map(region => {
+        {regions.map(region => {
           const c = riskCfg[region.riskLevel];
           const open = expanded === region.id;
 
           return (
-            <div key={region.id} className="rounded-2xl border border-line dark:border-line-dark overflow-hidden">
+            <div key={region.id} className="rounded-xl border border-line dark:border-line-dark overflow-hidden">
               <button
                 onClick={() => setExpanded(open ? null : region.id)}
                 className="w-full flex items-center gap-4 px-5 py-4 text-left hover:bg-surface-subtle/40 dark:hover:bg-surface-subtle-dark/40 transition-colors"
@@ -69,7 +72,7 @@ export default function RegionalPredictions() {
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-txt dark:text-txt-dark">{region.region}</p>
-                  <p className="text-xs text-txt-muted dark:text-txt-dark-muted truncate mt-0.5">{region.prediction}</p>
+                  <p className="text-xs text-txt-muted dark:text-txt-dark-muted truncate mt-0.5">{region.waterBody}</p>
                 </div>
 
                 <div className="hidden sm:flex flex-col items-center w-14 flex-shrink-0">
@@ -95,7 +98,7 @@ export default function RegionalPredictions() {
                     </div>
                     <div className="space-y-3">
                       <div>
-                        <p className="text-xs font-semibold text-txt-muted dark:text-txt-dark-muted">AI Assessment</p>
+                        <p className="text-xs font-semibold text-txt-muted dark:text-txt-dark-muted">Assessment</p>
                         <p className="text-xs text-txt-secondary dark:text-txt-dark-secondary mt-1 leading-relaxed">{region.prediction}</p>
                       </div>
                       <div className="flex gap-6">
