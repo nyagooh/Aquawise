@@ -8,13 +8,14 @@ import WaterSourceMap from './components/WaterSourceMap';
 import AlertsTable from './components/AlertsTable';
 import RegionalPredictions from './components/RegionalPredictions';
 import ParameterChart from './components/ParameterChart';
-import { currentReadings, recentAlerts, waterSources, regionPredictions } from './data/mockData';
 import { useEffect, useRef, useState } from 'react';
+import { DataProvider, useData } from './context/DataContext';
 import { MapPin, Droplets, AlertTriangle, Shield, Map } from 'lucide-react';
 
 function Dashboard() {
   const { theme } = useTheme();
   const { registerSection } = useNavigation();
+  const { currentReadings, recentAlerts, waterSources, regionPredictions } = useData();
   const mainRef = useRef<HTMLElement>(null);
   const sensorsRef = useRef<HTMLElement>(null);
   const stationsRef = useRef<HTMLElement>(null);
@@ -200,7 +201,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <NavigationProvider>
-        <Dashboard />
+        <DataProvider>
+          <Dashboard />
+        </DataProvider>
       </NavigationProvider>
     </ThemeProvider>
   );
