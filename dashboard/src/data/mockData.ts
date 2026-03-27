@@ -24,6 +24,7 @@ export interface TimePoint {
 export interface WaterSource {
   id: string;
   name: string;
+  regionId: string;
   risk: RiskLevel;
   lastUpdated: string;
 }
@@ -32,6 +33,7 @@ export interface Alert {
   id: string;
   time: string;
   source: string;
+  regionId: string;
   parameter: string;
   value: string;
   risk: RiskLevel;
@@ -87,20 +89,20 @@ export const currentReadings: SensorReading[] = [
 
 // ─── Monitoring stations (Kisumu area) ───
 export const waterSources: WaterSource[] = [
-  { id: 'ws1', name: 'Dunga Beach Station',     risk: 'safe',    lastUpdated: '2 min ago' },
-  { id: 'ws2', name: 'Ahero Irrigation Canal',  risk: 'warning', lastUpdated: '4 min ago' },
-  { id: 'ws3', name: 'Nyalenda Wetland',        risk: 'danger',  lastUpdated: '1 min ago' },
-  { id: 'ws4', name: 'Kibos River Point',       risk: 'safe',    lastUpdated: '6 min ago' },
-  { id: 'ws5', name: 'Kondele Water Point',     risk: 'safe',    lastUpdated: '3 min ago' },
+  { id: 'ws1', name: 'Dunga Beach Station',     regionId: 'r1', risk: 'safe',    lastUpdated: '2 min ago' },
+  { id: 'ws2', name: 'Ahero Irrigation Canal',  regionId: 'r2', risk: 'warning', lastUpdated: '4 min ago' },
+  { id: 'ws3', name: 'Nyalenda Wetland',        regionId: 'r3', risk: 'danger',  lastUpdated: '1 min ago' },
+  { id: 'ws4', name: 'Kibos River Point',       regionId: 'r4', risk: 'safe',    lastUpdated: '6 min ago' },
+  { id: 'ws5', name: 'Kondele Water Point',     regionId: 'r5', risk: 'safe',    lastUpdated: '3 min ago' },
 ];
 
 // ─── Alerts ───
 export const recentAlerts: Alert[] = [
-  { id: 'a1', time: '08:42 AM',  source: 'Nyalenda Wetland',      parameter: 'Turbidity',     value: '8.7 NTU',  risk: 'danger',  action: 'Boil water advisory issued for Nyalenda' },
-  { id: 'a2', time: '07:15 AM',  source: 'Ahero Irrigation Canal', parameter: 'Nitrates',      value: '11.2 mg/L', risk: 'warning', action: 'Increased monitoring at Ahero canal' },
-  { id: 'a3', time: '06:30 AM',  source: 'Kibos River Point',     parameter: 'pH Level',      value: '8.8 pH',   risk: 'warning', action: 'Treatment chemicals adjusted at Kibos' },
-  { id: 'a4', time: 'Yesterday', source: 'Dunga Beach Station',    parameter: 'Temperature',   value: '31.2 °C',  risk: 'warning', action: 'Resolved — temperature normalised at Dunga' },
-  { id: 'a5', time: 'Yesterday', source: 'Nyalenda Wetland',      parameter: 'E. coli (Sim)', value: 'Detected',  risk: 'danger',  action: 'Source isolated, samples sent to KIWASCO lab' },
+  { id: 'a1', time: '08:42 AM',  source: 'Nyalenda Wetland',       regionId: 'r3', parameter: 'Turbidity',     value: '8.7 NTU',  risk: 'danger',  action: 'Boil water advisory issued for Nyalenda' },
+  { id: 'a2', time: '07:15 AM',  source: 'Ahero Irrigation Canal', regionId: 'r2', parameter: 'Nitrates',      value: '11.2 mg/L', risk: 'warning', action: 'Increased monitoring at Ahero canal' },
+  { id: 'a3', time: '06:30 AM',  source: 'Kibos River Point',      regionId: 'r4', parameter: 'pH Level',      value: '8.8 pH',   risk: 'warning', action: 'Treatment chemicals adjusted at Kibos' },
+  { id: 'a4', time: 'Yesterday', source: 'Dunga Beach Station',     regionId: 'r1', parameter: 'Temperature',   value: '31.2 °C',  risk: 'warning', action: 'Resolved — temperature normalised at Dunga' },
+  { id: 'a5', time: 'Yesterday', source: 'Nyalenda Wetland',       regionId: 'r3', parameter: 'E. coli (Sim)', value: 'Detected',  risk: 'danger',  action: 'Source isolated, samples sent to KIWASCO lab' },
 ];
 
 // ─── Regional predictions (Kisumu sub-regions near water bodies) ───

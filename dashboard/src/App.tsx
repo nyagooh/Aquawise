@@ -14,8 +14,6 @@ import { currentReadings, recentAlerts, regionPredictions } from './data/mockDat
 import { useEffect, useRef, useState } from 'react';
 import { MapPin } from 'lucide-react';
 
-const alertCount = recentAlerts.filter(a => a.risk === 'danger' || a.risk === 'warning').length;
-
 function Dashboard() {
   const { theme } = useTheme();
   const { registerSection } = useNavigation();
@@ -25,6 +23,11 @@ function Dashboard() {
   const predictionsRef = useRef<HTMLElement>(null);
   const alertsRef = useRef<HTMLElement>(null);
   const [selectedRegion, setSelectedRegion] = useState('all');
+
+  const alertCount = recentAlerts.filter(a => {
+    if (selectedRegion !== 'all' && a.regionId !== selectedRegion) return false;
+    return a.risk === 'danger' || a.risk === 'warning';
+  }).length;
 
   useEffect(() => {
     registerSection('main', mainRef.current);
@@ -53,17 +56,7 @@ function Dashboard() {
                 <span className="text-sm font-semibold text-txt dark:text-txt-dark">Region</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSelectedRegion('all')}
-                  className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    selectedRegion === 'all'
-                      ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0C1425] shadow-lg shadow-primary/25'
-                      : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
-                  }`}
-                >
-                  All Regions
-                </button>
-                {regionPredictions.map(r => (
+                {[{ id: 'all', label: 'All Regions' }, ...regionPredictions.map(r => ({ id: r.id, label: r.region }))].map(r => (
                   <button
                     key={r.id}
                     onClick={() => setSelectedRegion(r.id)}
@@ -73,20 +66,16 @@ function Dashboard() {
                         : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
                     }`}
                   >
-                    {r.region}
+                    {r.label}
                   </button>
                 ))}
               </div>
             </div>
 
+            {/* KPIs */}
             <SummaryStats selectedRegion={selectedRegion} />
 
-            {/* Alerts — prominent, right after KPIs */}
-            <section ref={alertsRef}>
-              <AlertsTable />
-            </section>
-
-            {/* Sensors */}
+            {/* Live Sensors — always shown, these are physical sensors */}
             <section ref={sensorsRef}>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings</h2>
@@ -100,18 +89,23 @@ function Dashboard() {
               </div>
             </section>
 
+            {/* Alerts — filtered by region */}
+            <section ref={alertsRef}>
+              <AlertsTable selectedRegion={selectedRegion} />
+            </section>
+
             {/* Chart */}
             <WaterQualityChart />
 
-            {/* Predictions */}
+            {/* Predictions — filtered by region */}
             <section ref={predictionsRef}>
               <RegionalPredictions selectedRegion={selectedRegion} />
             </section>
 
-            {/* Stations + Radar */}
+            {/* Stations + Radar — stations filtered by region */}
             <section ref={stationsRef}>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <WaterSourceMap />
+                <WaterSourceMap selectedRegion={selectedRegion} />
                 <ParameterRadar />
               </div>
             </section>

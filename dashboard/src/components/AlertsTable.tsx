@@ -2,6 +2,8 @@ import { AlertTriangle, CheckCircle, XCircle, ArrowUpRight } from 'lucide-react'
 import { recentAlerts } from '../data/mockData';
 import { useState } from 'react';
 
+interface Props { selectedRegion: string; }
+
 const cfg = {
   safe:    { icon: <CheckCircle size={14} />, color: '#22C55E', bg: 'rgba(34,197,94,0.06)',  label: 'Resolved' },
   warning: { icon: <AlertTriangle size={14} />, color: '#EAB308', bg: 'rgba(234,179,8,0.06)', label: 'Warning' },
@@ -11,11 +13,13 @@ const cfg = {
 
 type Filter = 'all' | 'danger' | 'warning' | 'safe';
 
-export default function AlertsTable() {
+export default function AlertsTable({ selectedRegion }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [showAll, setShowAll] = useState(false);
 
-  const filtered = filter === 'all' ? recentAlerts : recentAlerts.filter(a => a.risk === filter);
+  // Filter by region first, then by severity
+  const regionAlerts = selectedRegion === 'all' ? recentAlerts : recentAlerts.filter(a => a.regionId === selectedRegion);
+  const filtered = filter === 'all' ? regionAlerts : regionAlerts.filter(a => a.risk === filter);
   const displayed = showAll ? filtered : filtered.slice(0, 4);
 
   const filters: { key: Filter; label: string }[] = [
@@ -27,13 +31,15 @@ export default function AlertsTable() {
 
   return (
     <div className="card p-7">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-5">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Recent Alerts</h2>
             <ArrowUpRight size={14} className="text-txt-muted dark:text-txt-dark-muted" />
           </div>
-          <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5">{recentAlerts.length} alerts · Kisumu stations</p>
+          <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">
+            {regionAlerts.length} alert{regionAlerts.length !== 1 ? 's' : ''}{selectedRegion !== 'all' ? ' in this region' : ' · Kisumu stations'}
+          </p>
         </div>
         <div className="hidden sm:flex gap-1.5">
           {filters.map(f => (
@@ -52,34 +58,41 @@ export default function AlertsTable() {
         </div>
       </div>
 
-      <div className="space-y-2">
-        {displayed.map(a => {
-          const c = cfg[a.risk];
-          return (
-            <div key={a.id} className="flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-surface-subtle/40 dark:hover:bg-surface-subtle-dark/40 transition-colors">
-              <div className="rounded-lg p-2.5 flex-shrink-0" style={{ background: c.bg }}>
-                <span style={{ color: c.color }}>{c.icon}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-txt dark:text-txt-dark">{a.source}</span>
-                  <span className="text-txt-muted dark:text-txt-dark-muted opacity-30">·</span>
-                  <span className="text-xs text-txt-secondary dark:text-txt-dark-secondary">{a.parameter}</span>
-                  <span className="text-xs font-semibold text-txt dark:text-txt-dark">{a.value}</span>
+      {filtered.length === 0 ? (
+        <div className="text-center py-8">
+          <CheckCircle size={24} className="mx-auto text-ok mb-2" />
+          <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">No alerts for this region</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {displayed.map(a => {
+            const c = cfg[a.risk];
+            return (
+              <div key={a.id} className="flex items-center gap-3 px-4 py-3.5 rounded-xl hover:bg-surface-subtle/40 dark:hover:bg-surface-subtle-dark/40 transition-colors">
+                <div className="rounded-lg p-2.5 flex-shrink-0" style={{ background: c.bg }}>
+                  <span style={{ color: c.color }}>{c.icon}</span>
                 </div>
-                <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5 truncate">{a.action}</p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-txt dark:text-txt-dark">{a.source}</span>
+                    <span className="text-txt-muted dark:text-txt-dark-muted opacity-30">·</span>
+                    <span className="text-sm text-txt-secondary dark:text-txt-dark-secondary">{a.parameter}</span>
+                    <span className="text-sm font-semibold text-txt dark:text-txt-dark">{a.value}</span>
+                  </div>
+                  <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-0.5 truncate">{a.action}</p>
+                </div>
+                <span className="text-xs font-semibold px-3 py-1 rounded-full flex-shrink-0" style={{ background: c.bg, color: c.color }}>{c.label}</span>
+                <span className="text-xs text-txt-muted dark:text-txt-dark-muted flex-shrink-0 w-20 text-right">{a.time}</span>
               </div>
-              <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0" style={{ background: c.bg, color: c.color }}>{c.label}</span>
-              <span className="text-xs text-txt-muted dark:text-txt-dark-muted flex-shrink-0 w-20 text-right">{a.time}</span>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {filtered.length > 4 && (
         <button
           onClick={() => setShowAll(!showAll)}
-          className="w-full mt-4 py-3 text-xs font-semibold text-primary dark:text-primary-dark rounded-xl hover:bg-surface-subtle/50 dark:hover:bg-surface-subtle-dark/50 transition-colors"
+          className="w-full mt-4 py-3 text-sm font-semibold text-primary dark:text-primary-dark rounded-xl hover:bg-surface-subtle/50 dark:hover:bg-surface-subtle-dark/50 transition-colors"
         >
           {showAll ? 'Show less' : `View all ${filtered.length} alerts`}
         </button>
