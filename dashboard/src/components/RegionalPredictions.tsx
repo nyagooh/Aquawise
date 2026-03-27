@@ -1,6 +1,7 @@
 import { TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react';
-import { regionPredictions, RegionPrediction } from '../data/mockData';
+import type { RegionPrediction } from '../data/mockData';
 import { useState } from 'react';
+import { useData } from '../context/DataContext';
 
 interface Props { selectedRegion: string; }
 
@@ -41,6 +42,7 @@ function ForecastBars({ data }: { data: RegionPrediction['forecastDays'] }) {
 
 export default function RegionalPredictions({ selectedRegion }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
+  const { regionPredictions } = useData();
   const regions = selectedRegion === 'all' ? regionPredictions : regionPredictions.filter(r => r.id === selectedRegion);
 
   return (
