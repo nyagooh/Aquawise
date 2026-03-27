@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle, XCircle, ArrowUpRight } from 'lucide-react';
-import { recentAlerts } from '../data/mockData';
 import { useState } from 'react';
+import { useData } from '../context/DataContext';
 
 interface Props { selectedRegion: string; }
 
@@ -16,6 +16,7 @@ type Filter = 'all' | 'danger' | 'warning' | 'safe';
 export default function AlertsTable({ selectedRegion }: Props) {
   const [filter, setFilter] = useState<Filter>('all');
   const [showAll, setShowAll] = useState(false);
+  const { recentAlerts } = useData();
 
   // Filter by region first, then by severity
   const regionAlerts = selectedRegion === 'all' ? recentAlerts : recentAlerts.filter(a => a.regionId === selectedRegion);
