@@ -1,2 +1,43 @@
 node_modules/
 dist/
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Django specific
+db.sqlite3
+media/
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# Arduino (optional)
+*.hex
+*.bin
