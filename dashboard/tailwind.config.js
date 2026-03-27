@@ -5,8 +5,8 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg:      { DEFAULT: '#D4E0F7', dark: '#0C1425' },
-        surface: { DEFAULT: '#FFFFFF', dark: '#131C2E', subtle: '#EDF2FB', 'subtle-dark': '#111828' },
+        bg:      { DEFAULT: '#E8EEF8', dark: '#1A2332' },
+        surface: { DEFAULT: '#FFFFFF', dark: '#212B3D', subtle: '#EDF2FB', 'subtle-dark': '#1E2738' },
         primary: { DEFAULT: '#2563EB', hover: '#1D4FCC', dark: '#60A5FA', 'dark-hover': '#93C5FD' },
         ok:      { DEFAULT: '#22C55E', soft: '#ECFDF5', 'soft-dark': '#052E16' },
         warn:    { DEFAULT: '#EAB308' },

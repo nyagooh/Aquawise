@@ -42,7 +42,7 @@ export default function Sidebar() {
               onClick={() => { if (collapsed) setCollapsed(false); setActivePage(page); }}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                 active
-                  ? 'bg-primary text-white dark:bg-primary-dark dark:text-[#0C1425] font-semibold shadow-lg shadow-primary/25'
+                  ? 'bg-primary text-white dark:bg-primary-dark dark:text-[#1A2332] font-semibold shadow-lg shadow-primary/25'
                   : 'text-txt-secondary dark:text-txt-dark-secondary hover:bg-surface-subtle dark:hover:bg-surface-subtle-dark hover:text-txt dark:hover:text-txt-dark'
               }`}
             >

@@ -16,13 +16,13 @@
     font-family: 'Geist Sans', 'Inter', system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background: #D4E0F7;
+    background: #E8EEF8;
     color: #0F172A;
     font-size: 14px;
     line-height: 1.5;
   }
   .dark body {
-    background: #0C1425;
+    background: #1A2332;
     color: #E2E8F0;
   }
 }
@@ -40,7 +40,7 @@
   transform: translateY(-2px);
 }
 .dark .card {
-  background: #131C2E;
+  background: #212B3D;
   border: 1px solid rgba(96,165,250,0.08);
   box-shadow: 0 1px 3px rgba(0,0,0,0.15), 0 6px 20px rgba(0,0,0,0.1);
 }

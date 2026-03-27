@@ -3,16 +3,13 @@ import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { NavigationProvider, useNavigation } from './context/NavigationContext';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import SummaryStats from './components/SummaryStats';
 import SensorCard from './components/SensorCard';
-import WaterQualityChart from './components/WaterQualityChart';
 import WaterSourceMap from './components/WaterSourceMap';
 import AlertsTable from './components/AlertsTable';
-import ParameterRadar from './components/ParameterRadar';
 import RegionalPredictions from './components/RegionalPredictions';
 import { currentReadings, recentAlerts, regionPredictions } from './data/mockData';
 import { useEffect, useRef, useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Droplets } from 'lucide-react';
 
 function Dashboard() {
   const { theme } = useTheme();
@@ -29,6 +26,8 @@ function Dashboard() {
     return a.risk === 'danger' || a.risk === 'warning';
   }).length;
 
+  const regionName = selectedRegion === 'all' ? null : regionPredictions.find(r => r.id === selectedRegion)?.region;
+
   useEffect(() => {
     registerSection('main', mainRef.current);
     registerSection('sensors', sensorsRef.current);
@@ -37,7 +36,7 @@ function Dashboard() {
     registerSection('alerts', alertsRef.current);
   }, [registerSection]);
 
-  const bg = theme === 'dark' ? '#0C1425' : '#D4E0F7';
+  const bg = theme === 'dark' ? '#1A2332' : '#E8EEF8';
 
   return (
     <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: bg }}>
@@ -62,7 +61,7 @@ function Dashboard() {
                     onClick={() => setSelectedRegion(r.id)}
                     className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
                       selectedRegion === r.id
-                        ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0C1425] shadow-lg shadow-primary/25'
+                        ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#1A2332] shadow-lg shadow-primary/25'
                         : 'bg-white dark:bg-surface-dark border border-line dark:border-line-dark text-txt-secondary dark:text-txt-dark-secondary hover:border-primary/30 hover:text-txt dark:hover:text-txt-dark'
                     }`}
                   >
@@ -72,21 +71,30 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* KPIs */}
-            <SummaryStats selectedRegion={selectedRegion} />
-
-            {/* Live Sensors — always shown, these are physical sensors */}
+            {/* Live Sensors — shown when a specific region is selected */}
             <section ref={sensorsRef}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings</h2>
-                <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
-                  <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
-                  Live
-                </span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
-              </div>
+              {selectedRegion !== 'all' ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings — {regionName}</h2>
+                    <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
+                      <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
+                      Live
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
+                  </div>
+                </>
+              ) : (
+                <div className="card px-6 py-8 flex flex-col items-center justify-center text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/8 dark:bg-primary-dark/8 flex items-center justify-center mb-3">
+                    <Droplets size={22} className="text-primary dark:text-primary-dark" />
+                  </div>
+                  <p className="text-sm font-semibold text-txt dark:text-txt-dark">Select a region to view live sensor readings</p>
+                  <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Choose a specific region above to see real-time water quality data</p>
+                </div>
+              )}
             </section>
 
             {/* Alerts — filtered by region */}
@@ -94,20 +102,14 @@ function Dashboard() {
               <AlertsTable selectedRegion={selectedRegion} />
             </section>
 
-            {/* Chart */}
-            <WaterQualityChart />
-
             {/* Predictions — filtered by region */}
             <section ref={predictionsRef}>
               <RegionalPredictions selectedRegion={selectedRegion} />
             </section>
 
-            {/* Stations + Radar — stations filtered by region */}
+            {/* Stations — filtered by region */}
             <section ref={stationsRef}>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <WaterSourceMap selectedRegion={selectedRegion} />
-                <ParameterRadar />
-              </div>
+              <WaterSourceMap selectedRegion={selectedRegion} />
             </section>
 
             <footer className="pb-6 text-center text-xs text-txt-muted dark:text-txt-dark-muted">

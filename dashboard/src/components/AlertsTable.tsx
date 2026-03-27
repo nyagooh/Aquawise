@@ -48,7 +48,7 @@ export default function AlertsTable({ selectedRegion }: Props) {
               onClick={() => { setFilter(f.key); setShowAll(false); }}
               className={`px-3.5 py-2 rounded-xl text-xs font-medium transition-all ${
                 filter === f.key
-                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#0C1425] shadow-sm'
+                  ? 'bg-primary dark:bg-primary-dark text-white dark:text-[#1A2332] shadow-sm'
                   : 'bg-surface-subtle dark:bg-surface-subtle-dark text-txt-secondary dark:text-txt-dark-secondary hover:text-txt dark:hover:text-txt-dark'
               }`}
             >
