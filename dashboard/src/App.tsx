@@ -13,14 +13,14 @@ import ParameterRadar from './components/ParameterRadar';
 import RegionalPredictions from './components/RegionalPredictions';
 import { currentReadings, recentAlerts } from './data/mockData';
 import { calculateOverallRisk } from './utils/riskCalculator';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 
 const risk = calculateOverallRisk(currentReadings);
 const alertCount = recentAlerts.filter(a => a.risk === 'danger' || a.risk === 'warning').length;
 
 function Dashboard() {
   const { theme } = useTheme();
-  const { registerSection, activePage } = useNavigation();
+  const { registerSection } = useNavigation();
   const mainRef = useRef<HTMLElement>(null);
   const sensorsRef = useRef<HTMLElement>(null);
   const stationsRef = useRef<HTMLElement>(null);
@@ -35,57 +35,28 @@ function Dashboard() {
     registerSection('alerts', alertsRef.current);
   }, [registerSection]);
 
-  // Track scroll position to update active nav
-  const handleScroll = useCallback(() => {
-    if (!mainRef.current) return;
-    const scrollTop = mainRef.current.scrollTop;
-    const offset = mainRef.current.offsetTop + 80;
-
-    const sections = [
-      { page: 'alerts' as const, ref: alertsRef },
-      { page: 'predictions' as const, ref: predictionsRef },
-      { page: 'stations' as const, ref: stationsRef },
-      { page: 'sensors' as const, ref: sensorsRef },
-    ];
-
-    for (const s of sections) {
-      if (s.ref.current && s.ref.current.offsetTop - offset <= scrollTop) {
-        // Don't call setActivePage here to avoid scroll loops — just visual tracking
-        return;
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const el = mainRef.current;
-    if (el) el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => { if (el) el.removeEventListener('scroll', handleScroll); };
-  }, [handleScroll]);
-
   return (
-    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#0A0F14' : '#F7FAFC' }}>
+    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#080D12' : '#EDF3F8' }}>
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header alertCount={alertCount} />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-[1440px] mx-auto px-6 py-6 space-y-6">
+          <div className="max-w-[1400px] mx-auto px-8 py-8 space-y-8">
 
             <SummaryStats risk={risk} />
 
             {/* Sensors */}
             <section ref={sensorsRef}>
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2.5">
-                  <h2 className="text-2xs font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-[0.12em]">Live Sensor Readings</h2>
-                  <span className="flex items-center gap-1.5 text-[9px] font-bold text-ok px-2 py-0.5 rounded-md" style={{ background: 'rgba(60,191,122,0.08)' }}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
-                    Updating
-                  </span>
-                </div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-txt-muted dark:text-txt-dark-muted uppercase tracking-[0.08em]">Live Sensor Readings</h2>
+                <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full" style={{ background: 'rgba(60,191,122,0.08)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
+                  Live
+                </span>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
                 {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}
               </div>
             </section>
@@ -113,8 +84,8 @@ function Dashboard() {
               <AlertsTable />
             </section>
 
-            <footer className="pb-4 text-center text-2xs text-txt-muted dark:text-txt-dark-muted">
-              Uhai WashWise · Water Quality Intelligence · Real sensors: Temperature &amp; Turbidity · Others simulated
+            <footer className="pb-6 text-center text-xs text-txt-muted dark:text-txt-dark-muted">
+              Uhai WashWise · Water Quality Intelligence
             </footer>
           </div>
         </main>
