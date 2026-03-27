@@ -1,10 +1,11 @@
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, Tooltip } from 'recharts';
-import { currentReadings } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
+import { useData } from '../context/DataContext';
 import { ArrowUpRight } from 'lucide-react';
 
 export default function ParameterRadar() {
   const { theme } = useTheme();
+  const { currentReadings } = useData();
   const dk = theme === 'dark';
 
   const data = currentReadings.map(r => {
