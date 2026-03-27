@@ -36,7 +36,7 @@ function Dashboard() {
   }, [registerSection]);
 
   return (
-    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#080D12' : '#EDF3F8' }}>
+    <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''}`} style={{ background: theme === 'dark' ? '#080D12' : '#F0F5FF' }}>
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
