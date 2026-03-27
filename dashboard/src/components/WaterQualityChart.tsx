@@ -3,8 +3,8 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceArea, ReferenceLine,
 } from 'recharts';
-import { timeSeriesData } from '../data/mockData';
 import { useTheme } from '../context/ThemeContext';
+import { useData } from '../context/DataContext';
 import { ArrowUpRight } from 'lucide-react';
 
 type Param = 'temperature' | 'turbidity' | 'ph' | 'dissolvedOxygen' | 'nitrates';
@@ -44,12 +44,13 @@ function ChartTooltip({ active, payload, label, param }: any) {
 export default function WaterQualityChart() {
   const [selected, setSelected] = useState<Param>('turbidity');
   const { theme } = useTheme();
+  const { timeSeriesData } = useData();
   const param = PARAMS.find(p => p.key === selected)!;
   const dk = theme === 'dark';
 
   const vals = timeSeriesData.map(d => (d as any)[selected] as number);
-  const yMin = Math.floor(Math.min(Math.min(...vals), param.safeMin) * 0.9);
-  const yMax = Math.ceil(Math.max(Math.max(...vals), param.safeMax) * 1.1);
+  const yMin = vals.length ? Math.floor(Math.min(Math.min(...vals), param.safeMin) * 0.9) : 0;
+  const yMax = vals.length ? Math.ceil(Math.max(Math.max(...vals), param.safeMax) * 1.1) : 100;
   const ticks = timeSeriesData.filter((_, i) => i % 4 === 0).map(d => d.time);
 
   const lineColor = dk ? '#60A5FA' : '#2563EB';
