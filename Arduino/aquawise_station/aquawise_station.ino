@@ -16,11 +16,11 @@
 #include <ArduinoJson.h>
 
 // ── Configuration ────────────────────────────────────────────────────────────
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID     = "Javis";
+const char* WIFI_PASSWORD = "777ascii";
 
 // IP address of the machine running Django (e.g. your laptop on the same network)
-const char* SERVER_IP   = "192.168.1.100";
+const char* SERVER_IP   = "192.168.0.108";
 const int   SERVER_PORT = 8000;
 
 // Must match a WaterSource name in the database exactly (case-insensitive)
@@ -38,6 +38,8 @@ void setup() {
   Serial.println("\n=== Aquawise Station ===");
   Serial.print("Connecting to WiFi: ");
   Serial.println(WIFI_SSID);
+  Serial.print("WiFi Password: ");
+  Serial.println(WIFI_PASSWORD);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
