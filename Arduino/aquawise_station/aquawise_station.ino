@@ -7,8 +7,10 @@
  * Usage:
  *   1. Set WIFI_SSID, WIFI_PASSWORD, SERVER_IP, STATION_NAME below.
  *   2. Flash to the board and open Serial Monitor at 115200 baud.
- *   3. Follow the prompts — enter each sensor value, press Enter.
- *   4. The sketch packages the values as JSON and POSTs to /api/ingest/.
+ *   3. If the preset WiFi doesn't connect within 5 s, a scan runs and you
+ *      pick a network by number and enter the password via Serial.
+ *   4. Follow the sensor prompts — enter each value, press Enter.
+ *   5. The sketch packages the values as JSON and POSTs to /api/ingest/.
  */
 
 #include <WiFi.h>
@@ -29,6 +31,127 @@ const char* STATION_NAME = "Dunga Beach Station";
 
 String serverUrl;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Block until a full line arrives on Serial, then return it trimmed.
+String readLine() {
+  while (!Serial.available()) { delay(10); }
+  String s = Serial.readStringUntil('\n');
+  s.trim();
+  return s;
+}
+
+// Read a float from Serial, blocking until the user hits Enter.
+float promptFloat(const char* label, const char* unit) {
+  Serial.print("  ");
+  Serial.print(label);
+  Serial.print(" (");
+  Serial.print(unit);
+  Serial.print("): ");
+  float value = readLine().toFloat();
+  Serial.println(value);
+  return value;
+}
+
+// ── WiFi ──────────────────────────────────────────────────────────────────────
+
+// Scan networks, print numbered list, return count.
+int scanAndPrint() {
+  Serial.println("\nScanning for WiFi networks...");
+  int n = WiFi.scanNetworks();
+  if (n == 0) {
+    Serial.println("No networks found.");
+    return 0;
+  }
+  Serial.println("Available networks:");
+  for (int i = 0; i < n; i++) {
+    Serial.print("  [");
+    Serial.print(i + 1);
+    Serial.print("] ");
+    Serial.print(WiFi.SSID(i));
+    Serial.print("  (RSSI: ");
+    Serial.print(WiFi.RSSI(i));
+    Serial.print(" dBm)");
+    if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) {
+      Serial.print("  [open]");
+    }
+    Serial.println();
+  }
+  return n;
+}
+
+// Interactive WiFi picker — shown when the preset credentials fail.
+void pickWifi() {
+  int n = scanAndPrint();
+  if (n == 0) {
+    Serial.println("Retrying scan in 5 s...");
+    delay(5000);
+    n = scanAndPrint();
+    if (n == 0) return;
+  }
+
+  // Pick network
+  int choice = 0;
+  while (choice < 1 || choice > n) {
+    Serial.print("\nSelect network [1-");
+    Serial.print(n);
+    Serial.print("]: ");
+    choice = readLine().toInt();
+    if (choice < 1 || choice > n) {
+      Serial.println("Invalid selection, try again.");
+    }
+  }
+  String chosenSSID = WiFi.SSID(choice - 1);
+  Serial.println(chosenSSID);
+
+  // Enter password (leave blank for open networks)
+  Serial.print("Password (leave blank if open): ");
+  String password = readLine();
+
+  Serial.print("Connecting to ");
+  Serial.print(chosenSSID);
+  Serial.print("...");
+
+  WiFi.begin(chosenSSID.c_str(), password.c_str());
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected!");
+  } else {
+    Serial.println("\nFailed to connect. Will retry on next loop.");
+  }
+}
+
+// Try the preset credentials for up to 5 s; fall back to interactive picker.
+void connectWifi() {
+  Serial.print("Connecting to preset WiFi: ");
+  Serial.println(WIFI_SSID);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 5000) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\nConnected to preset network.");
+  } else {
+    Serial.println("\nPreset network not reachable.");
+    WiFi.disconnect(true);
+    delay(500);
+    pickWifi();
+  }
+}
+
+// ── Setup ─────────────────────────────────────────────────────────────────────
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -36,49 +159,36 @@ void setup() {
   serverUrl = String("http://") + SERVER_IP + ":" + SERVER_PORT + "/api/ingest/";
 
   Serial.println("\n=== Aquawise Station ===");
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(WIFI_SSID);
-  Serial.print("WiFi Password: ");
-  Serial.println(WIFI_PASSWORD);
+  connectWifi();
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Sending to: ");
+    Serial.println(serverUrl);
   }
-
-  Serial.println("\nWiFi connected.");
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
-  Serial.print("Sending to: ");
-  Serial.println(serverUrl);
   Serial.println("========================\n");
 }
 
-// Read a float from Serial, blocking until the user hits Enter
-float promptFloat(const char* label, const char* unit) {
-  Serial.print("  ");
-  Serial.print(label);
-  Serial.print(" (");
-  Serial.print(unit);
-  Serial.print("): ");
-
-  while (!Serial.available()) { delay(10); }
-  String input = Serial.readStringUntil('\n');
-  input.trim();
-  float value = input.toFloat();
-  Serial.println(value);
-  return value;
-}
+// ── Loop ──────────────────────────────────────────────────────────────────────
 
 void loop() {
+  // Re-connect if dropped
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi lost. Reconnecting...");
+    WiFi.disconnect(true);
+    delay(500);
+    connectWifi();
+    return;
+  }
+
   Serial.println("--- Enter sensor readings ---");
 
-  float temperature     = promptFloat("Temperature",      "°C");
+  float temperature     = promptFloat("Temperature",      "C");
   float turbidity       = promptFloat("Turbidity",        "NTU");
   float ph              = promptFloat("pH",               "pH");
   float dissolvedOxygen = promptFloat("Dissolved Oxygen", "mg/L");
-  float conductivity    = promptFloat("Conductivity",     "µS/cm");
+  float conductivity    = promptFloat("Conductivity",     "uS/cm");
   float nitrates        = promptFloat("Nitrates",         "mg/L");
 
   // Build JSON payload
@@ -96,12 +206,6 @@ void loop() {
 
   Serial.println("\nSending payload:");
   Serial.println(payload);
-
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("ERROR: WiFi disconnected. Skipping send.");
-    delay(3000);
-    return;
-  }
 
   HTTPClient http;
   http.begin(serverUrl);
