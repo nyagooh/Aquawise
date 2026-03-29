@@ -99,3 +99,23 @@ class ForecastDay(models.Model):
 
     class Meta:
         ordering = ['order']
+
+
+class StationReading(models.Model):
+    """Live reading posted by a physical station (e.g. Arduino over HTTP)."""
+    station = models.ForeignKey(
+        WaterSource, on_delete=models.SET_NULL, null=True, blank=True, related_name='readings'
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+    temperature = models.FloatField(null=True, blank=True)
+    turbidity = models.FloatField(null=True, blank=True)
+    ph = models.FloatField(null=True, blank=True)
+    dissolved_oxygen = models.FloatField(null=True, blank=True)
+    conductivity = models.FloatField(null=True, blank=True)
+    nitrates = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f'{self.station} @ {self.timestamp:%Y-%m-%d %H:%M}'
