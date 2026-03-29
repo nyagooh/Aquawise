@@ -8,4 +8,5 @@ urlpatterns = [
     path('water-sources/', views.water_sources),
     path('alerts/', views.alerts),
     path('predictions/', views.predictions),
+    path('ingest/', views.ingest),
 ]
