@@ -1,11 +1,17 @@
 /*
  * Aquawise Station — HTTP POST to Django ingest endpoint
  *
- * Board  : ESP32 (or ESP8266 — change WiFi.h to ESP8266WiFi.h)
+ * Board  : ESP32
  * Library: ArduinoJson  (install via Library Manager: "ArduinoJson" by Benoit Blanchon)
  *
+ * Public URL setup (ngrok):
+ *   1. Install ngrok: https://ngrok.com/download
+ *   2. Run: ngrok http 8000
+ *   3. Copy the https://xxxx.ngrok-free.app URL into SERVER_URL below.
+ *   4. Run Django with: python manage.py runserver 0.0.0.0:8000
+ *
  * Usage:
- *   1. Set WIFI_SSID, WIFI_PASSWORD, SERVER_IP, STATION_NAME below.
+ *   1. Set WIFI_SSID, WIFI_PASSWORD, SERVER_URL, STATION_NAME below.
  *   2. Flash to the board and open Serial Monitor at 115200 baud.
  *   3. If the preset WiFi doesn't connect within 5 s, a scan runs and you
  *      pick a network by number and enter the password via Serial.
@@ -14,26 +20,26 @@
  */
 
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 
-// ── Configuration ────────────────────────────────────────────────────────────
+// ── Configuration ─────────────────────────────────────────────────────────────
 const char* WIFI_SSID     = "Javis";
 const char* WIFI_PASSWORD = "777ascii";
 
-// IP address of the machine running Django (e.g. your laptop on the same network)
-const char* SERVER_IP   = "192.168.0.108";
-const int   SERVER_PORT = 8000;
+// Full public URL — paste your ngrok URL here (keep the /api/ingest/ path)
+// Example: "https://abcd-1234.ngrok-free.app/api/ingest/"
+const char* SERVER_URL = "https://YOUR-NGROK-URL.ngrok-free.app/api/ingest/";
 
 // Must match a WaterSource name in the database exactly (case-insensitive)
 const char* STATION_NAME = "Dunga Beach Station";
-// ─────────────────────────────────────────────────────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
 
-String serverUrl;
+WiFiClientSecure secureClient;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Block until a full line arrives on Serial, then return it trimmed.
 String readLine() {
   while (!Serial.available()) { delay(10); }
   String s = Serial.readStringUntil('\n');
@@ -41,7 +47,6 @@ String readLine() {
   return s;
 }
 
-// Read a float from Serial, blocking until the user hits Enter.
 float promptFloat(const char* label, const char* unit) {
   Serial.print("  ");
   Serial.print(label);
@@ -55,7 +60,6 @@ float promptFloat(const char* label, const char* unit) {
 
 // ── WiFi ──────────────────────────────────────────────────────────────────────
 
-// Scan networks, print numbered list, return count.
 int scanAndPrint() {
   Serial.println("\nScanning for WiFi networks...");
   int n = WiFi.scanNetworks();
@@ -69,18 +73,15 @@ int scanAndPrint() {
     Serial.print(i + 1);
     Serial.print("] ");
     Serial.print(WiFi.SSID(i));
-    Serial.print("  (RSSI: ");
+    Serial.print("  (");
     Serial.print(WiFi.RSSI(i));
     Serial.print(" dBm)");
-    if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) {
-      Serial.print("  [open]");
-    }
+    if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) Serial.print("  [open]");
     Serial.println();
   }
   return n;
 }
 
-// Interactive WiFi picker — shown when the preset credentials fail.
 void pickWifi() {
   int n = scanAndPrint();
   if (n == 0) {
@@ -90,21 +91,17 @@ void pickWifi() {
     if (n == 0) return;
   }
 
-  // Pick network
   int choice = 0;
   while (choice < 1 || choice > n) {
     Serial.print("\nSelect network [1-");
     Serial.print(n);
     Serial.print("]: ");
     choice = readLine().toInt();
-    if (choice < 1 || choice > n) {
-      Serial.println("Invalid selection, try again.");
-    }
+    if (choice < 1 || choice > n) Serial.println("Invalid selection, try again.");
   }
   String chosenSSID = WiFi.SSID(choice - 1);
   Serial.println(chosenSSID);
 
-  // Enter password (leave blank for open networks)
   Serial.print("Password (leave blank if open): ");
   String password = readLine();
 
@@ -113,27 +110,20 @@ void pickWifi() {
   Serial.print("...");
 
   WiFi.begin(chosenSSID.c_str(), password.c_str());
-
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
     delay(500);
     Serial.print(".");
   }
 
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConnected!");
-  } else {
-    Serial.println("\nFailed to connect. Will retry on next loop.");
-  }
+  Serial.println(WiFi.status() == WL_CONNECTED ? "\nConnected!" : "\nFailed to connect.");
 }
 
-// Try the preset credentials for up to 5 s; fall back to interactive picker.
 void connectWifi() {
   Serial.print("Connecting to preset WiFi: ");
   Serial.println(WIFI_SSID);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 5000) {
     delay(500);
@@ -156,16 +146,17 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  serverUrl = String("http://") + SERVER_IP + ":" + SERVER_PORT + "/api/ingest/";
+  // Skip TLS certificate verification — fine for development with ngrok
+  secureClient.setInsecure();
 
   Serial.println("\n=== Aquawise Station ===");
   connectWifi();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("IP address: ");
+    Serial.print("IP address : ");
     Serial.println(WiFi.localIP());
-    Serial.print("Sending to: ");
-    Serial.println(serverUrl);
+    Serial.print("Sending to : ");
+    Serial.println(SERVER_URL);
   }
   Serial.println("========================\n");
 }
@@ -173,7 +164,6 @@ void setup() {
 // ── Loop ──────────────────────────────────────────────────────────────────────
 
 void loop() {
-  // Re-connect if dropped
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi lost. Reconnecting...");
     WiFi.disconnect(true);
@@ -191,7 +181,6 @@ void loop() {
   float conductivity    = promptFloat("Conductivity",     "uS/cm");
   float nitrates        = promptFloat("Nitrates",         "mg/L");
 
-  // Build JSON payload
   StaticJsonDocument<256> doc;
   doc["station"]          = STATION_NAME;
   doc["temperature"]      = temperature;
@@ -208,8 +197,10 @@ void loop() {
   Serial.println(payload);
 
   HTTPClient http;
-  http.begin(serverUrl);
+  http.begin(secureClient, SERVER_URL);
   http.addHeader("Content-Type", "application/json");
+  // ngrok requires this header to bypass the browser warning page
+  http.addHeader("ngrok-skip-browser-warning", "true");
 
   int httpCode = http.POST(payload);
 
