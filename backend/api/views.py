@@ -98,15 +98,7 @@ def ingest(request):
     reading = StationReading.objects.create(station=station, **fields)
 
     # Update the live SensorParameter values so the dashboard reflects reality
-    field_to_param_id = {
-        'temperature':      'temperature',
-        'turbidity':        'turbidity',
-        'ph':               'ph',
-        'dissolved_oxygen': 'dissolved_oxygen',
-        'conductivity':     'conductivity',
-        'nitrates':         'nitrates',
-    }
-    for field, param_id in field_to_param_id.items():
+    for field, param_id in PARAM_MAP.items():
         if field in fields:
             SensorParameter.objects.filter(param_id=param_id).update(value=fields[field])
 
