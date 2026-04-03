@@ -28,7 +28,7 @@ const char* DEFAULT_WIFI_PASSWORD = "777ascii";
 
 // Full public URL — paste your ngrok URL here (keep the /api/ingest/ path)
 // Example: "https://abcd-1234.ngrok-free.app/api/ingest/"
-const char* DEFAULT_SERVER_URL = "https://YOUR-NGROK-URL.ngrok-free.app/api/ingest/";
+const char* DEFAULT_SERVER_URL = "https://unincarnate-adele-inculpably.ngrok-free.dev/api/ingest/";
 
 // Must match a WaterSource name in the database exactly (case-insensitive)
 const char* STATION_NAME = "Dunga Beach Station";
