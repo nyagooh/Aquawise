@@ -45,7 +45,7 @@ const char* DEFAULT_SERVER_URL = "https://unincarnate-adele-inculpably.ngrok-fre
 const char* STATION_NAME = "Dunga Beach Station";
 
 #define CHOICE_TIMEOUT_MS 5000
-#define READ_INTERVAL_MS  5000  // how often to read sensors and POST
+#define READ_INTERVAL_MS  2000  // how often to read sensors and POST
 // ──────────────────────────────────────────────────────────────────────────────
 
 WiFiClientSecure  secureClient;
