@@ -1,5 +1,5 @@
 /*
- * Aquawise Station — reads real sensors, POSTs to Django ingest endpoint
+ * Aquawise Station — reads temperature & turbidity, POSTs to Django
  *
  * Board   : ESP32
  * Sensors : DS18B20 temperature (OneWire, pin 4)
@@ -20,10 +20,6 @@
  *   - Press 2 to paste a new URL via Serial.
  *   - Press 1 (or wait 5 s) to connect to the preset WiFi.
  *   - Press 2 to scan and pick a different network.
- *
- * In the main loop:
- *   - Temperature and turbidity are read automatically from the sensors.
- *   - pH, dissolved oxygen, conductivity, and nitrates are entered manually.
  */
 
 #include <WiFi.h>
@@ -34,8 +30,8 @@
 #include <DallasTemperature.h>
 
 // ── Pin definitions ───────────────────────────────────────────────────────────
-#define ONE_WIRE_BUS   4    // DS18B20 data pin
-#define TURBIDITY_PIN  34   // Turbidity sensor analog pin
+#define ONE_WIRE_BUS  4   // DS18B20 data pin
+#define TURBIDITY_PIN 34  // Turbidity sensor analog pin
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 const char* DEFAULT_WIFI_SSID     = "Javis";
@@ -49,6 +45,7 @@ const char* DEFAULT_SERVER_URL = "https://unincarnate-adele-inculpably.ngrok-fre
 const char* STATION_NAME = "Dunga Beach Station";
 
 #define CHOICE_TIMEOUT_MS 5000
+#define READ_INTERVAL_MS  5000  // how often to read sensors and POST
 // ──────────────────────────────────────────────────────────────────────────────
 
 WiFiClientSecure  secureClient;
@@ -60,8 +57,7 @@ String            serverUrl;
 
 float readTemperature() {
   tempSensor.requestTemperatures();
-  float t = tempSensor.getTempCByIndex(0);
-  return t;
+  return tempSensor.getTempCByIndex(0);
 }
 
 // Convert raw 12-bit ADC value to NTU.
@@ -74,11 +70,9 @@ float readTurbidity() {
     sum += analogRead(TURBIDITY_PIN);
     delay(5);
   }
-  float raw     = sum / 10.0;
-  float voltage = (raw / 4095.0) * 3.3;
+  float voltage = (sum / 10.0 / 4095.0) * 3.3;
   float ntu     = -1120.4 * voltage * voltage + 5742.3 * voltage - 4352.9;
-  if (ntu < 0) ntu = 0;
-  return ntu;
+  return max(ntu, 0.0f);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -91,7 +85,6 @@ String readLine() {
 }
 
 // Wait up to timeoutMs for '1' or '2'. Prints a live countdown.
-// Returns '1', '2', or 0 on timeout.
 char promptChoice(unsigned long timeoutMs) {
   unsigned long start   = millis();
   int           lastSec = -1;
@@ -107,10 +100,7 @@ char promptChoice(unsigned long timeoutMs) {
     if (Serial.available()) {
       char c = Serial.read();
       while (Serial.available()) Serial.read();
-      if (c == '1' || c == '2') {
-        Serial.println(c);
-        return c;
-      }
+      if (c == '1' || c == '2') { Serial.println(c); return c; }
     }
     delay(50);
   }
@@ -118,30 +108,17 @@ char promptChoice(unsigned long timeoutMs) {
   return 0;
 }
 
-float promptFloat(const char* label, const char* unit) {
-  Serial.print("  ");
-  Serial.print(label);
-  Serial.print(" (");
-  Serial.print(unit);
-  Serial.print("): ");
-  float value = readLine().toFloat();
-  Serial.println(value);
-  return value;
-}
-
 // ── URL configuration ─────────────────────────────────────────────────────────
 
 void configureUrl() {
   Serial.println("---- Server URL ----");
-  Serial.print("  Current: ");
-  Serial.println(serverUrl);
+  Serial.print("  Current: "); Serial.println(serverUrl);
   Serial.println("  Press 1 to keep  |  Press 2 to enter a new URL");
 
   if (promptChoice(CHOICE_TIMEOUT_MS) == '2') {
     Serial.print("  Paste new URL: ");
     serverUrl = readLine();
-    Serial.print("  URL set to: ");
-    Serial.println(serverUrl);
+    Serial.print("  URL set to: "); Serial.println(serverUrl);
   } else {
     Serial.println("  Keeping current URL.");
   }
@@ -223,7 +200,7 @@ void setup() {
   serverUrl = String(DEFAULT_SERVER_URL);
 
   tempSensor.begin();
-  analogReadResolution(12);  // ESP32: 12-bit ADC (0–4095)
+  analogReadResolution(12);
 
   Serial.println("\n======= Aquawise Station =======");
   configureUrl();
@@ -247,36 +224,22 @@ void loop() {
     return;
   }
 
-  // ── Read real sensors ──────────────────────────────────────────────────────
   float temperature = readTemperature();
   float turbidity   = readTurbidity();
 
-  Serial.println("--- Sensor readings ---");
-  Serial.print("  Temperature (sensor) : "); Serial.print(temperature); Serial.println(" C");
-  Serial.print("  Turbidity   (sensor) : "); Serial.print(turbidity);   Serial.println(" NTU");
+  Serial.println("--- Reading sensors ---");
+  Serial.print("  Temperature : "); Serial.print(temperature); Serial.println(" C");
+  Serial.print("  Turbidity   : "); Serial.print(turbidity);   Serial.println(" NTU");
 
-  // ── Manual input for remaining parameters ─────────────────────────────────
-  Serial.println("--- Enter remaining values manually ---");
-  float ph              = promptFloat("pH",               "pH");
-  float dissolvedOxygen = promptFloat("Dissolved Oxygen", "mg/L");
-  float conductivity    = promptFloat("Conductivity",     "uS/cm");
-  float nitrates        = promptFloat("Nitrates",         "mg/L");
-
-  // ── Build and send JSON ────────────────────────────────────────────────────
-  StaticJsonDocument<256> doc;
-  doc["station"]          = STATION_NAME;
-  doc["temperature"]      = temperature;
-  doc["turbidity"]        = turbidity;
-  doc["ph"]               = ph;
-  doc["dissolved_oxygen"] = dissolvedOxygen;
-  doc["conductivity"]     = conductivity;
-  doc["nitrates"]         = nitrates;
+  StaticJsonDocument<128> doc;
+  doc["station"]     = STATION_NAME;
+  doc["temperature"] = temperature;
+  doc["turbidity"]   = turbidity;
 
   String payload;
   serializeJson(doc, payload);
 
-  Serial.println("\nSending payload:");
-  Serial.println(payload);
+  Serial.print("Sending: "); Serial.println(payload);
 
   HTTPClient http;
   http.begin(secureClient, serverUrl);
@@ -293,7 +256,7 @@ void loop() {
   }
 
   http.end();
-  Serial.println("\n--- Done. Ready for next reading. ---\n");
+  Serial.println();
 
-  delay(1000);
+  delay(READ_INTERVAL_MS);
 }
