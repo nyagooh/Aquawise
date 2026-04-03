@@ -15,7 +15,7 @@ import { MapPin, Droplets, AlertTriangle, Shield, Map } from 'lucide-react';
 function Dashboard() {
   const { theme } = useTheme();
   const { registerSection } = useNavigation();
-  const { currentReadings, recentAlerts, waterSources, regionPredictions } = useData();
+  const { currentReadings, recentAlerts, waterSources, regionPredictions, lastUpdated } = useData();
   const mainRef = useRef<HTMLElement>(null);
   const sensorsRef = useRef<HTMLElement>(null);
   const stationsRef = useRef<HTMLElement>(null);
@@ -157,10 +157,17 @@ function Dashboard() {
                 <section ref={sensorsRef}>
                   <div className="flex items-center justify-between mb-4">
                     <h2 className="text-sm font-semibold text-txt-secondary dark:text-txt-dark-secondary uppercase tracking-wide">Live Sensor Readings — {regionName}</h2>
-                    <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
-                      <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
-                      Live
-                    </span>
+                    <div className="flex items-center gap-3">
+                      {lastUpdated && (
+                        <span className="text-2xs text-txt-muted dark:text-txt-dark-muted">
+                          Updated {lastUpdated.toLocaleTimeString()}
+                        </span>
+                      )}
+                      <span className="flex items-center gap-1.5 text-2xs font-bold text-ok px-2.5 py-1 rounded-full bg-ok/8">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ok live-dot" />
+                        Live
+                      </span>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     {currentReadings.map(r => <SensorCard key={r.id} reading={r} />)}

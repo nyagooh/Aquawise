@@ -6,7 +6,7 @@ SECRET_KEY = 'django-insecure-aquawise-dev-key-change-in-production'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*']  # restrict in production
 
 INSTALLED_APPS = [
     'django.contrib.admin',
