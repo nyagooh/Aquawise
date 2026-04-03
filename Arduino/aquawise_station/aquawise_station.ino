@@ -1,13 +1,18 @@
 /*
- * Aquawise Station — HTTP POST to Django ingest endpoint
+ * Aquawise Station — reads real sensors, POSTs to Django ingest endpoint
  *
- * Board  : ESP32
- * Library: ArduinoJson  (install via Library Manager: "ArduinoJson" by Benoit Blanchon)
+ * Board   : ESP32
+ * Sensors : DS18B20 temperature (OneWire, pin 4)
+ *           Turbidity sensor    (analog, pin 34)
+ * Libraries (install via Library Manager):
+ *   - ArduinoJson       by Benoit Blanchon
+ *   - OneWire           by Paul Stoffregen
+ *   - DallasTemperature by Miles Burton
  *
  * Public URL setup (ngrok):
  *   1. Install ngrok: https://ngrok.com/download
  *   2. Run: ngrok http 8000
- *   3. Copy the https://xxxx.ngrok-free.app URL into DEFAULT_SERVER_URL below.
+ *   3. Paste the https://xxxx.ngrok-free.app URL into DEFAULT_SERVER_URL below.
  *   4. Run Django with: python manage.py runserver 0.0.0.0:8000
  *
  * On each boot:
@@ -15,12 +20,22 @@
  *   - Press 2 to paste a new URL via Serial.
  *   - Press 1 (or wait 5 s) to connect to the preset WiFi.
  *   - Press 2 to scan and pick a different network.
+ *
+ * In the main loop:
+ *   - Temperature and turbidity are read automatically from the sensors.
+ *   - pH, dissolved oxygen, conductivity, and nitrates are entered manually.
  */
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+// ── Pin definitions ───────────────────────────────────────────────────────────
+#define ONE_WIRE_BUS   4    // DS18B20 data pin
+#define TURBIDITY_PIN  34   // Turbidity sensor analog pin
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 const char* DEFAULT_WIFI_SSID     = "Javis";
@@ -36,12 +51,38 @@ const char* STATION_NAME = "Dunga Beach Station";
 #define CHOICE_TIMEOUT_MS 5000
 // ──────────────────────────────────────────────────────────────────────────────
 
-WiFiClientSecure secureClient;
-String serverUrl;
+WiFiClientSecure  secureClient;
+OneWire           oneWire(ONE_WIRE_BUS);
+DallasTemperature tempSensor(&oneWire);
+String            serverUrl;
+
+// ── Sensor reading ────────────────────────────────────────────────────────────
+
+float readTemperature() {
+  tempSensor.requestTemperatures();
+  float t = tempSensor.getTempCByIndex(0);
+  return t;
+}
+
+// Convert raw 12-bit ADC value to NTU.
+// Formula matches typical SEN0189-style turbidity sensors at 3.3 V.
+// Calibrate the constants for your specific sensor if needed.
+float readTurbidity() {
+  // Average 10 samples to reduce noise
+  long sum = 0;
+  for (int i = 0; i < 10; i++) {
+    sum += analogRead(TURBIDITY_PIN);
+    delay(5);
+  }
+  float raw     = sum / 10.0;
+  float voltage = (raw / 4095.0) * 3.3;
+  float ntu     = -1120.4 * voltage * voltage + 5742.3 * voltage - 4352.9;
+  if (ntu < 0) ntu = 0;
+  return ntu;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Block until a full line is typed, then return it trimmed.
 String readLine() {
   while (!Serial.available()) { delay(10); }
   String s = Serial.readStringUntil('\n');
@@ -49,8 +90,8 @@ String readLine() {
   return s;
 }
 
-// Wait up to timeoutMs for the user to press '1' or '2'.
-// Prints a live countdown. Returns '1', '2', or 0 on timeout.
+// Wait up to timeoutMs for '1' or '2'. Prints a live countdown.
+// Returns '1', '2', or 0 on timeout.
 char promptChoice(unsigned long timeoutMs) {
   unsigned long start   = millis();
   int           lastSec = -1;
@@ -63,10 +104,9 @@ char promptChoice(unsigned long timeoutMs) {
       Serial.print("s)... ");
       lastSec = secsLeft;
     }
-
     if (Serial.available()) {
       char c = Serial.read();
-      while (Serial.available()) Serial.read();  // flush rest
+      while (Serial.available()) Serial.read();
       if (c == '1' || c == '2') {
         Serial.println(c);
         return c;
@@ -97,8 +137,7 @@ void configureUrl() {
   Serial.println(serverUrl);
   Serial.println("  Press 1 to keep  |  Press 2 to enter a new URL");
 
-  char choice = promptChoice(CHOICE_TIMEOUT_MS);
-  if (choice == '2') {
+  if (promptChoice(CHOICE_TIMEOUT_MS) == '2') {
     Serial.print("  Paste new URL: ");
     serverUrl = readLine();
     Serial.print("  URL set to: ");
@@ -113,18 +152,11 @@ void configureUrl() {
 int scanAndPrint() {
   Serial.println("\n  Scanning for WiFi networks...");
   int n = WiFi.scanNetworks();
-  if (n == 0) {
-    Serial.println("  No networks found.");
-    return 0;
-  }
+  if (n == 0) { Serial.println("  No networks found."); return 0; }
   for (int i = 0; i < n; i++) {
-    Serial.print("    [");
-    Serial.print(i + 1);
-    Serial.print("] ");
+    Serial.print("    ["); Serial.print(i + 1); Serial.print("] ");
     Serial.print(WiFi.SSID(i));
-    Serial.print("  (");
-    Serial.print(WiFi.RSSI(i));
-    Serial.print(" dBm)");
+    Serial.print("  ("); Serial.print(WiFi.RSSI(i)); Serial.print(" dBm)");
     if (WiFi.encryptionType(i) == WIFI_AUTH_OPEN) Serial.print("  [open]");
     Serial.println();
   }
@@ -133,72 +165,48 @@ int scanAndPrint() {
 
 void pickWifi() {
   int n = scanAndPrint();
-  if (n == 0) {
-    Serial.println("  Retrying scan in 5 s...");
-    delay(5000);
-    n = scanAndPrint();
-    if (n == 0) return;
-  }
+  if (n == 0) { delay(5000); n = scanAndPrint(); if (n == 0) return; }
 
   int choice = 0;
   while (choice < 1 || choice > n) {
-    Serial.print("\n  Select network [1-");
-    Serial.print(n);
-    Serial.print("]: ");
+    Serial.print("\n  Select network [1-"); Serial.print(n); Serial.print("]: ");
     choice = readLine().toInt();
-    if (choice < 1 || choice > n) Serial.println("  Invalid selection, try again.");
+    if (choice < 1 || choice > n) Serial.println("  Invalid, try again.");
   }
-  String chosenSSID = WiFi.SSID(choice - 1);
-  Serial.println(chosenSSID);
+  String ssid = WiFi.SSID(choice - 1);
+  Serial.println(ssid);
 
   Serial.print("  Password (blank if open): ");
-  String password = readLine();
+  String pw = readLine();
 
-  Serial.print("  Connecting to ");
-  Serial.print(chosenSSID);
-  Serial.print("...");
-
-  WiFi.begin(chosenSSID.c_str(), password.c_str());
+  Serial.print("  Connecting to "); Serial.print(ssid); Serial.print("...");
+  WiFi.begin(ssid.c_str(), pw.c_str());
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
-    delay(500);
-    Serial.print(".");
-  }
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) { delay(500); Serial.print("."); }
   Serial.println(WiFi.status() == WL_CONNECTED ? "\n  Connected!" : "\n  Failed to connect.");
 }
 
 void connectToPreset() {
-  Serial.print("  Connecting to ");
-  Serial.print(DEFAULT_WIFI_SSID);
-  Serial.print("...");
-
+  Serial.print("  Connecting to "); Serial.print(DEFAULT_WIFI_SSID); Serial.print("...");
   WiFi.begin(DEFAULT_WIFI_SSID, DEFAULT_WIFI_PASSWORD);
   unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
-    delay(500);
-    Serial.print(".");
-  }
-
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) { delay(500); Serial.print("."); }
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n  Connected!");
   } else {
     Serial.println("\n  Preset network not reachable.");
-    WiFi.disconnect(true);
-    delay(500);
+    WiFi.disconnect(true); delay(500);
     pickWifi();
   }
 }
 
 void configureWifi() {
   Serial.println("---- WiFi ----");
-  Serial.print("  Preset SSID: ");
-  Serial.println(DEFAULT_WIFI_SSID);
+  Serial.print("  Preset SSID: "); Serial.println(DEFAULT_WIFI_SSID);
   Serial.println("  Press 1 to connect to preset  |  Press 2 to choose another network");
 
-  char choice = promptChoice(CHOICE_TIMEOUT_MS);
-  if (choice == '2') {
-    WiFi.disconnect(true);
-    delay(500);
+  if (promptChoice(CHOICE_TIMEOUT_MS) == '2') {
+    WiFi.disconnect(true); delay(500);
     pickWifi();
   } else {
     connectToPreset();
@@ -211,22 +219,21 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  secureClient.setInsecure();  // skip TLS cert check — fine for dev/ngrok
+  secureClient.setInsecure();
   serverUrl = String(DEFAULT_SERVER_URL);
 
-  Serial.println("\n======= Aquawise Station =======");
+  tempSensor.begin();
+  analogReadResolution(12);  // ESP32: 12-bit ADC (0–4095)
 
+  Serial.println("\n======= Aquawise Station =======");
   configureUrl();
   Serial.println();
   configureWifi();
-
   Serial.println("\n================================");
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.print("IP address : ");
-    Serial.println(WiFi.localIP());
+    Serial.print("IP address : "); Serial.println(WiFi.localIP());
   }
-  Serial.print("Server URL : ");
-  Serial.println(serverUrl);
+  Serial.print("Server URL : "); Serial.println(serverUrl);
   Serial.println("================================\n");
 }
 
@@ -235,21 +242,27 @@ void setup() {
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi lost. Reconnecting...");
-    WiFi.disconnect(true);
-    delay(500);
+    WiFi.disconnect(true); delay(500);
     connectToPreset();
     return;
   }
 
-  Serial.println("--- Enter sensor readings ---");
+  // ── Read real sensors ──────────────────────────────────────────────────────
+  float temperature = readTemperature();
+  float turbidity   = readTurbidity();
 
-  float temperature     = promptFloat("Temperature",      "C");
-  float turbidity       = promptFloat("Turbidity",        "NTU");
+  Serial.println("--- Sensor readings ---");
+  Serial.print("  Temperature (sensor) : "); Serial.print(temperature); Serial.println(" C");
+  Serial.print("  Turbidity   (sensor) : "); Serial.print(turbidity);   Serial.println(" NTU");
+
+  // ── Manual input for remaining parameters ─────────────────────────────────
+  Serial.println("--- Enter remaining values manually ---");
   float ph              = promptFloat("pH",               "pH");
   float dissolvedOxygen = promptFloat("Dissolved Oxygen", "mg/L");
   float conductivity    = promptFloat("Conductivity",     "uS/cm");
   float nitrates        = promptFloat("Nitrates",         "mg/L");
 
+  // ── Build and send JSON ────────────────────────────────────────────────────
   StaticJsonDocument<256> doc;
   doc["station"]          = STATION_NAME;
   doc["temperature"]      = temperature;
@@ -273,17 +286,14 @@ void loop() {
   int httpCode = http.POST(payload);
 
   if (httpCode > 0) {
-    Serial.print("HTTP status: ");
-    Serial.println(httpCode);
-    Serial.print("Response:    ");
-    Serial.println(http.getString());
+    Serial.print("HTTP status: "); Serial.println(httpCode);
+    Serial.print("Response:    "); Serial.println(http.getString());
   } else {
-    Serial.print("HTTP error:  ");
-    Serial.println(http.errorToString(httpCode));
+    Serial.print("HTTP error:  "); Serial.println(http.errorToString(httpCode));
   }
 
   http.end();
-  Serial.println("\n--- Reading sent. Ready for next. ---\n");
+  Serial.println("\n--- Done. Ready for next reading. ---\n");
 
   delay(1000);
 }
