@@ -17,8 +17,11 @@ body {
 
 /* ── Hero ── */
 .hero {
-  background: linear-gradient(135deg, var(--bg-surface) 0%, #0d2a42 60%, var(--bg-base) 100%);
-  border-bottom: 1px solid var(--border-subtle);
+  background:
+    radial-gradient(900px 500px at 20% 10%, rgba(59,130,246,0.18), transparent 60%),
+    radial-gradient(800px 400px at 90% 0%, rgba(139,92,246,0.10), transparent 55%),
+    linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);
+  border-bottom: 1px solid var(--border-default);
   padding: var(--s16) var(--s10) var(--s12);
   text-align: center;
   position: relative;
@@ -30,7 +33,7 @@ body {
   top: -120px; left: 50%; transform: translateX(-50%);
   width: 600px; height: 600px;
   border-radius: 50%;
-  background: radial-gradient(ellipse, rgba(0,212,200,0.08) 0%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(59,130,246,0.08) 0%, transparent 70%);
   pointer-events: none;
 }
 .hero-logo {
@@ -98,19 +101,24 @@ body {
   margin-bottom: var(--s12);
 }
 .del-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  background: var(--surface-tint), var(--bg-card);
+  border: 1px solid var(--border-default);
   border-radius: var(--r-xl);
   overflow: hidden;
-  transition: all var(--t-base);
+  box-shadow:
+    inset 0 1px 0 var(--rim-highlight),
+    var(--shadow-card);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
   text-decoration: none;
   display: flex;
   flex-direction: column;
 }
 .del-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,212,200,0.1);
-  transform: translateY(-3px);
+  border-color: var(--border-strong);
+  box-shadow:
+    inset 0 1px 0 var(--rim-highlight-strong),
+    var(--shadow-lg);
+  transform: translateY(-2px);
 }
 .del-card-preview {
   height: 160px;
@@ -225,7 +233,7 @@ body {
 .mock-kpi.safe   { border-top: 2px solid var(--safe); }
 .mock-kpi.warn   { border-top: 2px solid var(--warning); }
 .mock-kpi.danger { border-top: 2px solid var(--danger); }
-.mock-map { flex: 1; border-radius: 6px; background: #0d2137; border: 1px solid var(--border-subtle); position: relative; overflow: hidden; }
+.mock-map { flex: 1; border-radius: 6px; background: var(--bg-elevated); border: 1px solid var(--border-subtle); position: relative; overflow: hidden; }
 .mock-map::after {
   content: '';
   position: absolute;
@@ -250,7 +258,7 @@ body {
   position: absolute;
   bottom: 4px; left: 4px; right: 4px;
   height: 24px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30'%3E%3Cpolyline points='0,25 15,20 30,22 45,10 60,15 75,8 100,12' fill='none' stroke='%2300D4C8' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat center/contain;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30'%3E%3Cpolyline points='0,25 15,20 30,22 45,10 60,15 75,8 100,12' fill='none' stroke='%233B82F6' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat center/contain;
 }
 .mock-bar-chart {
   position: relative;
@@ -261,7 +269,7 @@ body {
   gap: 3px;
   padding: 4px;
 }
-.mock-bar { width: 8px; border-radius: 2px 2px 0 0; background: rgba(0,212,200,0.5); }
+.mock-bar { width: 8px; border-radius: 2px 2px 0 0; background: rgba(59,130,246,0.5); }
 .mock-alert-row { height: 12px; border-radius: 3px; background: var(--bg-surface); border: 1px solid var(--border-subtle); margin-bottom: 3px; display: flex; align-items: center; gap: 4px; padding: 0 4px; }
 .mock-alert-row .dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
 .mock-form { display: flex; flex-direction: column; gap: 4px; }
@@ -276,7 +284,7 @@ body {
   position: absolute;
   bottom: 4px; left: 4px; right: 4px;
   height: 24px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30'%3E%3Cpolyline points='0,8 20,10 40,14 50,18' fill='none' stroke='%234FC3F7' stroke-width='1.5'/%3E%3Cpolyline points='50,18 60,22 70,20 80,17 100,14' fill='none' stroke='%239C89E2' stroke-width='1.5' stroke-dasharray='3,2'/%3E%3Cline x1='0' y1='20' x2='100' y2='20' stroke='%23EF5350' stroke-width='0.8' stroke-dasharray='3,2'/%3E%3C/svg%3E") no-repeat center/contain;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30'%3E%3Cpolyline points='0,8 20,10 40,14 50,18' fill='none' stroke='%2360A5FA' stroke-width='1.5'/%3E%3Cpolyline points='50,18 60,22 70,20 80,17 100,14' fill='none' stroke='%238B5CF6' stroke-width='1.5' stroke-dasharray='3,2'/%3E%3Cline x1='0' y1='20' x2='100' y2='20' stroke='%23EF4444' stroke-width='0.8' stroke-dasharray='3,2'/%3E%3C/svg%3E") no-repeat center/contain;
 }
 
 /* ── Design Specs Section ── */
@@ -341,8 +349,8 @@ body {
 <div class="hero">
   <div class="hero-logo">
     <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-      <circle cx="26" cy="26" r="26" fill="rgba(0,212,200,0.08)"/>
-      <path d="M26 8C26 8 12 20 12 30A14 14 0 0040 30C40 20 26 8 26 8Z" fill="#00D4C8"/>
+      <circle cx="26" cy="26" r="26" fill="rgba(59,130,246,0.08)"/>
+      <path d="M26 8C26 8 12 20 12 30A14 14 0 0040 30C40 20 26 8 26 8Z" fill="#3B82F6"/>
       <path d="M26 18C26 18 18 25 18 30A8 8 0 0034 30C34 25 26 18 26 18Z" fill="rgba(7,23,40,0.5)"/>
     </svg>
     <div>
@@ -408,9 +416,9 @@ body {
 
     <!-- Sitemap -->
     <a href="sitemap.html" class="del-card">
-      <div class="del-card-preview" style="background:linear-gradient(135deg,#0B1F35,#1A3A5C)">
+      <div class="del-card-preview" style="background:linear-gradient(135deg,#0B1224,#15243F)">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px;opacity:0.9">
-          <div style="padding:8px 16px;background:linear-gradient(135deg,rgba(0,212,200,0.3),rgba(79,195,247,0.3));border:1px solid var(--accent);border-radius:8px;font-size:0.6875rem;font-weight:700;color:var(--accent)">AquaWatch</div>
+          <div style="padding:8px 16px;background:linear-gradient(135deg,rgba(59,130,246,0.3),rgba(79,195,247,0.3));border:1px solid var(--accent);border-radius:8px;font-size:0.6875rem;font-weight:700;color:var(--accent)">AquaWatch</div>
           <div style="width:1.5px;height:16px;background:var(--border-default)"></div>
           <div style="display:flex;gap:6px">
             <div style="padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:6px;font-size:0.5625rem;color:var(--text-secondary);border-top:2px solid var(--accent)">Dashboard</div>
@@ -442,25 +450,25 @@ body {
 
     <!-- Style Guide -->
     <a href="style-guide.html" class="del-card">
-      <div class="del-card-preview" style="background:linear-gradient(135deg,#0B1F35,#1A3A5C)">
+      <div class="del-card-preview" style="background:linear-gradient(135deg,#0B1224,#15243F)">
         <div style="display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:12px;width:100%">
           <div style="display:flex;gap:5px">
-            <div style="width:24px;height:24px;border-radius:6px;background:#00D4C8;box-shadow:0 0 8px rgba(0,212,200,0.4)"></div>
-            <div style="width:24px;height:24px;border-radius:6px;background:#4FC3F7"></div>
-            <div style="width:24px;height:24px;border-radius:6px;background:#9C89E2"></div>
-            <div style="width:24px;height:24px;border-radius:6px;background:#4CAF50"></div>
-            <div style="width:24px;height:24px;border-radius:6px;background:#FFA726"></div>
-            <div style="width:24px;height:24px;border-radius:6px;background:#EF5350"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,0.4)"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#60A5FA"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#8B5CF6"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#22C55E"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#F59E0B"></div>
+            <div style="width:24px;height:24px;border-radius:6px;background:#EF4444"></div>
           </div>
           <div>
-            <div style="font-size:1.25rem;font-weight:700;letter-spacing:-0.02em;color:#E8F4FD;line-height:1">Heading / 700</div>
-            <div style="font-size:0.75rem;color:#7BB8D8;margin-top:2px">Body regular · 14px</div>
-            <div style="font-family:monospace;font-size:0.75rem;color:#00D4C8;margin-top:2px">7.42 mg/L · mono</div>
+            <div style="font-size:1.25rem;font-weight:700;letter-spacing:-0.02em;color:#F1F5F9;line-height:1">Heading / 700</div>
+            <div style="font-size:0.75rem;color:#94A3B8;margin-top:2px">Body regular · 14px</div>
+            <div style="font-family:monospace;font-size:0.75rem;color:#3B82F6;margin-top:2px">7.42 mg/L · mono</div>
           </div>
           <div style="display:flex;gap:5px;align-items:center">
-            <div style="padding:4px 10px;background:#00D4C8;border-radius:5px;font-size:0.5625rem;font-weight:700;color:#071728">Primary</div>
-            <div style="padding:4px 10px;border:1px solid #264E73;border-radius:5px;font-size:0.5625rem;color:#7BB8D8">Secondary</div>
-            <div style="padding:4px 10px;border-radius:5px;font-size:0.5625rem;color:#7BB8D8">Ghost</div>
+            <div style="padding:4px 10px;background:#3B82F6;border-radius:5px;font-size:0.5625rem;font-weight:700;color:#070B17">Primary</div>
+            <div style="padding:4px 10px;border:1px solid #1F2D4D;border-radius:5px;font-size:0.5625rem;color:#94A3B8">Secondary</div>
+            <div style="padding:4px 10px;border-radius:5px;font-size:0.5625rem;color:#94A3B8">Ghost</div>
           </div>
         </div>
       </div>
@@ -496,9 +504,9 @@ body {
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
           <div class="mock-topbar">
-            <div class="mock-dot" style="background:#EF5350"></div>
-            <div class="mock-dot" style="background:#FFA726"></div>
-            <div class="mock-dot" style="background:#4CAF50"></div>
+            <div class="mock-dot" style="background:#EF4444"></div>
+            <div class="mock-dot" style="background:#F59E0B"></div>
+            <div class="mock-dot" style="background:#22C55E"></div>
             <div style="flex:1;height:5px;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div>
             <div style="width:16px;height:5px;background:var(--border-default);border-radius:2px"></div>
           </div>
@@ -520,11 +528,11 @@ body {
                 <div class="mock-kpi danger"></div>
               </div>
               <div class="mock-map" style="height:55px">
-                <div class="mock-dot-pin" style="background:#4CAF50;top:30%;left:35%"></div>
-                <div class="mock-dot-pin" style="background:#EF5350;top:20%;left:55%"></div>
-                <div class="mock-dot-pin" style="background:#FFA726;top:40%;left:25%"></div>
-                <div class="mock-dot-pin" style="background:#4CAF50;top:55%;left:60%"></div>
-                <div class="mock-dot-pin" style="background:#4CAF50;top:65%;left:40%"></div>
+                <div class="mock-dot-pin" style="background:#22C55E;top:30%;left:35%"></div>
+                <div class="mock-dot-pin" style="background:#EF4444;top:20%;left:55%"></div>
+                <div class="mock-dot-pin" style="background:#F59E0B;top:40%;left:25%"></div>
+                <div class="mock-dot-pin" style="background:#22C55E;top:55%;left:60%"></div>
+                <div class="mock-dot-pin" style="background:#22C55E;top:65%;left:40%"></div>
               </div>
               <div class="mock-row">
                 <div class="mock-half mock-line-chart"></div>
@@ -561,9 +569,9 @@ body {
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
           <div class="mock-topbar">
-            <div class="mock-dot" style="background:#EF5350"></div>
-            <div class="mock-dot" style="background:#FFA726"></div>
-            <div class="mock-dot" style="background:#4CAF50"></div>
+            <div class="mock-dot" style="background:#EF4444"></div>
+            <div class="mock-dot" style="background:#F59E0B"></div>
+            <div class="mock-dot" style="background:#22C55E"></div>
             <div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div>
           </div>
           <div class="mock-body">
@@ -576,7 +584,7 @@ body {
             </div>
             <div class="mock-content">
               <div style="display:flex;gap:4px;margin-bottom:3px">
-                <div style="width:28px;height:28px;border-radius:6px;background:var(--danger-bg);border:1px solid rgba(239,83,80,0.3);display:flex;align-items:center;justify-content:center;font-size:0.875rem">📍</div>
+                <div style="width:28px;height:28px;border-radius:6px;background:var(--danger-bg);border:1px solid rgba(239,68,68,0.3);display:flex;align-items:center;justify-content:center;font-size:0.875rem">📍</div>
                 <div style="flex:1">
                   <div style="height:6px;background:var(--text-primary);border-radius:2px;opacity:0.7;width:60%;margin-bottom:3px"></div>
                   <div style="height:4px;background:var(--border-default);border-radius:2px;width:40%"></div>
@@ -591,7 +599,7 @@ body {
               </div>
               <div class="mock-row">
                 <div class="mock-half mock-line-chart" style="flex:2"></div>
-                <div class="mock-half" style="background:#0d2137;border:1px solid var(--border-subtle)"></div>
+                <div class="mock-half" style="background:var(--bg-elevated);border:1px solid var(--border-subtle)"></div>
               </div>
             </div>
           </div>
@@ -620,7 +628,7 @@ body {
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
           <div class="mock-topbar">
-            <div class="mock-dot" style="background:#EF5350"></div><div class="mock-dot" style="background:#FFA726"></div><div class="mock-dot" style="background:#4CAF50"></div>
+            <div class="mock-dot" style="background:#EF4444"></div><div class="mock-dot" style="background:#F59E0B"></div><div class="mock-dot" style="background:#22C55E"></div>
             <div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div>
           </div>
           <div class="mock-body">
@@ -632,8 +640,8 @@ body {
             </div>
             <div class="mock-content">
               <div style="display:flex;gap:3px;margin-bottom:3px">
-                <div style="height:8px;border-radius:4px;background:var(--danger-bg);border:1px solid rgba(239,83,80,0.3);flex:1;display:flex;align-items:center;justify-content:center;font-size:0.4rem;color:var(--danger);font-weight:700">1</div>
-                <div style="height:8px;border-radius:4px;background:var(--warning-bg);border:1px solid rgba(255,167,38,0.3);flex:1;display:flex;align-items:center;justify-content:center;font-size:0.4rem;color:var(--warning);font-weight:700">2</div>
+                <div style="height:8px;border-radius:4px;background:var(--danger-bg);border:1px solid rgba(239,68,68,0.3);flex:1;display:flex;align-items:center;justify-content:center;font-size:0.4rem;color:var(--danger);font-weight:700">1</div>
+                <div style="height:8px;border-radius:4px;background:var(--warning-bg);border:1px solid rgba(245,158,11,0.3);flex:1;display:flex;align-items:center;justify-content:center;font-size:0.4rem;color:var(--warning);font-weight:700">2</div>
                 <div style="height:8px;border-radius:4px;background:var(--bg-elevated);border:1px solid var(--border-subtle);flex:1"></div>
               </div>
               <div style="display:grid;grid-template-columns:1fr 140px;gap:4px;flex:1">
@@ -643,7 +651,7 @@ body {
                   <div class="mock-alert-row" style="height:16px;border-left:2px solid var(--warning)"><div class="dot" style="background:var(--warning)"></div><div style="flex:1"></div></div>
                   <div class="mock-alert-row" style="height:16px;opacity:0.4"><div class="dot" style="background:var(--text-muted)"></div><div style="flex:1"></div></div>
                 </div>
-                <div style="background:var(--danger-bg);border:1px solid rgba(239,83,80,0.2);border-radius:6px;padding:5px;display:flex;flex-direction:column;gap:3px">
+                <div style="background:var(--danger-bg);border:1px solid rgba(239,68,68,0.2);border-radius:6px;padding:5px;display:flex;flex-direction:column;gap:3px">
                   <div style="height:4px;background:var(--danger);border-radius:1px;width:50%"></div>
                   <div style="height:3px;background:var(--border-default);border-radius:1px;width:90%"></div>
                   <div style="height:3px;background:var(--border-default);border-radius:1px;width:70%"></div>
@@ -684,7 +692,7 @@ body {
     <a href="historical.html" class="del-card">
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
-          <div class="mock-topbar"><div class="mock-dot" style="background:#EF5350"></div><div class="mock-dot" style="background:#FFA726"></div><div class="mock-dot" style="background:#4CAF50"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
+          <div class="mock-topbar"><div class="mock-dot" style="background:#EF4444"></div><div class="mock-dot" style="background:#F59E0B"></div><div class="mock-dot" style="background:#22C55E"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
           <div class="mock-body">
             <div class="mock-sidebar"><div style="width:32px;height:6px;background:var(--accent);border-radius:2px;margin-bottom:4px"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot active"></div></div>
             <div class="mock-content">
@@ -732,7 +740,7 @@ body {
     <a href="predictive.html" class="del-card">
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
-          <div class="mock-topbar"><div class="mock-dot" style="background:#EF5350"></div><div class="mock-dot" style="background:#FFA726"></div><div class="mock-dot" style="background:#4CAF50"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
+          <div class="mock-topbar"><div class="mock-dot" style="background:#EF4444"></div><div class="mock-dot" style="background:#F59E0B"></div><div class="mock-dot" style="background:#22C55E"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
           <div class="mock-body">
             <div class="mock-sidebar"><div style="width:32px;height:6px;background:var(--accent);border-radius:2px;margin-bottom:4px"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot active"></div></div>
             <div class="mock-content">
@@ -740,18 +748,18 @@ body {
               <div class="mock-half mock-forecast" style="height:50px;width:100%"></div>
               <div class="mock-row" style="margin-top:3px">
                 <div style="flex:1;height:45px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border-subtle);padding:4px;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(4,1fr);gap:2px">
-                  <div style="border-radius:2px;background:rgba(239,83,80,0.5)"></div>
-                  <div style="border-radius:2px;background:rgba(255,167,38,0.4)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
-                  <div style="border-radius:2px;background:rgba(255,167,38,0.4)"></div>
-                  <div style="border-radius:2px;background:rgba(76,175,80,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(239,68,68,0.5)"></div>
+                  <div style="border-radius:2px;background:rgba(245,158,11,0.4)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
+                  <div style="border-radius:2px;background:rgba(245,158,11,0.4)"></div>
+                  <div style="border-radius:2px;background:rgba(34,197,94,0.3)"></div>
                 </div>
                 <div style="flex:1;height:45px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border-subtle);padding:4px;display:flex;flex-direction:column;gap:2px">
                   <div style="height:3px;background:var(--accent);border-radius:1px;width:80%"></div>
@@ -786,7 +794,7 @@ body {
     <a href="statistics.html" class="del-card">
       <div class="del-card-preview" style="background:var(--bg-base);padding:0">
         <div class="screen-mock">
-          <div class="mock-topbar"><div class="mock-dot" style="background:#EF5350"></div><div class="mock-dot" style="background:#FFA726"></div><div class="mock-dot" style="background:#4CAF50"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
+          <div class="mock-topbar"><div class="mock-dot" style="background:#EF4444"></div><div class="mock-dot" style="background:#F59E0B"></div><div class="mock-dot" style="background:#22C55E"></div><div style="height:5px;flex:1;background:var(--border-subtle);border-radius:2px;margin:0 6px"></div></div>
           <div class="mock-body">
             <div class="mock-sidebar"><div style="width:32px;height:6px;background:var(--accent);border-radius:2px;margin-bottom:4px"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot"></div><div class="mock-nav-dot active"></div></div>
             <div class="mock-content">
@@ -810,8 +818,8 @@ body {
               <div class="mock-row" style="margin-top:3px">
                 <div class="mock-half mock-line-chart"></div>
                 <div class="mock-half mock-bar-chart">
-                  <div class="mock-bar" style="height:22px;background:rgba(239,83,80,0.5)"></div>
-                  <div class="mock-bar" style="height:14px;background:rgba(255,167,38,0.5)"></div>
+                  <div class="mock-bar" style="height:22px;background:rgba(239,68,68,0.5)"></div>
+                  <div class="mock-bar" style="height:14px;background:rgba(245,158,11,0.5)"></div>
                   <div class="mock-bar" style="height:8px"></div>
                   <div class="mock-bar" style="height:7px"></div>
                 </div>
@@ -850,7 +858,7 @@ body {
     <a href="account.html" class="del-card">
       <div class="del-card-preview" style="background:linear-gradient(135deg,var(--bg-surface),var(--bg-card));display:flex;align-items:center;justify-content:center;gap:var(--s5)">
         <div style="display:flex;flex-direction:column;align-items:center;gap:8px">
-          <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-purple));display:flex;align-items:center;justify-content:center;font-size:1.125rem;font-weight:700;color:#071728">TL</div>
+          <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent-purple));display:flex;align-items:center;justify-content:center;font-size:1.125rem;font-weight:700;color:#070B17">TL</div>
           <div style="text-align:center">
             <div style="font-size:0.75rem;font-weight:700;color:var(--text-primary)">Tom Lee</div>
             <div style="font-size:0.5625rem;color:var(--text-muted)">Field Researcher</div>
@@ -889,19 +897,19 @@ body {
             <div style="height:5px;background:var(--border-default);border-radius:1px;width:60%"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:3px"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:3px"></div>
-            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,83,80,0.4);border-radius:3px"></div>
+            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,68,68,0.4);border-radius:3px"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 40px 40px 40px;gap:4px;align-items:center">
             <div style="height:5px;background:var(--border-default);border-radius:1px;width:55%"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:3px"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:3px"></div>
-            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,83,80,0.4);border-radius:3px"></div>
+            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,68,68,0.4);border-radius:3px"></div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 40px 40px 40px;gap:4px;align-items:center">
             <div style="height:5px;background:var(--border-default);border-radius:1px;width:70%"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:3px"></div>
             <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(255,255,255,0.1);border-radius:3px;opacity:0.3"></div>
-            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,83,80,0.4);border-radius:3px"></div>
+            <div style="height:14px;background:var(--bg-surface);border:1px solid rgba(239,68,68,0.4);border-radius:3px"></div>
           </div>
           <div style="height:14px;background:var(--accent);border-radius:4px;margin-top:3px;opacity:0.85;width:60%"></div>
         </div>
@@ -939,20 +947,20 @@ body {
         <div class="spec-icon">🎨</div>
         <div class="spec-title">Color System</div>
         <div class="spec-items">
-          <div class="spec-item">Deep navy dark-mode base (#071728)</div>
-          <div class="spec-item">Teal accent (#00D4C8) — water theme</div>
+          <div class="spec-item">Deep navy dark-mode base (#070B17)</div>
+          <div class="spec-item">Teal accent (#3B82F6) — water theme</div>
           <div class="spec-item">Semantic status: green / amber / red</div>
           <div class="spec-item">All values as CSS custom properties</div>
         </div>
         <div class="palette">
-          <div class="pal-swatch" style="background:#071728" title="#071728 Base"></div>
-          <div class="pal-swatch" style="background:#0B1F35" title="#0B1F35 Surface"></div>
-          <div class="pal-swatch" style="background:#112844" title="#112844 Card"></div>
-          <div class="pal-swatch" style="background:#00D4C8;box-shadow:0 0 8px rgba(0,212,200,0.4)" title="#00D4C8 Accent"></div>
-          <div class="pal-swatch" style="background:#4FC3F7" title="#4FC3F7 Blue"></div>
-          <div class="pal-swatch" style="background:#4CAF50" title="#4CAF50 Safe"></div>
-          <div class="pal-swatch" style="background:#FFA726" title="#FFA726 Warning"></div>
-          <div class="pal-swatch" style="background:#EF5350" title="#EF5350 Danger"></div>
+          <div class="pal-swatch" style="background:#070B17" title="#070B17 Base"></div>
+          <div class="pal-swatch" style="background:#0B1224" title="#0B1224 Surface"></div>
+          <div class="pal-swatch" style="background:#0F1A30" title="#0F1A30 Card"></div>
+          <div class="pal-swatch" style="background:#3B82F6;box-shadow:0 0 8px rgba(59,130,246,0.4)" title="#3B82F6 Accent"></div>
+          <div class="pal-swatch" style="background:#60A5FA" title="#60A5FA Blue"></div>
+          <div class="pal-swatch" style="background:#22C55E" title="#22C55E Safe"></div>
+          <div class="pal-swatch" style="background:#F59E0B" title="#F59E0B Warning"></div>
+          <div class="pal-swatch" style="background:#EF4444" title="#EF4444 Danger"></div>
         </div>
       </div>
 
@@ -1064,5 +1072,6 @@ body {
   </div>
 </div>
 
+<script src="assets/theme.js"></script>
 </body>
 </html>
