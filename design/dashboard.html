@@ -74,7 +74,7 @@
 <aside class="sidebar">
   <div class="sidebar-logo">
     <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#00D4C8"/>
+      <path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#3B82F6"/>
       <path d="M14 9C14 9 9 14 9 18A5 5 0 0019 18C19 14 14 9 14 9Z" fill="rgba(7,23,40,0.5)"/>
     </svg>
     <span class="sidebar-logo-text">Aqua<span>Watch</span></span>
@@ -132,7 +132,7 @@
 <main class="main">
   <!-- Mobile top bar -->
   <div class="mobile-topbar">
-    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#00D4C8"/></svg>
+    <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#3B82F6"/></svg>
     <span style="font-weight:700;font-size:1rem">Aqua<span style="color:var(--accent)">Watch</span></span>
     <div style="margin-left:auto;display:flex;gap:var(--s3)">
       <button class="icon-btn"><div class="dot"></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></button>
@@ -471,7 +471,7 @@ const sensors = [
   { name: 'Berg River',      lat: -33.4,  lng: 18.9,  status: 'safe',    ph: 7.9, turb: 0.6, do_: 10.4, nit: 4.8 },
   { name: 'Breede River',    lat: -33.9,  lng: 20.4,  status: 'safe',    ph: 7.5, turb: 1.1, do_: 9.8, nit: 7.1 },
 ];
-const colorMap = { safe: '#4CAF50', warning: '#FFA726', danger: '#EF5350' };
+const colorMap = { safe: '#22C55E', warning: '#F59E0B', danger: '#EF4444' };
 
 const map = L.map('main-map', { zoomControl: true, scrollWheelZoom: false }).setView([-29, 25], 5);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -488,14 +488,14 @@ sensors.forEach(s => {
   L.marker([s.lat, s.lng], { icon }).addTo(map)
     .bindPopup(`
       <div style="min-width:180px">
-        <div style="font-weight:700;font-size:0.9rem;margin-bottom:8px;color:#E8F4FD">${s.name}</div>
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:8px;color:#F1F5F9">${s.name}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem">
-          <div><span style="color:#3D6E90">pH</span> <span style="font-family:monospace;color:#E8F4FD">${s.ph}</span></div>
-          <div><span style="color:#3D6E90">Turbidity</span> <span style="font-family:monospace;color:#E8F4FD">${s.turb}</span></div>
-          <div><span style="color:#3D6E90">DO</span> <span style="font-family:monospace;color:#E8F4FD">${s.do_}</span></div>
-          <div><span style="color:#3D6E90">Nitrates</span> <span style="font-family:monospace;color:${s.nit > 45 ? '#EF5350' : '#E8F4FD'}">${s.nit}</span></div>
+          <div><span style="color:#64748B">pH</span> <span style="font-family:monospace;color:#F1F5F9">${s.ph}</span></div>
+          <div><span style="color:#64748B">Turbidity</span> <span style="font-family:monospace;color:#F1F5F9">${s.turb}</span></div>
+          <div><span style="color:#64748B">DO</span> <span style="font-family:monospace;color:#F1F5F9">${s.do_}</span></div>
+          <div><span style="color:#64748B">Nitrates</span> <span style="font-family:monospace;color:${s.nit > 45 ? '#EF4444' : '#F1F5F9'}">${s.nit}</span></div>
         </div>
-        <a href="location-detail.html" style="display:block;margin-top:10px;padding:6px 12px;background:#00D4C8;color:#071728;border-radius:6px;text-align:center;font-weight:600;font-size:0.8rem;text-decoration:none">View Detail →</a>
+        <a href="location-detail.html" style="display:block;margin-top:10px;padding:6px 12px;background:#3B82F6;color:#070B17;border-radius:6px;text-align:center;font-weight:600;font-size:0.8rem;text-decoration:none">View Detail →</a>
       </div>
     `);
 });
@@ -510,8 +510,8 @@ new Chart(document.getElementById('trend-chart'), {
     labels: hours,
     datasets: [{
       data: phData,
-      borderColor: '#00D4C8',
-      backgroundColor: 'rgba(0,212,200,0.08)',
+      borderColor: '#3B82F6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
       borderWidth: 2,
       pointRadius: 0,
       pointHoverRadius: 4,
@@ -524,26 +524,27 @@ new Chart(document.getElementById('trend-chart'), {
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: '#1A3A5C',
-        borderColor: '#264E73',
+        backgroundColor: '#15243F',
+        borderColor: '#1F2D4D',
         borderWidth: 1,
-        titleColor: '#7BB8D8',
-        bodyColor: '#E8F4FD',
+        titleColor: '#94A3B8',
+        bodyColor: '#F1F5F9',
       }
     },
     scales: {
       x: {
-        grid: { color: 'rgba(38,78,115,0.3)' },
-        ticks: { color: '#3D6E90', maxTicksLimit: 8, font: { size: 10 } },
+        grid: { color: 'rgba(31,45,77,0.3)' },
+        ticks: { color: '#64748B', maxTicksLimit: 8, font: { size: 10 } },
       },
       y: {
-        grid: { color: 'rgba(38,78,115,0.3)' },
-        ticks: { color: '#3D6E90', font: { size: 10 } },
+        grid: { color: 'rgba(31,45,77,0.3)' },
+        ticks: { color: '#64748B', font: { size: 10 } },
         min: 6.8, max: 8.2,
       }
     }
   }
 });
 </script>
+<script src="assets/theme.js"></script>
 </body>
 </html>

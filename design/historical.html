@@ -23,7 +23,7 @@
   width: 64px; height: 64px;
   border-radius: var(--r-2xl);
   background: var(--accent-glow);
-  border: 1px solid rgba(0,212,200,0.3);
+  border: 1px solid rgba(59,130,246,0.3);
   display: flex; align-items: center; justify-content: center;
   margin: 0 auto var(--s4);
   transition: transform var(--t-base);
@@ -47,7 +47,7 @@
 <body>
 <div class="app-shell">
 <aside class="sidebar">
-  <div class="sidebar-logo"><svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#00D4C8"/><path d="M14 9C14 9 9 14 9 18A5 5 0 0019 18C19 14 14 9 14 9Z" fill="rgba(7,23,40,0.5)"/></svg><span class="sidebar-logo-text">Aqua<span>Watch</span></span></div>
+  <div class="sidebar-logo"><svg width="28" height="28" viewBox="0 0 28 28" fill="none"><path d="M14 2C14 2 4 11 4 18A10 10 0 0024 18C24 11 14 2 14 2Z" fill="#3B82F6"/><path d="M14 9C14 9 9 14 9 18A5 5 0 0019 18C19 14 14 9 14 9Z" fill="rgba(7,23,40,0.5)"/></svg><span class="sidebar-logo-text">Aqua<span>Watch</span></span></div>
   <nav class="sidebar-nav">
     <div class="nav-section-label">Monitor</div>
     <a href="dashboard.html" class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Dashboard</a>
@@ -197,7 +197,7 @@
       </div>
       <div>
         <div class="dataset-row">
-          <div class="file-icon" style="background:rgba(0,212,200,0.1)">📊</div>
+          <div class="file-icon" style="background:rgba(59,130,246,0.1)">📊</div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:0.875rem;color:var(--text-primary)">water_quality_jan2024.csv</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">847 rows · 7 columns · Jan 1–31, 2024</div>
@@ -224,7 +224,7 @@
           <div style="display:flex;gap:var(--s2)"><button class="btn btn-sm btn-ghost">View</button><button class="btn btn-sm btn-secondary"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button></div>
         </div>
         <div class="dataset-row">
-          <div class="file-icon" style="background:rgba(255,167,38,0.1)">⚠️</div>
+          <div class="file-icon" style="background:rgba(245,158,11,0.1)">⚠️</div>
           <div style="flex:1;min-width:0">
             <div style="font-weight:600;font-size:0.875rem;color:var(--text-primary)">field_samples_crocodile.csv</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">128 rows · 5 columns · Mar 2023</div>
@@ -271,5 +271,6 @@ function handleDrop(e) {
   handleFile(e.dataTransfer.files[0]);
 }
 </script>
+<script src="assets/theme.js"></script>
 </body>
 </html>
