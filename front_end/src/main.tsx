@@ -9,3 +9,5 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+import "./assets/legacy.js";
+import "./assets/custom-pages.css";

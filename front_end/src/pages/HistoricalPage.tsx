@@ -6,7 +6,7 @@ export default function HistoricalPage() {
     {/*  Upload Section  */}
     <div className="two-col">
       <div>
-        <div className="upload-zone" id="drop-zone" onClick={() => {}}
+        <div className="upload-zone" id="drop-zone" 
           onDragOver={() => {}}
           onDragLeave={() => {}}
           onDrop={() => {}}>

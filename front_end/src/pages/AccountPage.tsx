@@ -6,23 +6,23 @@ export default function AccountPage() {
 
         {/*  Left nav  */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s2)' }}>
-          <div className="account-nav-item active" onClick={() => {}}>
+          <div className="account-nav-item active" >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
             Profile
           </div>
-          <div className="account-nav-item" onClick={() => {}}>
+          <div className="account-nav-item" >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" /></svg>
             My Sensors
           </div>
-          <div className="account-nav-item" onClick={() => {}}>
+          <div className="account-nav-item" >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg>
             Notifications
           </div>
-          <div className="account-nav-item" onClick={() => {}}>
+          <div className="account-nav-item" >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
             API Access
           </div>
-          <div className="account-nav-item" onClick={() => {}}>
+          <div className="account-nav-item" >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
             Security
           </div>
@@ -78,12 +78,12 @@ export default function AccountPage() {
             <div className="card-header"><div className="card-title">Notification Preferences</div></div>
             <div className="card-body">
               <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginBottom: 'var(--s6)' }}>Choose how and when you receive alerts from AquaWatch.</p>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Critical alerts (email)</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Immediate email for critical threshold breaches</div></div><div className="toggle on" onClick={() => {}}></div></div>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Warning alerts (email)</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Email for warning-level readings</div></div><div className="toggle on" onClick={() => {}}></div></div>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Push notifications</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Browser push for all active alerts</div></div><div className="toggle on" onClick={() => {}}></div></div>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Daily digest</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Daily summary email at 8:00 AM</div></div><div className="toggle" onClick={() => {}}></div></div>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Sensor offline alerts</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Notify when sensor goes offline (&gt; 30 min)</div></div><div className="toggle on" onClick={() => {}}></div></div>
-              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Weekly report</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Weekly PDF report via email</div></div><div className="toggle" onClick={() => {}}></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Critical alerts (email)</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Immediate email for critical threshold breaches</div></div><div className="toggle on" ></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Warning alerts (email)</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Email for warning-level readings</div></div><div className="toggle on" ></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Push notifications</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Browser push for all active alerts</div></div><div className="toggle on" ></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Daily digest</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Daily summary email at 8:00 AM</div></div><div className="toggle" ></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Sensor offline alerts</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Notify when sensor goes offline (&gt; 30 min)</div></div><div className="toggle on" ></div></div>
+              <div className="toggle-row"><div><div style={{ fontWeight: 600, fontSize: '0.875rem' }}>Weekly report</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Weekly PDF report via email</div></div><div className="toggle" ></div></div>
               <div style={{ marginTop: 'var(--s6)' }}><button className="btn btn-primary">Save Preferences</button></div>
             </div>
           </div>

@@ -1,4 +1,46 @@
+import { useEffect } from "react";
+import Chart from "chart.js/auto";
+
 export default function PredictivePage() {
+  
+  useEffect(() => {
+    try {
+// Forecast Chart
+const labels = ['Apr 14','Apr 15','Apr 16','Apr 17','Apr 18','Apr 19','Apr 20','Apr 21','Apr 22','Apr 23','Apr 24','Apr 25','Apr 26','Apr 27','Apr 28','Apr 29','Apr 30','May 1','May 2','May 3','May 4'];
+const hist  = [42,45,58,71,65,72,78,null,null,null,null,null,null,null,null,null,null,null,null,null,null];
+const fore  = [null,null,null,null,null,null,78,81,76,74,69,65,60,55,52,48,46,43,41,40,38];
+const upper = [null,null,null,null,null,null,78,90,87,83,78,73,68,62,58,54,51,48,45,43,42];
+const lower = [null,null,null,null,null,null,78,72,65,65,60,57,52,48,46,42,41,38,37,37,34];
+const thr   = Array(21).fill(45);
+
+new Chart((document.getElementById('forecast-chart') as HTMLCanvasElement), {
+  type:'line',
+  data:{
+    labels,
+    datasets:[
+      { label:'Historical', data:hist, borderColor:'#4FC3F7', borderWidth:2.5, pointRadius:4, pointBackgroundColor:'#4FC3F7', fill:false, spanGaps:false },
+      { label:'Forecast',   data:fore, borderColor:'#9C89E2', borderWidth:2.5, borderDash:[6,3], pointRadius:3, pointBackgroundColor:'#9C89E2', fill:false, spanGaps:false },
+      { label:'Upper CI',   data:upper, borderColor:'transparent', backgroundColor:'rgba(156,137,226,0.12)', fill:'+1', pointRadius:0, spanGaps:false },
+      { label:'Lower CI',   data:lower, borderColor:'transparent', backgroundColor:'transparent', fill:false, pointRadius:0, spanGaps:false },
+      { label:'Safety Limit',data:thr, borderColor:'rgba(239,83,80,0.6)', borderWidth:1.5, borderDash:[4,4], pointRadius:0, fill:false },
+    ]
+  },
+  options:{
+    responsive:true,
+    plugins:{
+      legend:{display:false},
+      tooltip:{backgroundColor:'#1A3A5C',borderColor:'#264E73',borderWidth:1,titleColor:'#7BB8D8',bodyColor:'#E8F4FD',
+        filter:i => i.datasetIndex < 2
+      }
+    },
+    scales:{
+      x:{ grid:{color:'rgba(38,78,115,0.3)'}, ticks:{color:'#3D6E90',maxTicksLimit:10,font:{size:10}} },
+      y:{ grid:{color:'rgba(38,78,115,0.3)'}, ticks:{color:'#3D6E90'}, min:20, max:100 }
+    }
+  }
+});
+    } catch(e){}
+  }, []);
   return (
     <>
 
