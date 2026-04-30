@@ -57,6 +57,13 @@ class TimeSeriesReading(models.Model):
         return str(self.timestamp)
 
 
+ALERT_STATUS_CHOICES = [
+    ('active', 'Active'),
+    ('acknowledged', 'Acknowledged'),
+    ('resolved', 'Resolved'),
+]
+
+
 class Alert(models.Model):
     alert_id = models.CharField(max_length=10, unique=True)
     time_label = models.CharField(max_length=50)   # "08:42 AM", "Yesterday"
@@ -66,6 +73,9 @@ class Alert(models.Model):
     value = models.CharField(max_length=50)
     risk = models.CharField(max_length=10, choices=RISK_CHOICES)
     action = models.TextField()
+    status = models.CharField(max_length=15, choices=ALERT_STATUS_CHOICES, default='active')
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
