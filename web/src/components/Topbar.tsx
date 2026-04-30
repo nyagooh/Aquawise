@@ -14,12 +14,12 @@ const titles: Record<string, string> = {
 
 export default function Topbar() {
   const { pathname } = useLocation();
-  const title = titles[pathname] ?? (pathname.startsWith('/locations') ? 'Location Detail' : 'AquaWatch');
+  const title = titles[pathname] ?? (pathname.startsWith('/locations') ? 'Location Detail' : 'AquaWise');
 
   return (
     <header className="topbar">
       <div className="topbar-breadcrumb">
-        <span>AquaWatch</span>
+        <span>AquaWise</span>
         <span className="crumb-sep">/</span>
         <span className="crumb-current">{title}</span>
       </div>

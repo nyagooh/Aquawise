@@ -34,7 +34,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <div className="sidebar-logo">
         <Droplets size={22} color="var(--accent)" />
-        <div className="sidebar-logo-text">Aqua<span>Watch</span></div>
+        <div className="sidebar-logo-text">Aqua<span>Wise</span></div>
       </div>
       <nav className="sidebar-nav">
         {sections.map(section => (
