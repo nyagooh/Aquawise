@@ -27,10 +27,12 @@ urlpatterns = [
     path('statistics/compliance/', stats_views.statistics_compliance),
     path('readings/aggregate/', stats_views.readings_aggregate),
 
-    # ── Forecasting ───────────────────────────────────────────────────────────
+    # ── Forecasting & ML ─────────────────────────────────────────────────────
     path('forecasts/nitrate/', forecast_views.forecast_nitrate),
     path('forecasts/heatmap/', forecast_views.forecast_heatmap),
     path('ml/feature-importance/', forecast_views.feature_importance),
+    path('ml/models/', forecast_views.ml_model_status),
+    path('ml/anomalies/', forecast_views.anomaly_detection),
     path('insights/', forecast_views.insights),
 
     # ── Settings & sensors ────────────────────────────────────────────────────
