@@ -77,14 +77,14 @@ export default function Account() {
                 <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent), var(--accent-purple))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem', fontWeight: 700, color: '#fff' }}>TL</div>
                 <div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>Tlou Letshufi</div>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>tlou.letshufi@aquawatch.co.ke</div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>tlou.letshufi@aquawise.co.ke</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: 4 }}>Utility Operator · Member since Jan 2024</div>
                 </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--s4)' }}>
                 <Field label="First Name" value="Tlou" />
                 <Field label="Last Name" value="Letshufi" />
-                <Field label="Email Address" value="tlou.letshufi@aquawatch.co.ke" />
+                <Field label="Email Address" value="tlou.letshufi@aquawise.co.ke" />
                 <Field label="Phone Number" value="+254 700 000 000" />
               </div>
             </CardBody>
@@ -139,7 +139,7 @@ export default function Account() {
               <div style={{ padding: 'var(--s4)', background: 'var(--bg-card)', borderRadius: 'var(--r-lg)', border: '1px solid var(--border-subtle)' }}>
                 <div className="card-eyebrow" style={{ marginBottom: 'var(--s2)' }}>Example: Fetch readings</div>
                 <pre className="mono" style={{ fontSize: '0.75rem', color: 'var(--accent)', overflowX: 'auto' }}>
-                  GET https://api.aquawatch.io/v1/utilities/NRB-001/readings
+                  GET https://api.aquawise.io/v1/utilities/NRB-001/readings
                   Authorization: Bearer aw_live_sk_...
                 </pre>
               </div>
