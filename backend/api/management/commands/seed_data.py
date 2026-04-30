@@ -95,20 +95,45 @@ class Command(BaseCommand):
             )
 
         # ── Alerts ─────────────────────────────────────────────────────────
+        # (id, time_label, source_name, region_id, water_source_id,
+        #  parameter, value, threshold, risk, title, action)
         alerts_data = [
-            ('a1', '08:42 AM',  'Nyalenda Wetland',       'r3', 'Turbidity',     '8.7 NTU',   'danger',  'Boil water advisory issued for Nyalenda'),
-            ('a2', '07:15 AM',  'Ahero Irrigation Canal', 'r2', 'Nitrates',      '11.2 mg/L', 'warning', 'Increased monitoring at Ahero canal'),
-            ('a3', '06:30 AM',  'Kibos River Point',      'r4', 'pH Level',      '8.8 pH',    'warning', 'Treatment chemicals adjusted at Kibos'),
-            ('a4', 'Yesterday', 'Dunga Beach Station',    'r1', 'Temperature',   '31.2 °C',   'warning', 'Resolved — temperature normalised at Dunga'),
-            ('a5', 'Yesterday', 'Nyalenda Wetland',       'r3', 'E. coli (Sim)', 'Detected',  'danger',  'Source isolated, samples sent to KIWASCO lab'),
+            ('a1', '08:42 AM',  'Nyalenda Wetland',       'r3', 'ws3',
+             'Turbidity',     '8.7 NTU',    5.0,  'danger',
+             'High Turbidity Alert',
+             'Boil water advisory issued for Nyalenda'),
+            ('a2', '07:15 AM',  'Ahero Irrigation Canal', 'r2', 'ws2',
+             'Nitrates',      '11.2 mg/L',  10.0, 'warning',
+             'Nitrates Above Safe Limit',
+             'Increased monitoring at Ahero canal'),
+            ('a3', '06:30 AM',  'Kibos River Point',      'r4', 'ws4',
+             'pH Level',      '8.8 pH',     8.5,  'warning',
+             'pH Level Anomaly',
+             'Treatment chemicals adjusted at Kibos'),
+            ('a4', 'Yesterday', 'Dunga Beach Station',    'r1', 'ws1',
+             'Temperature',   '31.2 °C',    30.0, 'warning',
+             'Elevated Water Temperature',
+             'Resolved — temperature normalised at Dunga'),
+            ('a5', 'Yesterday', 'Nyalenda Wetland',       'r3', 'ws3',
+             'E. coli (Sim)', 'Detected',   None, 'danger',
+             'E. coli Contamination Detected',
+             'Source isolated, samples sent to KIWASCO lab'),
         ]
-        for aid, time_label, source, rid, param, value, risk, action in alerts_data:
+        for (aid, time_label, source_name, rid, wsid,
+             param, value, threshold, risk, title, action) in alerts_data:
             Alert.objects.update_or_create(
                 alert_id=aid,
                 defaults={
-                    'time_label': time_label, 'source': source,
-                    'region': regions[rid], 'parameter': param,
-                    'value': value, 'risk': risk, 'action': action,
+                    'time_label': time_label,
+                    'source': source_name,
+                    'water_source': sources.get(wsid),
+                    'region': regions[rid],
+                    'parameter': param,
+                    'value': value,
+                    'threshold': threshold,
+                    'title': title,
+                    'risk': risk,
+                    'action': action,
                 },
             )
 
