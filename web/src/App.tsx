@@ -1,5 +1,9 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import LandingLayout from './pages/landing/LandingLayout';
+import LandingHome from './pages/landing/Home';
+import LandingAbout from './pages/landing/About';
+import LandingContact from './pages/landing/Contact';
 import Dashboard from './pages/Dashboard';
 import LocationDetail from './pages/LocationDetail';
 import Alerts from './pages/Alerts';
@@ -14,8 +18,18 @@ import Register from './pages/Register';
 export default function App() {
   return (
     <Routes>
+      {/* Public landing routes */}
+      <Route element={<LandingLayout />}>
+        <Route path="/home" element={<LandingHome />} />
+        <Route path="/about" element={<LandingAbout />} />
+        <Route path="/contact" element={<LandingContact />} />
+      </Route>
+
+      {/* Auth pages */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+
+      {/* Authenticated app */}
       <Route path="/" element={<Layout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />

@@ -998,3 +998,12 @@ select.form-control { cursor: pointer; }
   :root:not([data-theme]) .theme-toggle .icon-moon { display: block; }
   :root:not([data-theme]) .theme-toggle .icon-sun { display: none; }
 }
+
+/* ── Landing Pages ───────────────────────────────────────── */
+.landing-desktop-nav { display: flex; }
+.landing-mobile-menu-btn { display: none !important; }
+
+@media (max-width: 720px) {
+  .landing-desktop-nav { display: none !important; }
+  .landing-mobile-menu-btn { display: flex !important; }
+}
