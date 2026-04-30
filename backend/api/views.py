@@ -70,10 +70,49 @@ def water_source_readings(request, source_id):
 @api_view(['GET'])
 def alerts(request):
     qs = Alert.objects.select_related('region').all()
-    region_id = request.query_params.get('region')
-    if region_id:
+    if region_id := request.query_params.get('region'):
         qs = qs.filter(region__region_id=region_id)
+    if alert_status := request.query_params.get('status'):
+        qs = qs.filter(status=alert_status)
+    if param := request.query_params.get('param'):
+        qs = qs.filter(parameter__icontains=param)
     return Response(AlertSerializer(qs, many=True).data)
+
+
+@api_view(['GET'])
+def alert_detail(request, alert_id):
+    alert = get_object_or_404(Alert.objects.select_related('region'), alert_id=alert_id)
+    return Response(AlertSerializer(alert).data)
+
+
+@api_view(['POST'])
+def alert_acknowledge(request, alert_id):
+    alert = get_object_or_404(Alert, alert_id=alert_id)
+    if alert.status != 'active':
+        return Response(
+            {'error': f'Alert is already {alert.status}.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    alert.status = 'acknowledged'
+    alert.acknowledged_at = timezone.now()
+    alert.save(update_fields=['status', 'acknowledged_at'])
+    return Response(AlertSerializer(alert).data)
+
+
+@api_view(['POST'])
+def alert_resolve(request, alert_id):
+    alert = get_object_or_404(Alert, alert_id=alert_id)
+    if alert.status == 'resolved':
+        return Response(
+            {'error': 'Alert is already resolved.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    alert.status = 'resolved'
+    alert.resolved_at = timezone.now()
+    if not alert.acknowledged_at:
+        alert.acknowledged_at = alert.resolved_at
+    alert.save(update_fields=['status', 'resolved_at', 'acknowledged_at'])
+    return Response(AlertSerializer(alert).data)
 
 
 @api_view(['GET'])
