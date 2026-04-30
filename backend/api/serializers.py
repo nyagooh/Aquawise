@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Region, WaterSource, SensorParameter, TimeSeriesReading, Alert, RegionPrediction, ForecastDay
+from .models import Region, WaterSource, SensorParameter, TimeSeriesReading, Alert, RegionPrediction, ForecastDay, StationReading
 
 
 class RegionSerializer(serializers.ModelSerializer):
@@ -27,6 +27,28 @@ class WaterSourceSerializer(serializers.ModelSerializer):
             return f'{minutes} min ago'
         hours = minutes // 60
         return f'{hours} hr ago'
+
+
+class StationReadingSerializer(serializers.ModelSerializer):
+    dissolvedOxygen = serializers.FloatField(source='dissolved_oxygen', allow_null=True)
+
+    class Meta:
+        model = StationReading
+        fields = ['timestamp', 'temperature', 'turbidity', 'ph', 'dissolvedOxygen', 'conductivity', 'nitrates']
+
+
+class WaterSourceDetailSerializer(WaterSourceSerializer):
+    regionName = serializers.CharField(source='region.name')
+    currentReadings = serializers.SerializerMethodField()
+
+    class Meta(WaterSourceSerializer.Meta):
+        fields = ['id', 'name', 'regionId', 'regionName', 'risk', 'lastUpdated', 'currentReadings']
+
+    def get_currentReadings(self, obj):
+        reading = obj.readings.first()  # StationReading is ordered -timestamp
+        if reading is None:
+            return None
+        return StationReadingSerializer(reading).data
 
 
 class SensorParameterSerializer(serializers.ModelSerializer):

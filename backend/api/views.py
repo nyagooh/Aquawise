@@ -1,10 +1,14 @@
+from datetime import timedelta
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import Region, WaterSource, SensorParameter, TimeSeriesReading, Alert, RegionPrediction, StationReading
 from .serializers import (
-    RegionSerializer, WaterSourceSerializer, SensorParameterSerializer,
+    RegionSerializer, WaterSourceSerializer, WaterSourceDetailSerializer,
+    StationReadingSerializer, SensorParameterSerializer,
     TimeSeriesReadingSerializer, AlertSerializer, RegionPredictionSerializer,
 )
 
@@ -33,7 +37,34 @@ def water_sources(request):
     region_id = request.query_params.get('region')
     if region_id:
         qs = qs.filter(region__region_id=region_id)
+    risk = request.query_params.get('status')
+    if risk:
+        qs = qs.filter(risk=risk)
     return Response(WaterSourceSerializer(qs, many=True).data)
+
+
+@api_view(['GET'])
+def water_source_detail(request, source_id):
+    source = get_object_or_404(
+        WaterSource.objects.select_related('region').prefetch_related('readings'),
+        source_id=source_id,
+    )
+    return Response(WaterSourceDetailSerializer(source).data)
+
+
+@api_view(['GET'])
+def water_source_readings(request, source_id):
+    source = get_object_or_404(WaterSource, source_id=source_id)
+    since = timezone.now() - timedelta(days=7)
+    readings = StationReading.objects.filter(
+        station=source,
+        timestamp__gte=since,
+    ).order_by('timestamp')
+    return Response({
+        'id': source.source_id,
+        'name': source.name,
+        'readings': StationReadingSerializer(readings, many=True).data,
+    })
 
 
 @api_view(['GET'])
