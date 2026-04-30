@@ -33,12 +33,10 @@ def timeseries(request):
 
 @api_view(['GET'])
 def water_sources(request):
-    qs = WaterSource.objects.select_related('region').all()
-    region_id = request.query_params.get('region')
-    if region_id:
+    qs = WaterSource.objects.select_related('region').prefetch_related('readings')
+    if region_id := request.query_params.get('region'):
         qs = qs.filter(region__region_id=region_id)
-    risk = request.query_params.get('status')
-    if risk:
+    if risk := request.query_params.get('status'):
         qs = qs.filter(risk=risk)
     return Response(WaterSourceSerializer(qs, many=True).data)
 
@@ -69,7 +67,7 @@ def water_source_readings(request, source_id):
 
 @api_view(['GET'])
 def alerts(request):
-    qs = Alert.objects.select_related('region').all()
+    qs = Alert.objects.select_related('region', 'water_source').all()
     if region_id := request.query_params.get('region'):
         qs = qs.filter(region__region_id=region_id)
     if alert_status := request.query_params.get('status'):
@@ -81,13 +79,17 @@ def alerts(request):
 
 @api_view(['GET'])
 def alert_detail(request, alert_id):
-    alert = get_object_or_404(Alert.objects.select_related('region'), alert_id=alert_id)
+    alert = get_object_or_404(
+        Alert.objects.select_related('region', 'water_source'), alert_id=alert_id
+    )
     return Response(AlertSerializer(alert).data)
 
 
 @api_view(['POST'])
 def alert_acknowledge(request, alert_id):
-    alert = get_object_or_404(Alert, alert_id=alert_id)
+    alert = get_object_or_404(
+        Alert.objects.select_related('region', 'water_source'), alert_id=alert_id
+    )
     if alert.status != 'active':
         return Response(
             {'error': f'Alert is already {alert.status}.'},
@@ -101,7 +103,9 @@ def alert_acknowledge(request, alert_id):
 
 @api_view(['POST'])
 def alert_resolve(request, alert_id):
-    alert = get_object_or_404(Alert, alert_id=alert_id)
+    alert = get_object_or_404(
+        Alert.objects.select_related('region', 'water_source'), alert_id=alert_id
+    )
     if alert.status == 'resolved':
         return Response(
             {'error': 'Alert is already resolved.'},
