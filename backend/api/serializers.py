@@ -78,10 +78,16 @@ class AlertSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='alert_id')
     time = serializers.CharField(source='time_label')
     regionId = serializers.CharField(source='region.region_id')
+    acknowledgedAt = serializers.DateTimeField(source='acknowledged_at', allow_null=True)
+    resolvedAt = serializers.DateTimeField(source='resolved_at', allow_null=True)
+    createdAt = serializers.DateTimeField(source='created_at')
 
     class Meta:
         model = Alert
-        fields = ['id', 'time', 'source', 'regionId', 'parameter', 'value', 'risk', 'action']
+        fields = [
+            'id', 'time', 'source', 'regionId', 'parameter', 'value',
+            'risk', 'action', 'status', 'acknowledgedAt', 'resolvedAt', 'createdAt',
+        ]
 
 
 class ForecastDaySerializer(serializers.ModelSerializer):
