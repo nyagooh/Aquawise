@@ -33,6 +33,9 @@ Thumbs.db
 db.sqlite3
 media/
 
+# Trained ML model artefacts (regenerate with: python manage.py train_models)
+backend/ml_models/*.joblib
+
 # Build / distribution
 build/
 dist/
