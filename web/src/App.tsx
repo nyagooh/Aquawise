@@ -7,18 +7,23 @@ import Predictive from './pages/Predictive';
 import Statistics from './pages/Statistics';
 import Settings from './pages/Settings';
 import Account from './pages/Account';
+import Historical from './pages/Historical';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<Layout />}>
-        <Route index element={<Dashboard />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="locations/:id" element={<LocationDetail />} />
-        <Route path="locations" element={<Navigate to="/dashboard" replace />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="predictive" element={<Predictive />} />
         <Route path="statistics" element={<Statistics />} />
+        <Route path="historical" element={<Historical />} />
         <Route path="settings" element={<Settings />} />
         <Route path="account" element={<Account />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

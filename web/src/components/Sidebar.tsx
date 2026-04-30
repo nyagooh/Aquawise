@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, MapPin, Bell, BarChart3, TrendingUp, Settings, User, Droplets,
+  LayoutDashboard, MapPin, Bell, BarChart3, TrendingUp, Settings, User, Droplets, Database,
 } from 'lucide-react';
 
 const sections = [
@@ -15,8 +15,9 @@ const sections = [
   {
     label: 'Operations',
     items: [
-      { to: '/locations/nairobi', label: 'Locations', icon: MapPin },
-      { to: '/alerts',            label: 'Alerts',    icon: Bell, badge: 3 },
+      { to: '/locations/nairobi', label: 'Locations',       icon: MapPin },
+      { to: '/alerts',            label: 'Alerts',          icon: Bell, badge: 3 },
+      { to: '/historical',        label: 'Historical Data', icon: Database },
     ],
   },
   {

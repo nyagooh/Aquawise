@@ -60,6 +60,91 @@ export default function Predictive() {
         </CardBody>
       </Card>
 
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 'var(--s6)' }}>
+        {/* Risk Heatmap */}
+        <Card>
+          <CardHeader title="14-Day Risk Heatmap" eyebrow="ALL LOCATIONS × ALL PARAMETERS" />
+          <CardBody>
+            <div style={{ display: 'flex', gap: 'var(--s3)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-around', paddingTop: 24 }}>
+                {['pH', 'Turbidity', 'DO', 'Nitrates'].map(p => (
+                  <div key={p} style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'right', width: 60 }}>{p}</div>
+                ))}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, marginBottom: 4 }}>
+                  {['CRR', 'LIM', 'OLI', 'VAL', 'ORG', 'UMG', 'BRG', 'BRD'].map(l => (
+                    <div key={l} style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>{l}</div>
+                  ))}
+                </div>
+                {[1, 2, 3, 4].map(row => (
+                  <div key={row} style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, marginBottom: 4 }}>
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map(col => {
+                      const risk = (row + col) % 7 === 0 ? 'high' : (row + col) % 4 === 0 ? 'med' : 'low';
+                      return (
+                        <div
+                          key={col}
+                          style={{
+                            aspectRatio: '1',
+                            borderRadius: 'var(--r-sm)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.6875rem',
+                            fontWeight: 600,
+                            background: risk === 'high' ? 'rgba(239,68,68,0.2)' : risk === 'med' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
+                            color: risk === 'high' ? 'var(--danger)' : risk === 'med' ? 'var(--warning)' : 'var(--safe)',
+                            border: `1px solid ${risk === 'high' ? 'rgba(239,68,68,0.3)' : risk === 'med' ? 'rgba(245,158,11,0.3)' : 'rgba(34,197,94,0.3)'}`,
+                          }}
+                        >
+                          {risk.charAt(0).toUpperCase()}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--s4)', marginTop: 'var(--s4)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-safe" />Low risk</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-warning" />Medium risk</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-danger" />High risk</div>
+            </div>
+          </CardBody>
+        </Card>
+
+        {/* Feature Importance */}
+        <Card>
+          <CardHeader title="Feature Importance" eyebrow="RANDOM FOREST · NITRATES" />
+          <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
+            {[
+              { label: 'SWIR22', value: 31.4 },
+              { label: 'NDMI', value: 24.8 },
+              { label: 'PET', value: 18.2 },
+              { label: 'MNDWI', value: 14.1 },
+              { label: 'NIR', value: 7.4 },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8125rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>{f.label}</span>
+                  <span className="mono" style={{ color: 'var(--accent)' }}>{f.value}%</span>
+                </div>
+                <div style={{ height: 8, background: 'var(--border-subtle)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), var(--accent-blue))', width: `${f.value}%` }} />
+                </div>
+              </div>
+            ))}
+            <div style={{ padding: 'var(--s3)', background: 'var(--bg-card)', borderRadius: 'var(--r-lg)', marginTop: 'var(--s2)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 'var(--s2)' }}>Model performance</div>
+              <div style={{ display: 'flex', gap: 'var(--s6)' }}>
+                <div><div className="mono" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent)' }}>0.58</div><div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>R² (test)</div></div>
+                <div><div className="mono" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>35.2</div><div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>RMSE</div></div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--s4)' }}>
         <Insight tone="danger" title="Nitrate spike predicted" body="Nairobi Water nitrate likely to remain above WHO 50 mg/L for the next 4–7 days. Recommend immediate investigation." />
         <Insight tone="warning" title="E. coli clearance expected" body="Kisumu Water E. coli predicted to return to 0 CFU/100 mL within 3 days after Free Chlorine residual is restored above 0.2 mg/L." />
