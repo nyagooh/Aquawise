@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, Navigate } from 'react-router-dom';
+import { useAuth } from '../../lib/auth';
 
 const Logo = () => (
   <Link to="/home" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
@@ -14,9 +15,12 @@ const Logo = () => (
 );
 
 export default function LandingLayout() {
+  const { isAuthenticated } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const { pathname } = useLocation();
+
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
