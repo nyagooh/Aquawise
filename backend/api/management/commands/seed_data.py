@@ -34,18 +34,26 @@ class Command(BaseCommand):
             regions[rid] = r
 
         # ── Water sources ──────────────────────────────────────────────────
+        # (source_id, name, region_id, risk, lat, lng, battery, sensor_id, installed)
         sources_data = [
-            ('ws1', 'Dunga Beach Station',    'r1', 'safe'),
-            ('ws2', 'Ahero Irrigation Canal', 'r2', 'warning'),
-            ('ws3', 'Nyalenda Wetland',       'r3', 'danger'),
-            ('ws4', 'Kibos River Point',      'r4', 'safe'),
-            ('ws5', 'Kondele Water Point',    'r5', 'safe'),
+            ('ws1', 'Dunga Beach Station',    'r1', 'safe',    -0.1139, 34.7484, 87, 'SN-D001', '2023-03-15'),
+            ('ws2', 'Ahero Irrigation Canal', 'r2', 'warning', -0.1667, 34.9167, 62, 'SN-A002', '2023-06-20'),
+            ('ws3', 'Nyalenda Wetland',       'r3', 'danger',  -0.1208, 34.7625, 41, 'SN-N003', '2023-09-10'),
+            ('ws4', 'Kibos River Point',      'r4', 'safe',    -0.0483, 34.8317, 95, 'SN-K004', '2023-01-05'),
+            ('ws5', 'Kondele Water Point',    'r5', 'safe',    -0.1017, 34.7403, 78, 'SN-C005', '2024-02-28'),
         ]
-        for sid, name, rid, risk in sources_data:
-            WaterSource.objects.update_or_create(
+        sources = {}
+        for sid, name, rid, risk, lat, lng, battery, sensor_id, installed in sources_data:
+            ws, _ = WaterSource.objects.update_or_create(
                 source_id=sid,
-                defaults={'name': name, 'region': regions[rid], 'risk': risk},
+                defaults={
+                    'name': name, 'region': regions[rid], 'risk': risk,
+                    'lat': lat, 'lng': lng,
+                    'battery': battery, 'sensor_id': sensor_id,
+                    'installed': installed,
+                },
             )
+            sources[sid] = ws
 
         # ── 24-hour time series ────────────────────────────────────────────
         TimeSeriesReading.objects.all().delete()
