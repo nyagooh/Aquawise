@@ -1,7 +1,8 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, MapPin, Bell, BarChart3, TrendingUp, Settings, User, Droplets, Database,
+  LayoutDashboard, MapPin, Bell, BarChart3, TrendingUp, Settings, User, Droplets, Database, LogOut,
 } from 'lucide-react';
+import { useAuth } from '../lib/auth';
 
 const sections = [
   {
@@ -30,6 +31,14 @@ const sections = [
 ];
 
 export default function Sidebar() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/home', { replace: true });
+  };
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -62,6 +71,23 @@ export default function Sidebar() {
             <div className="user-role">Utility Operator</div>
           </div>
         </NavLink>
+        <button
+          onClick={handleLogout}
+          title="Log out"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            width: '100%', marginTop: 4,
+            padding: '8px 12px', borderRadius: 'var(--r-md)',
+            color: 'var(--text-muted)', fontSize: '0.875rem', fontWeight: 500,
+            background: 'none', border: 'none', cursor: 'pointer',
+            transition: 'all var(--t-fast)',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--danger-bg)'; e.currentTarget.style.color = 'var(--danger)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+        >
+          <LogOut size={16} />
+          <span>Log out</span>
+        </button>
       </div>
     </aside>
   );
