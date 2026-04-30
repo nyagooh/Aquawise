@@ -13,7 +13,7 @@ export default function Register() {
               <path d="M14 9C14 9 9 14 9 18A5 5 0 0019 18C19 14 14 9 14 9Z" fill="rgba(7,23,40,0.5)" />
             </svg>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
-              Aqua<span style={{ color: 'var(--accent)' }}>Watch</span>
+              Aqua<span style={{ color: 'var(--accent)' }}>Wise</span>
             </span>
           </div>
           <h1 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Create an account</h1>
