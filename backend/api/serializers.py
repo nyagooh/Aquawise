@@ -12,21 +12,52 @@ class RegionSerializer(serializers.ModelSerializer):
 
 class WaterSourceSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='source_id')
+    # Frontend-expected aliases
+    county = serializers.CharField(source='region.name')
+    status = serializers.CharField(source='risk')
+    sensorId = serializers.CharField(source='sensor_id')
+    lastUpdate = serializers.SerializerMethodField()
+    readings = serializers.SerializerMethodField()
+    # Backward-compatible fields kept alongside
     regionId = serializers.CharField(source='region.region_id')
-    lastUpdated = serializers.SerializerMethodField()
+    risk = serializers.CharField()
 
     class Meta:
         model = WaterSource
-        fields = ['id', 'name', 'regionId', 'risk', 'lastUpdated']
+        fields = [
+            'id', 'name',
+            'county', 'regionId',
+            'status', 'risk',
+            'lat', 'lng',
+            'sensorId', 'battery', 'installed',
+            'lastUpdate',
+            'readings',
+        ]
 
-    def get_lastUpdated(self, obj):
+    def get_lastUpdate(self, obj):
         from django.utils import timezone
         delta = timezone.now() - obj.last_updated
         minutes = int(delta.total_seconds() / 60)
         if minutes < 60:
             return f'{minutes} min ago'
         hours = minutes // 60
-        return f'{hours} hr ago'
+        if hours < 24:
+            return f'{hours} hr ago'
+        return f'{hours // 24} day(s) ago'
+
+    def get_readings(self, obj):
+        # Works with prefetch_related('readings'); safe without it too.
+        reading = next(iter(obj.readings.all()), None)
+        if reading is None:
+            return None
+        return {
+            'temperature': reading.temperature,
+            'turbidity': reading.turbidity,
+            'ph': reading.ph,
+            'dissolvedOxygen': reading.dissolved_oxygen,
+            'conductivity': reading.conductivity,
+            'nitrates': reading.nitrates,
+        }
 
 
 class StationReadingSerializer(serializers.ModelSerializer):
@@ -38,17 +69,9 @@ class StationReadingSerializer(serializers.ModelSerializer):
 
 
 class WaterSourceDetailSerializer(WaterSourceSerializer):
-    regionName = serializers.CharField(source='region.name')
-    currentReadings = serializers.SerializerMethodField()
-
+    """Detail view — identical fields for now; extend here for future detail-only data."""
     class Meta(WaterSourceSerializer.Meta):
-        fields = ['id', 'name', 'regionId', 'regionName', 'risk', 'lastUpdated', 'currentReadings']
-
-    def get_currentReadings(self, obj):
-        reading = obj.readings.first()  # StationReading is ordered -timestamp
-        if reading is None:
-            return None
-        return StationReadingSerializer(reading).data
+        pass
 
 
 class SensorParameterSerializer(serializers.ModelSerializer):
@@ -76,6 +99,13 @@ class TimeSeriesReadingSerializer(serializers.ModelSerializer):
 
 class AlertSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='alert_id')
+    # Frontend-expected fields
+    utilityId = serializers.SerializerMethodField()
+    title = serializers.SerializerMethodField()
+    severity = serializers.CharField(source='risk')
+    description = serializers.CharField(source='action')
+    triggered = serializers.DateTimeField(source='created_at')
+    # Backward-compatible fields
     time = serializers.CharField(source='time_label')
     regionId = serializers.CharField(source='region.region_id')
     acknowledgedAt = serializers.DateTimeField(source='acknowledged_at', allow_null=True)
@@ -85,9 +115,22 @@ class AlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = Alert
         fields = [
-            'id', 'time', 'source', 'regionId', 'parameter', 'value',
-            'risk', 'action', 'status', 'acknowledgedAt', 'resolvedAt', 'createdAt',
+            'id',
+            'utilityId', 'title', 'parameter', 'value', 'threshold',
+            'severity', 'description', 'triggered',
+            'status', 'acknowledgedAt', 'resolvedAt',
+            # legacy / backward-compat
+            'time', 'source', 'regionId', 'risk', 'action', 'createdAt',
         ]
+
+    def get_utilityId(self, obj):
+        return obj.water_source.source_id if obj.water_source_id else None
+
+    def get_title(self, obj):
+        if obj.title:
+            return obj.title
+        severity_prefix = {'danger': 'Critical', 'warning': 'Warning'}.get(obj.risk, 'Alert')
+        return f'{severity_prefix}: {obj.parameter}'
 
 
 class ForecastDaySerializer(serializers.ModelSerializer):
