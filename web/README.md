@@ -1,4 +1,4 @@
-# AquaWatch — Water Utility Monitoring (React)
+# AquaWise — Water Utility Monitoring (React)
 
 React + Vite + TypeScript port of the design mockups in `../design/`.
 
