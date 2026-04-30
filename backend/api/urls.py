@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from . import auth_views
+from . import stats_views
 
 urlpatterns = [
     # ── Existing data endpoints ────────────────────────────────────────────────
@@ -11,8 +12,17 @@ urlpatterns = [
     path('water-sources/<str:source_id>/', views.water_source_detail),
     path('water-sources/<str:source_id>/readings/', views.water_source_readings),
     path('alerts/', views.alerts),
+    path('alerts/<str:alert_id>/', views.alert_detail),
+    path('alerts/<str:alert_id>/acknowledge/', views.alert_acknowledge),
+    path('alerts/<str:alert_id>/resolve/', views.alert_resolve),
     path('predictions/', views.predictions),
     path('ingest/', views.ingest),
+
+    # ── Statistics ────────────────────────────────────────────────────────────
+    path('statistics/summary/', stats_views.statistics_summary),
+    path('statistics/distribution/', stats_views.statistics_distribution),
+    path('statistics/compliance/', stats_views.statistics_compliance),
+    path('readings/aggregate/', stats_views.readings_aggregate),
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     path('auth/register/', auth_views.register),
