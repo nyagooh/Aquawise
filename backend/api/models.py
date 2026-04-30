@@ -18,6 +18,11 @@ class WaterSource(models.Model):
     name = models.CharField(max_length=200)
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='water_sources')
     risk = models.CharField(max_length=10, choices=RISK_CHOICES)
+    lat = models.FloatField(null=True, blank=True)
+    lng = models.FloatField(null=True, blank=True)
+    battery = models.IntegerField(null=True, blank=True)   # 0–100 %
+    sensor_id = models.CharField(max_length=50, blank=True)
+    installed = models.DateField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -67,10 +72,16 @@ ALERT_STATUS_CHOICES = [
 class Alert(models.Model):
     alert_id = models.CharField(max_length=10, unique=True)
     time_label = models.CharField(max_length=50)   # "08:42 AM", "Yesterday"
-    source = models.CharField(max_length=200)
+    source = models.CharField(max_length=200)      # human-readable name, kept for display
+    water_source = models.ForeignKey(
+        'WaterSource', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='alerts',
+    )
     region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name='alerts')
     parameter = models.CharField(max_length=100)
-    value = models.CharField(max_length=50)
+    value = models.CharField(max_length=50)        # human-readable, e.g. "8.7 NTU"
+    threshold = models.FloatField(null=True, blank=True)  # numeric WHO threshold exceeded
+    title = models.CharField(max_length=200, blank=True)
     risk = models.CharField(max_length=10, choices=RISK_CHOICES)
     action = models.TextField()
     status = models.CharField(max_length=15, choices=ALERT_STATUS_CHOICES, default='active')
