@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import ProtectedRoute from './components/ProtectedRoute';
 import LandingLayout from './pages/landing/LandingLayout';
 import LandingHome from './pages/landing/Home';
 import LandingAbout from './pages/landing/About';
@@ -18,6 +19,9 @@ import Register from './pages/Register';
 export default function App() {
   return (
     <Routes>
+      {/* Root redirect → landing home */}
+      <Route index element={<Navigate to="/home" replace />} />
+
       {/* Public landing routes */}
       <Route element={<LandingLayout />}>
         <Route path="/home" element={<LandingHome />} />
@@ -25,23 +29,26 @@ export default function App() {
         <Route path="/contact" element={<LandingContact />} />
       </Route>
 
-      {/* Auth pages */}
+      {/* Auth pages (publicly accessible) */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* Authenticated app */}
-      <Route path="/" element={<Layout />}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="locations/:id" element={<LocationDetail />} />
-        <Route path="alerts" element={<Alerts />} />
-        <Route path="predictive" element={<Predictive />} />
-        <Route path="statistics" element={<Statistics />} />
-        <Route path="historical" element={<Historical />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="account" element={<Account />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      {/* Authenticated app — redirects to /home if not logged in */}
+      <Route element={<ProtectedRoute />}>
+        <Route element={<Layout />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/locations/:id" element={<LocationDetail />} />
+          <Route path="/alerts" element={<Alerts />} />
+          <Route path="/predictive" element={<Predictive />} />
+          <Route path="/statistics" element={<Statistics />} />
+          <Route path="/historical" element={<Historical />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/account" element={<Account />} />
+        </Route>
       </Route>
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );
 }
