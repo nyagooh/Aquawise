@@ -1,24 +1,71 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine,
 } from 'recharts';
 import { TrendingUp, Brain, Sparkles } from 'lucide-react';
 import { Card, CardHeader, CardBody, Badge } from '../components/ui';
-import { UTILITIES } from '../data/mockData';
+import { api } from '../lib/api';
+import type { WaterSource } from '../lib/api';
 
-const labels = ['Apr 14','Apr 15','Apr 16','Apr 17','Apr 18','Apr 19','Apr 20','Apr 21','Apr 22','Apr 23','Apr 24','Apr 25','Apr 26','Apr 27','Apr 28','Apr 29','Apr 30','May 1','May 2','May 3','May 4'];
-const hist  = [42,45,58,71,65,72,78,null,null,null,null,null,null,null,null,null,null,null,null,null,null];
-const fore  = [null,null,null,null,null,null,78,81,76,74,69,65,60,55,52,48,46,43,41,40,38];
-const upper = [null,null,null,null,null,null,78,90,87,83,78,73,68,62,58,54,51,48,45,43,42];
-const lower = [null,null,null,null,null,null,78,72,65,65,60,57,52,48,46,42,41,38,37,37,34];
+type ForecastPoint = { date: string; value: number; lower: number; upper: number; risk: string };
+type ForecastResp  = { utilityName: string; parameter: string; unit: string; safeMax: number; safeMin: number; baseline: number; forecast: ForecastPoint[]; modelUsed: string; days: number };
+type FeatureItem   = { feature: string; importance: number };
+type FeatureResp   = { features: FeatureItem[]; fromTrainedModel: boolean; trainingNote: string };
+type Insight       = { id: string; severity: string; title: string; description: string; recommendedAction: string };
 
-const chartData = labels.map((d, i) => ({
-  day: d, hist: hist[i] as number | null, fore: fore[i] as number | null,
-  upper: upper[i] as number | null, lower: lower[i] as number | null,
-}));
+type ParamKey = 'nitrates' | 'ph' | 'turbidity' | 'conductivity' | 'temperature' | 'dissolvedOxygen';
+const PARAMS: { key: ParamKey; label: string }[] = [
+  { key: 'nitrates',       label: 'Nitrates' },
+  { key: 'ph',             label: 'pH' },
+  { key: 'turbidity',      label: 'Turbidity' },
+  { key: 'conductivity',   label: 'Conductivity' },
+  { key: 'temperature',    label: 'Temperature' },
+  { key: 'dissolvedOxygen', label: 'Dissolved O₂' },
+];
+
+const WHO_MAX: Partial<Record<ParamKey, number>> = { nitrates: 50, ph: 8.5, turbidity: 1, conductivity: 2500, temperature: 25 };
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 export default function Predictive() {
-  const [utility, setUtility] = useState('nairobi');
+  const [sources,   setSources]   = useState<WaterSource[]>([]);
+  const [utility,   setUtility]   = useState('');
+  const [days,      setDays]      = useState(14);
+  const [param,     setParam]     = useState<ParamKey>('nitrates');
+  const [forecast,  setForecast]  = useState<ForecastResp | null>(null);
+  const [features,  setFeatures]  = useState<FeatureResp | null>(null);
+  const [insights,  setInsights]  = useState<Insight[]>([]);
+  const [loading,   setLoading]   = useState(false);
+
+  useEffect(() => {
+    api.get<WaterSource[]>('/water-sources/').then(data => {
+      setSources(data);
+      if (data.length) setUtility(data[0].id);
+    }).catch(() => {});
+    api.get<{ insights: Insight[] }>('/insights/').then(d => setInsights(d.insights)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!utility) return;
+    setLoading(true);
+    Promise.all([
+      api.get<ForecastResp>(`/forecasts/nitrate/?utility=${utility}&days=${days}&param=${param}`),
+      api.get<FeatureResp>(`/ml/feature-importance/?param=${param}`),
+    ]).then(([fc, fi]) => { setForecast(fc); setFeatures(fi); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [utility, days, param]);
+
+  const chartData = forecast?.forecast.map(pt => ({
+    day: fmtDate(pt.date),
+    fore: pt.value,
+    upper: pt.upper,
+    lower: pt.lower,
+  })) ?? [];
+
+  const whoMax = WHO_MAX[param];
 
   return (
     <>
@@ -26,12 +73,17 @@ export default function Predictive() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s4)', padding: 'var(--s4) var(--s5)', borderBottom: '1px solid var(--border-default)', flexWrap: 'wrap' }}>
           <Badge tone="info"><Brain size={11} style={{ marginRight: 4 }} />ML Forecast</Badge>
           <div className="tabs">
-            <button className="tab-btn">7 days</button>
-            <button className="tab-btn active">14 days</button>
-            <button className="tab-btn">30 days</button>
+            {[7, 14, 30].map(d => (
+              <button key={d} className={'tab-btn' + (days === d ? ' active' : '')} onClick={() => setDays(d)}>{d} days</button>
+            ))}
+          </div>
+          <div className="tabs">
+            {PARAMS.map(p => (
+              <button key={p.key} className={'tab-btn' + (param === p.key ? ' active' : '')} onClick={() => setParam(p.key)}>{p.label}</button>
+            ))}
           </div>
           <select className="form-control" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8125rem', marginLeft: 'auto' }} value={utility} onChange={e => setUtility(e.target.value)}>
-            {UTILITIES.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
       </Card>
@@ -39,136 +91,92 @@ export default function Predictive() {
       <Card>
         <CardHeader
           icon={<TrendingUp size={16} />}
-          title="14-Day Nitrate Forecast"
-          eyebrow={UTILITIES.find(u => u.id === utility)?.name ?? 'Utility'}
+          title={`${days}-Day ${PARAMS.find(p => p.key === param)?.label ?? param} Forecast`}
+          eyebrow={forecast ? `${forecast.utilityName} · ${forecast.modelUsed}` : 'Loading…'}
         />
         <CardBody>
-          <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chartData} margin={{ top: 10, right: 24, bottom: 0, left: -10 }}>
-              <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval={2} />
-              <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} domain={[20, 100]} />
-              <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <ReferenceLine y={50} stroke="var(--danger)" strokeDasharray="4 3" label={{ value: 'WHO 50 mg/L', fill: 'var(--danger)', fontSize: 10, position: 'right' }} />
-              <Area type="monotone" dataKey="upper" stroke="transparent" fill="rgba(139,92,246,0.15)" name="Upper 95%" />
-              <Area type="monotone" dataKey="lower" stroke="transparent" fill="var(--bg-card)" name="Lower 95%" />
-              <Line type="monotone" dataKey="hist"  stroke="var(--accent-blue)"   strokeWidth={2.5} dot={{ r: 3 }} name="Historical" />
-              <Line type="monotone" dataKey="fore"  stroke="var(--accent-purple)" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 3 }} name="Forecast" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {loading && <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--s6)' }}>Loading forecast…</p>}
+          {!loading && chartData.length === 0 && <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--s6)' }}>No forecast data available.</p>}
+          {!loading && chartData.length > 0 && (
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 24, bottom: 0, left: -10 }}>
+                <CartesianGrid stroke="var(--border-subtle)" strokeDasharray="3 3" />
+                <XAxis dataKey="day" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} interval={Math.max(0, Math.floor(chartData.length / 7) - 1)} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {whoMax != null && (
+                  <ReferenceLine y={whoMax} stroke="var(--danger)" strokeDasharray="4 3" label={{ value: `WHO limit (${whoMax})`, fill: 'var(--danger)', fontSize: 10, position: 'right' }} />
+                )}
+                <Area type="monotone" dataKey="upper" stroke="transparent" fill="rgba(139,92,246,0.15)" name="Upper 95%" />
+                <Area type="monotone" dataKey="lower" stroke="transparent" fill="var(--bg-card)" name="Lower 95%" />
+                <Line type="monotone" dataKey="fore" stroke="var(--accent-purple)" strokeWidth={2.5} strokeDasharray="6 4" dot={{ r: 3 }} name="Forecast" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+          {forecast && (
+            <div style={{ display: 'flex', gap: 'var(--s6)', marginTop: 'var(--s4)', fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
+              <span>Baseline: <strong className="mono">{forecast.baseline} {forecast.unit}</strong></span>
+              <span>Model: <strong>{forecast.modelUsed}</strong></span>
+              <span>Horizon: <strong>{forecast.days} days</strong></span>
+            </div>
+          )}
         </CardBody>
       </Card>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 'var(--s6)' }}>
-        {/* Risk Heatmap */}
-        <Card>
-          <CardHeader title="14-Day Risk Heatmap" eyebrow="ALL LOCATIONS × ALL PARAMETERS" />
-          <CardBody>
-            <div style={{ display: 'flex', gap: 'var(--s3)' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'space-around', paddingTop: 24 }}>
-                {['pH', 'Turbidity', 'DO', 'Nitrates'].map(p => (
-                  <div key={p} style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'right', width: 60 }}>{p}</div>
-                ))}
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, marginBottom: 4 }}>
-                  {['CRR', 'LIM', 'OLI', 'VAL', 'ORG', 'UMG', 'BRG', 'BRD'].map(l => (
-                    <div key={l} style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'center' }}>{l}</div>
-                  ))}
-                </div>
-                {[1, 2, 3, 4].map(row => (
-                  <div key={row} style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4, marginBottom: 4 }}>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map(col => {
-                      const risk = (row + col) % 7 === 0 ? 'high' : (row + col) % 4 === 0 ? 'med' : 'low';
-                      return (
-                        <div
-                          key={col}
-                          style={{
-                            aspectRatio: '1',
-                            borderRadius: 'var(--r-sm)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.6875rem',
-                            fontWeight: 600,
-                            background: risk === 'high' ? 'rgba(239,68,68,0.2)' : risk === 'med' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
-                            color: risk === 'high' ? 'var(--danger)' : risk === 'med' ? 'var(--warning)' : 'var(--safe)',
-                            border: `1px solid ${risk === 'high' ? 'rgba(239,68,68,0.3)' : risk === 'med' ? 'rgba(245,158,11,0.3)' : 'rgba(34,197,94,0.3)'}`,
-                          }}
-                        >
-                          {risk.charAt(0).toUpperCase()}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 'var(--s4)', marginTop: 'var(--s4)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-safe" />Low risk</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-warning" />Medium risk</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--s2)', fontSize: '0.6875rem', color: 'var(--text-muted)' }}><span className="status-dot dot-danger" />High risk</div>
-            </div>
-          </CardBody>
-        </Card>
-
         {/* Feature Importance */}
         <Card>
-          <CardHeader title="Feature Importance" eyebrow="RANDOM FOREST · NITRATES" />
+          <CardHeader title="Feature Importance" eyebrow={`RANDOM FOREST · ${param.toUpperCase()}`} />
           <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)' }}>
-            {[
-              { label: 'SWIR22', value: 31.4 },
-              { label: 'NDMI', value: 24.8 },
-              { label: 'PET', value: 18.2 },
-              { label: 'MNDWI', value: 14.1 },
-              { label: 'NIR', value: 7.4 },
-            ].map(f => (
-              <div key={f.label}>
+            {!features && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading…</p>}
+            {features?.features.map(f => (
+              <div key={f.feature}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: '0.8125rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>{f.label}</span>
-                  <span className="mono" style={{ color: 'var(--accent)' }}>{f.value}%</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{f.feature}</span>
+                  <span className="mono" style={{ color: 'var(--accent)' }}>{(f.importance * 100).toFixed(1)}%</span>
                 </div>
                 <div style={{ height: 8, background: 'var(--border-subtle)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), var(--accent-blue))', width: `${f.value}%` }} />
+                  <div style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), var(--accent-blue))', width: `${f.importance * 100}%` }} />
                 </div>
               </div>
             ))}
-            <div style={{ padding: 'var(--s3)', background: 'var(--bg-card)', borderRadius: 'var(--r-lg)', marginTop: 'var(--s2)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: 'var(--s2)' }}>Model performance</div>
-              <div style={{ display: 'flex', gap: 'var(--s6)' }}>
-                <div><div className="mono" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent)' }}>0.58</div><div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>R² (test)</div></div>
-                <div><div className="mono" style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>35.2</div><div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>RMSE</div></div>
+            {features && (
+              <div style={{ padding: 'var(--s3)', background: 'var(--bg-card)', borderRadius: 'var(--r-lg)', marginTop: 'var(--s2)', border: '1px solid var(--border-subtle)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                {features.trainingNote}
               </div>
-            </div>
+            )}
           </CardBody>
         </Card>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--s4)' }}>
-        <Insight tone="danger" title="Nitrate spike predicted" body="Nairobi Water nitrate likely to remain above WHO 50 mg/L for the next 4–7 days. Recommend immediate investigation." />
-        <Insight tone="warning" title="E. coli clearance expected" body="Kisumu Water E. coli predicted to return to 0 CFU/100 mL within 3 days after Free Chlorine residual is restored above 0.2 mg/L." />
-        <Insight tone="safe" title="Network stable" body="5 of 8 utilities forecast to remain within all WHO thresholds for the full 14-day period." />
-        <Insight tone="info" title="Seasonal pattern detected" body="Model identifies PET (evapotranspiration) as the top seasonal predictor for nitrate levels across the Tana basin." />
+        {/* Insights */}
+        <Card>
+          <CardHeader title="ML Insights" eyebrow={`NEXT ${days} DAYS`} />
+          <CardBody style={{ display: 'flex', flexDirection: 'column', gap: 'var(--s4)', maxHeight: 340, overflowY: 'auto' }}>
+            {insights.length === 0 && <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Loading insights…</p>}
+            {insights.map(ins => (
+              <InsightCard key={ins.id} tone={ins.severity as 'safe' | 'warning' | 'danger' | 'info'} title={ins.title} body={ins.description} action={ins.recommendedAction} />
+            ))}
+          </CardBody>
+        </Card>
       </div>
     </>
   );
 }
 
-function Insight(props: { tone: 'safe' | 'warning' | 'danger' | 'info'; title: string; body: string }) {
-  const bg = `var(--${props.tone === 'safe' ? 'safe' : props.tone === 'warning' ? 'warning' : props.tone === 'danger' ? 'danger' : 'info'}-bg)`;
-  const fg = `var(--${props.tone === 'safe' ? 'safe' : props.tone === 'warning' ? 'warning' : props.tone === 'danger' ? 'danger' : 'info'})`;
+function InsightCard(props: { tone: 'safe' | 'warning' | 'danger' | 'info'; title: string; body: string; action: string }) {
+  const bg = `var(--${props.tone === 'info' ? 'info' : props.tone}-bg)`;
+  const fg = `var(--${props.tone === 'info' ? 'info' : props.tone})`;
   return (
-    <Card style={{ padding: 'var(--s5)' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--s3)' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 'var(--r-lg)', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <Sparkles size={18} />
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: 4 }}>{props.title}</div>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{props.body}</div>
-        </div>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--s3)', padding: 'var(--s3)', background: 'var(--bg-card)', borderRadius: 'var(--r-lg)', border: '1px solid var(--border-subtle)' }}>
+      <div style={{ width: 32, height: 32, borderRadius: 'var(--r-lg)', background: bg, color: fg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <Sparkles size={16} />
       </div>
-    </Card>
+      <div>
+        <div style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: 2 }}>{props.title}</div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{props.body}</div>
+        <div style={{ fontSize: '0.7rem', color: fg, marginTop: 4, fontWeight: 500 }}>→ {props.action}</div>
+      </div>
+    </div>
   );
 }
