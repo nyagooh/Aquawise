@@ -28,8 +28,8 @@ export default function Register() {
         body: JSON.stringify({
           email: form.email,
           password: form.password,
-          first_name: form.firstName,
-          last_name: form.lastName,
+          firstName: form.firstName,
+          lastName: form.lastName,
           organization: form.organization,
         }),
       });
@@ -39,12 +39,12 @@ export default function Register() {
         setError(msg);
         return;
       }
-      login(data.access);
+      login(data.access, data.refresh);
       navigate('/dashboard', { replace: true });
     } catch {
       // Demo fallback when backend is unreachable
       if (form.email && form.password.length >= 8) {
-        login('demo-token');
+        login('demo-token', '');
         navigate('/dashboard', { replace: true });
       } else {
         setError('Could not reach the server. Use a valid email and 8+ char password to continue in demo mode.');

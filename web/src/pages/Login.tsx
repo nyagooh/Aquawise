@@ -28,12 +28,12 @@ export default function Login() {
         setError(data.detail || data.error || 'Invalid email or password.');
         return;
       }
-      login(data.access);
+      login(data.access, data.refresh);
       navigate('/dashboard', { replace: true });
     } catch {
       // Backend unreachable — allow demo login so the UI is still usable
       if (email && password.length >= 6) {
-        login('demo-token');
+        login('demo-token', '');
         navigate('/dashboard', { replace: true });
       } else {
         setError('Could not reach the server. Enter any email and a password of 6+ chars to continue in demo mode.');
