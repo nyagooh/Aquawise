@@ -74,25 +74,96 @@ class Command(BaseCommand):
                 nitrates=round(4.2 + (random.random() - 0.5) * 1.2, 2),
             )
 
-        # ── Current sensor readings (use last time-series point) ──────────
+        # ── Full WHO parameter catalogue ───────────────────────────────────
+        # (param_id, name, unit, safe_min, safe_max, category, is_real, description)
         latest = TimeSeriesReading.objects.last()
-        params = [
-            ('temperature',      'Temperature',       latest.temperature,      '°C',    15,   30,   True,  'High temps reduce oxygen and encourage bacteria growth.'),
-            ('turbidity',        'Turbidity',         latest.turbidity,        'NTU',   0,    5,    True,  'Measures water cloudiness. Higher = more particles.'),
-            ('ph',               'pH Level',          latest.ph,               'pH',    6.5,  8.5,  False, 'Acidity balance. Unsafe pH harms humans and aquatic life.'),
-            ('dissolved_oxygen', 'Dissolved Oxygen',  latest.dissolved_oxygen, 'mg/L',  6,    14,   False, 'Low dissolved oxygen signals pollution or algae bloom.'),
-            ('conductivity',     'Conductivity',      latest.conductivity,     'µS/cm', 200,  800,  False, 'Dissolved salts/minerals. Spikes may indicate runoff.'),
-            ('nitrates',         'Nitrates',          latest.nitrates,         'mg/L',  0,    10,   False, 'Nutrients from fertiliser. High levels cause algae blooms.'),
+
+        def _live(attr):
+            return round(getattr(latest, attr, None) or 0, 3)
+
+        who_params = [
+            # Microbiological
+            ('ecoli',               'E. coli / Thermotolerant Coliforms', 'CFU/100 mL', 0,      0,      'micro',       False, 'WHO: 0 CFU/100 mL in treated water.'),
+            ('total_coliforms',     'Total Coliforms',                    'CFU/100 mL', 0,      0,      'micro',       False, 'WHO: 0 CFU/100 mL in treated water.'),
+            ('faecal_streptococci', 'Faecal Streptococci',                'CFU/100 mL', 0,      0,      'micro',       False, 'Indicator of faecal contamination.'),
+            ('hpc',                 'Heterotrophic Plate Count',          'CFU/mL',     0,      500,    'micro',       False, 'WHO: ≤ 500 CFU/mL.'),
+            # Physical / Aesthetic
+            ('turbidity',           'Turbidity',                          'NTU',        0,      1,      'physical',    True,  'WHO: ≤ 1 NTU treated, ≤ 5 NTU source water.'),
+            ('colour',              'Colour',                             'TCU',        0,      15,     'physical',    False, 'WHO: ≤ 15 True Colour Units.'),
+            ('temperature',         'Temperature',                        '°C',         0,      25,     'physical',    True,  'WHO preferred: < 25°C.'),
+            ('tds',                 'Total Dissolved Solids',             'mg/L',       0,      1000,   'physical',    True,  'WHO: ≤ 1,000 mg/L.'),
+            # Chemical — General
+            ('ph',                  'pH',                                 '',           6.5,    8.5,    'chemical',    True,  'WHO: 6.5 – 8.5.'),
+            ('conductivity',        'Conductivity',                       'µS/cm',      0,      2500,   'chemical',    True,  'WHO: ≤ 2,500 µS/cm.'),
+            ('hardness',            'Hardness (as CaCO₃)',                'mg/L',       0,      500,    'chemical',    False, 'WHO: ≤ 500 mg/L.'),
+            ('alkalinity',          'Alkalinity',                         'mg/L',       None,   None,   'chemical',    False, 'Monitoring only — no WHO health guideline.'),
+            ('aluminium',           'Aluminium (Al)',                     'mg/L',       0,      0.2,    'chemical',    False, 'WHO: ≤ 0.2 mg/L.'),
+            ('ammonia',             'Ammonia (NH₃)',                      'mg/L',       0,      1.5,    'chemical',    False, 'WHO: ≤ 1.5 mg/L.'),
+            ('arsenic',             'Arsenic (As)',                       'mg/L',       0,      0.01,   'chemical',    False, 'WHO: ≤ 0.01 mg/L (10 µg/L).'),
+            ('barium',              'Barium (Ba)',                        'mg/L',       0,      1.3,    'chemical',    False, 'WHO: ≤ 1.3 mg/L.'),
+            ('boron',               'Boron (B)',                          'mg/L',       0,      2.4,    'chemical',    False, 'WHO: ≤ 2.4 mg/L.'),
+            ('cadmium',             'Cadmium (Cd)',                       'mg/L',       0,      0.003,  'chemical',    False, 'WHO: ≤ 0.003 mg/L (3 µg/L).'),
+            ('chloride',            'Chloride (Cl⁻)',                     'mg/L',       0,      250,    'chemical',    False, 'WHO: ≤ 250 mg/L.'),
+            ('chromium',            'Chromium (Cr)',                      'mg/L',       0,      0.05,   'chemical',    False, 'WHO: ≤ 0.05 mg/L (50 µg/L).'),
+            ('copper',              'Copper (Cu)',                        'mg/L',       0,      2.0,    'chemical',    False, 'WHO: ≤ 2.0 mg/L.'),
+            ('cyanide',             'Cyanide (CN⁻)',                      'mg/L',       0,      0.07,   'chemical',    False, 'WHO: ≤ 0.07 mg/L (70 µg/L).'),
+            ('fluoride',            'Fluoride (F⁻)',                      'mg/L',       0,      1.5,    'chemical',    False, 'WHO: ≤ 1.5 mg/L.'),
+            ('iron',                'Iron (Fe)',                          'mg/L',       0,      0.3,    'chemical',    False, 'WHO: ≤ 0.3 mg/L.'),
+            ('lead',                'Lead (Pb)',                          'mg/L',       0,      0.01,   'chemical',    False, 'WHO: ≤ 0.01 mg/L (10 µg/L).'),
+            ('magnesium',           'Magnesium (Mg)',                     'mg/L',       0,      50,     'chemical',    False, 'WHO: ≤ 50 mg/L (aesthetic).'),
+            ('manganese',           'Manganese (Mn)',                     'mg/L',       0,      0.08,   'chemical',    False, 'WHO: ≤ 0.08 mg/L (80 µg/L).'),
+            ('mercury',             'Mercury (Hg)',                       'mg/L',       0,      0.006,  'chemical',    False, 'WHO: ≤ 0.006 mg/L (6 µg/L).'),
+            ('nickel',              'Nickel (Ni)',                        'mg/L',       0,      0.07,   'chemical',    False, 'WHO: ≤ 0.07 mg/L (70 µg/L).'),
+            ('nitrates',            'Nitrate (NO₃⁻)',                     'mg/L',       0,      50,     'chemical',    True,  'WHO: ≤ 50 mg/L as NO₃.'),
+            ('nitrite',             'Nitrite (NO₂⁻)',                     'mg/L',       0,      3.0,    'chemical',    False, 'WHO: ≤ 3 mg/L short-term, ≤ 0.2 mg/L long-term.'),
+            ('phosphate',           'Phosphate (PO₄³⁻)',                  'mg/L',       None,   None,   'chemical',    False, 'Monitoring only — no WHO health guideline.'),
+            ('selenium',            'Selenium (Se)',                      'mg/L',       0,      0.04,   'chemical',    False, 'WHO: ≤ 0.04 mg/L (40 µg/L).'),
+            ('sodium',              'Sodium (Na)',                        'mg/L',       0,      200,    'chemical',    False, 'WHO: ≤ 200 mg/L.'),
+            ('sulphate',            'Sulphate (SO₄²⁻)',                   'mg/L',       0,      500,    'chemical',    False, 'WHO: ≤ 500 mg/L.'),
+            ('uranium',             'Uranium (U)',                        'mg/L',       0,      0.03,   'chemical',    False, 'WHO: ≤ 0.03 mg/L (30 µg/L).'),
+            ('zinc',                'Zinc (Zn)',                          'mg/L',       0,      3.0,    'chemical',    False, 'WHO: ≤ 3.0 mg/L.'),
+            # Operational
+            ('dissolved_oxygen',    'Dissolved Oxygen',                   'mg/L',       5.0,    None,   'operational', True,  'Recommended > 5 mg/L. Low DO signals pollution.'),
+            ('free_chlorine',       'Free Chlorine (Residual)',           'mg/L',       0.2,    1.0,    'operational', True,  'Residual 0.2 – 1.0 mg/L in distribution system.'),
         ]
-        for pid, name, value, unit, smin, smax, is_real, desc in params:
+
+        # Live sensor values for the IoT-measurable params
+        live_values = {
+            'turbidity':        _live('turbidity'),
+            'temperature':      _live('temperature'),
+            'tds':              0,
+            'ph':               _live('ph'),
+            'conductivity':     _live('conductivity'),
+            'nitrates':         _live('nitrates'),
+            'dissolved_oxygen': _live('dissolved_oxygen'),
+            'free_chlorine':    0,
+        }
+
+        for pid, name, unit, smin, smax, category, is_real, desc in who_params:
             SensorParameter.objects.update_or_create(
                 param_id=pid,
                 defaults={
-                    'name': name, 'value': value, 'unit': unit,
+                    'name': name, 'unit': unit,
                     'safe_min': smin, 'safe_max': smax,
-                    'is_real': is_real, 'description': desc,
+                    'category': category, 'is_real': is_real,
+                    'description': desc,
+                    'value': live_values.get(pid, 0),
                 },
             )
+
+        # ── Set measured_parameters per station ────────────────────────────
+        # Each tuple: (source_id, [list of param_ids this sensor measures])
+        # These represent what the physical IoT sensor at each location tests.
+        iot_base = ['ph', 'turbidity', 'temperature', 'dissolved_oxygen', 'conductivity', 'nitrates']
+        station_params = {
+            'ws1': iot_base + ['free_chlorine', 'tds'],       # Dunga — full IoT suite
+            'ws2': iot_base + ['free_chlorine'],               # Ahero — adds Cl residual
+            'ws3': iot_base,                                   # Nyalenda — base IoT
+            'ws4': iot_base + ['tds'],                         # Kibos — adds TDS
+            'ws5': ['ph', 'turbidity', 'temperature', 'conductivity'],  # Kondele — basic 4
+        }
+        for sid, params_list in station_params.items():
+            WaterSource.objects.filter(source_id=sid).update(measured_parameters=params_list)
 
         # ── Alerts ─────────────────────────────────────────────────────────
         # (id, time_label, source_name, region_id, water_source_id,
