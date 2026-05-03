@@ -24,21 +24,33 @@ class WaterSource(models.Model):
     sensor_id = models.CharField(max_length=50, blank=True)
     installed = models.DateField(null=True, blank=True)
     last_updated = models.DateTimeField(auto_now=True)
+    # Param IDs (matching SensorParameter.param_id) that this sensor measures.
+    # Empty list means the sensor measures all physically-possible params.
+    measured_parameters = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.name
 
 
+PARAM_CATEGORY_CHOICES = [
+    ('micro',       'Microbiological'),
+    ('physical',    'Physical / Aesthetic'),
+    ('chemical',    'Chemical'),
+    ('operational', 'Operational'),
+]
+
+
 class SensorParameter(models.Model):
-    """Current live sensor reading for each measured parameter."""
-    param_id = models.CharField(max_length=50, unique=True)  # temperature, turbidity, …
+    """WHO parameter definition — safe ranges, units, and category."""
+    param_id = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
-    value = models.FloatField()
-    unit = models.CharField(max_length=20)
-    safe_min = models.FloatField()
-    safe_max = models.FloatField()
+    value = models.FloatField(default=0)       # last live reading (0 if not measured)
+    unit = models.CharField(max_length=30)
+    safe_min = models.FloatField(null=True, blank=True)
+    safe_max = models.FloatField(null=True, blank=True)
     is_real = models.BooleanField(default=False)
-    description = models.TextField()
+    category = models.CharField(max_length=15, choices=PARAM_CATEGORY_CHOICES, default='chemical')
+    description = models.TextField(blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -129,12 +141,15 @@ class StationReading(models.Model):
         WaterSource, on_delete=models.SET_NULL, null=True, blank=True, related_name='readings'
     )
     timestamp = models.DateTimeField(auto_now_add=True)
+    # IoT-sensor-measurable parameters
     temperature = models.FloatField(null=True, blank=True)
     turbidity = models.FloatField(null=True, blank=True)
     ph = models.FloatField(null=True, blank=True)
     dissolved_oxygen = models.FloatField(null=True, blank=True)
     conductivity = models.FloatField(null=True, blank=True)
     nitrates = models.FloatField(null=True, blank=True)
+    free_chlorine = models.FloatField(null=True, blank=True)   # residual Cl, mg/L
+    tds = models.FloatField(null=True, blank=True)             # Total Dissolved Solids, mg/L
 
     class Meta:
         ordering = ['-timestamp']
