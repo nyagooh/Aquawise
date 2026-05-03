@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import type { Status } from '../data/mockData';
+import type { SourceStatus as Status } from '../lib/api';
 
 export function Card(props: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return <div className={'card' + (props.className ? ' ' + props.className : '')} style={props.style}>{props.children}</div>;

@@ -31,7 +31,7 @@ const sections = [
 ];
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -65,10 +65,12 @@ export default function Sidebar() {
       </nav>
       <div className="sidebar-footer">
         <NavLink to="/account" className="user-chip">
-          <div className="user-avatar">TL</div>
+          <div className="user-avatar">
+            {user ? `${user.firstName[0] ?? ''}${user.lastName[0] ?? ''}`.toUpperCase() : '?'}
+          </div>
           <div className="user-info">
-            <div className="user-name">Tlou Letshufi</div>
-            <div className="user-role">Utility Operator</div>
+            <div className="user-name">{user ? `${user.firstName} ${user.lastName}` : 'Account'}</div>
+            <div className="user-role">{user?.organization || 'Aquawise'}</div>
           </div>
         </NavLink>
         <button
