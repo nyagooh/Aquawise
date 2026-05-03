@@ -54,7 +54,7 @@ def _save_setting(key, value):
 @api_view(['GET', 'PUT'])
 def settings_thresholds(request):
     if request.method == 'GET':
-        params = SensorParameter.objects.all()
+        params = SensorParameter.objects.all().order_by('category', 'name')
         return Response({
             'thresholds': [
                 {
@@ -63,6 +63,7 @@ def settings_thresholds(request):
                     'unit': p.unit,
                     'safeMin': p.safe_min,
                     'safeMax': p.safe_max,
+                    'category': p.category,
                 }
                 for p in params
             ]

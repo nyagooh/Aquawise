@@ -18,6 +18,7 @@ class WaterSourceSerializer(serializers.ModelSerializer):
     sensorId = serializers.CharField(source='sensor_id')
     lastUpdate = serializers.SerializerMethodField()
     readings = serializers.SerializerMethodField()
+    measuredParameters = serializers.JSONField(source='measured_parameters')
     # Backward-compatible fields kept alongside
     regionId = serializers.CharField(source='region.region_id')
     risk = serializers.CharField()
@@ -32,6 +33,7 @@ class WaterSourceSerializer(serializers.ModelSerializer):
             'sensorId', 'battery', 'installed',
             'lastUpdate',
             'readings',
+            'measuredParameters',
         ]
 
     def get_lastUpdate(self, obj):
@@ -51,21 +53,28 @@ class WaterSourceSerializer(serializers.ModelSerializer):
         if reading is None:
             return None
         return {
-            'temperature': reading.temperature,
-            'turbidity': reading.turbidity,
-            'ph': reading.ph,
+            'ph':             reading.ph,
+            'turbidity':      reading.turbidity,
+            'temperature':    reading.temperature,
             'dissolvedOxygen': reading.dissolved_oxygen,
-            'conductivity': reading.conductivity,
-            'nitrates': reading.nitrates,
+            'conductivity':   reading.conductivity,
+            'nitrates':       reading.nitrates,
+            'freeChlorine':   reading.free_chlorine,
+            'tds':            reading.tds,
         }
 
 
 class StationReadingSerializer(serializers.ModelSerializer):
     dissolvedOxygen = serializers.FloatField(source='dissolved_oxygen', allow_null=True)
+    freeChlorine = serializers.FloatField(source='free_chlorine', allow_null=True)
 
     class Meta:
         model = StationReading
-        fields = ['timestamp', 'temperature', 'turbidity', 'ph', 'dissolvedOxygen', 'conductivity', 'nitrates']
+        fields = [
+            'timestamp', 'temperature', 'turbidity', 'ph',
+            'dissolvedOxygen', 'conductivity', 'nitrates',
+            'freeChlorine', 'tds',
+        ]
 
 
 class WaterSourceDetailSerializer(WaterSourceSerializer):
@@ -76,13 +85,13 @@ class WaterSourceDetailSerializer(WaterSourceSerializer):
 
 class SensorParameterSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source='param_id')
-    safeMin = serializers.FloatField(source='safe_min')
-    safeMax = serializers.FloatField(source='safe_max')
+    safeMin = serializers.FloatField(source='safe_min', allow_null=True)
+    safeMax = serializers.FloatField(source='safe_max', allow_null=True)
     isReal = serializers.BooleanField(source='is_real')
 
     class Meta:
         model = SensorParameter
-        fields = ['id', 'name', 'value', 'unit', 'safeMin', 'safeMax', 'isReal', 'description']
+        fields = ['id', 'name', 'value', 'unit', 'safeMin', 'safeMax', 'isReal', 'category', 'description']
 
 
 class TimeSeriesReadingSerializer(serializers.ModelSerializer):
