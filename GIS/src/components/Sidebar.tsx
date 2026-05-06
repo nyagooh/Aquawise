@@ -1,0 +1,78 @@
+import { Link } from 'react-router-dom';
+import { alerts as allAlerts } from '../data';
+import { useTheme } from '../theme';
+
+type Active = 'dashboard' | 'gis' | 'alerts' | 'nrw' | 'sensors' | 'reports';
+
+const ICONS: Record<Active, JSX.Element> = {
+  dashboard: <><rect x={3} y={3} width={7} height={9} /><rect x={14} y={3} width={7} height={5} /><rect x={14} y={12} width={7} height={9} /><rect x={3} y={16} width={7} height={5} /></>,
+  gis:       <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx={12} cy={10} r={3} /></>,
+  alerts:    <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1={12} y1={9} x2={12} y2={13} /><line x1={12} y1={17} x2={12.01} y2={17} /></>,
+  nrw:       <><line x1={18} y1={20} x2={18} y2={10} /><line x1={12} y1={20} x2={12} y2={4} /><line x1={6} y1={20} x2={6} y2={14} /></>,
+  sensors:   <><circle cx={12} cy={12} r={3} /><circle cx={12} cy={12} r={9} /></>,
+  reports:   <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1={16} y1={13} x2={8} y2={13} /><line x1={16} y1={17} x2={8} y2={17} /></>
+};
+
+const ITEMS: Array<{ key: Active; label: string; href: string }> = [
+  { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+  { key: 'gis',       label: 'GIS Map',   href: '/gis' },
+  { key: 'alerts',    label: 'Alerts',    href: '/alerts' },
+  { key: 'nrw',       label: 'NRW',       href: '/nrw' },
+  { key: 'sensors',   label: 'Sensors',   href: '/sensors' },
+  { key: 'reports',   label: 'Reports',   href: '/reports' }
+];
+
+export function Sidebar({ active }: { active: Active }) {
+  const { mode, toggle } = useTheme();
+  const activeAlertCount = allAlerts.filter(a => a.status === 'active').length;
+  return (
+    <aside className="sidebar">
+      <Link to="/" className="sb-brand" style={{ color: 'inherit' }}>
+        <svg width={20} height={20} viewBox="0 0 28 28" fill="none">
+          <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
+          <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
+        </svg>
+        Aqua<span className="accent">Watch</span>
+      </Link>
+      <div className="sb-section">Platform</div>
+      {ITEMS.map(item => (
+        <Link key={item.key} to={item.href} className={`sb-link${item.key === active ? ' active' : ''}`}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            {ICONS[item.key]}
+          </svg>
+          {item.label}
+          {item.key === 'alerts' && activeAlertCount > 0 && <span className="badge">{activeAlertCount}</span>}
+        </Link>
+      ))}
+      <div className="sb-foot">
+        <button className="theme-toggle" onClick={toggle} title={`Switch to ${mode === 'dark' ? 'light' : 'dark'}`}>
+          {mode === 'dark' ? (
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx={12} cy={12} r={4} />
+              <line x1={12} y1={2} x2={12} y2={4} />
+              <line x1={12} y1={20} x2={12} y2={22} />
+              <line x1={4.93} y1={4.93} x2={6.34} y2={6.34} />
+              <line x1={17.66} y1={17.66} x2={19.07} y2={19.07} />
+              <line x1={2} y1={12} x2={4} y2={12} />
+              <line x1={20} y1={12} x2={22} y2={12} />
+              <line x1={4.93} y1={19.07} x2={6.34} y2={17.66} />
+              <line x1={17.66} y1={6.34} x2={19.07} y2={4.93} />
+            </svg>
+          ) : (
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+            </svg>
+          )}
+          {mode === 'dark' ? 'Light mode' : 'Dark mode'}
+        </button>
+        <div className="sb-user">
+          <div className="sb-avatar">DM</div>
+          <div className="sb-user-meta">
+            <span className="sb-user-name">Demo User</span>
+            <span className="sb-user-sub">Read-only sandbox</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
