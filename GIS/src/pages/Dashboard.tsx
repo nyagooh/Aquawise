@@ -4,13 +4,14 @@ import L from 'leaflet';
 import { Shell } from '../components/Shell';
 import { useTheme } from '../theme';
 import {
-  zones, alerts, sensors,
+  zones, alerts, sensors, pipeLatLng,
   zonePolys, zoneCenters, sensorLatLng, MAP_CENTER, MAP_ZOOM,
   statusColor
 } from '../data';
 
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TECH_BLUE = '#165DCC';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -45,6 +46,16 @@ export default function Dashboard() {
       L.polygon(poly, {
         color: z.color, weight: 1.5, opacity: 0.9,
         fillColor: z.color, fillOpacity: 0.12, dashArray: '4 3'
+      }).addTo(map);
+    });
+
+    // pipes (network flow lines)
+    pipeLatLng.forEach(pipe => {
+      L.polyline(pipe.path, {
+        color: pipe.main ? TECH_BLUE : '#94A3B8',
+        weight: pipe.main ? 3 : 2,
+        opacity: 0.9,
+        dashArray: pipe.main ? undefined : '4 4'
       }).addTo(map);
     });
 
@@ -83,6 +94,9 @@ export default function Dashboard() {
     }).addTo(map);
   }, [mode]);
 
+  const zoomIn = () => leafletRef.current?.zoomIn();
+  const zoomOut = () => leafletRef.current?.zoomOut();
+
   const sevColor = (s: string) =>
     s === 'critical' ? 'hsl(var(--danger))' :
     s === 'warning' ? 'hsl(var(--warning))' :
@@ -108,7 +122,7 @@ export default function Dashboard() {
 
       {/* Map preview + alerts feed */}
       <section style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 'var(--s4)' }}>
-        <div className="card">
+          <div className="card">
           <div className="card-head">
             <div>
               <div className="card-title">Network overview</div>
@@ -121,6 +135,10 @@ export default function Dashboard() {
             style={{ position: 'relative', cursor: 'pointer' }}
           >
             <div ref={mapRef} style={{ height: 320, width: '100%' }} />
+            <div className="map-zoom-controls">
+              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomIn(); }}>+</button>
+              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomOut(); }}>−</button>
+            </div>
             <div style={{
               position: 'absolute', bottom: 12, right: 12,
               padding: '4px 10px',
@@ -134,7 +152,7 @@ export default function Dashboard() {
               Click to open full map →
             </div>
           </div>
-        </div>
+          </div>
 
         <div className="card">
           <div className="card-head">
@@ -224,21 +242,21 @@ export default function Dashboard() {
         </div>
 
         <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Asset summary</div>
-              <div className="card-sub">Pipes &amp; sensors</div>
+            <div className="card-head">
+              <div>
+                <div className="card-title">Asset summary</div>
+                <div className="card-sub">Pipes &amp; sensors</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/reports')}>Reports →</button>
             </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/reports')}>Reports →</button>
-          </div>
-          <div className="card-body">
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--s3)' }}>
-              <AssetTile label="Pipes" value="142" sub="PVC 64 · HDPE 52 · DI 26" onClick={() => navigate('/sensors?type=pipe')} />
-              <AssetTile label="Sensors" value="10" sub="Pressure 4 · Level 3 · pH 3" onClick={() => navigate('/sensors')} />
-              <AssetTile label="Zones" value="5" sub="86,200 people served" onClick={() => navigate('/gis')} />
-              <AssetTile label="NRW today" value="12%" sub="+2.4% vs avg" subColor="hsl(var(--warning))" onClick={() => navigate('/nrw')} />
+            <div className="card-body">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--s3)' }}>
+                <AssetTile label="Pipes" value="142" sub="PVC 64 · HDPE 52 · DI 26" onClick={() => navigate('/sensors?type=pipe')} />
+                <AssetTile label="Sensors" value="10" sub="Pressure 4 · Level 3 · pH 3" onClick={() => navigate('/sensors')} />
+                <AssetTile label="Zones" value="5" sub="86,200 people served" onClick={() => navigate('/gis')} />
+                <AssetTile label="NRW today" value="12%" sub="+2.4% vs avg" subColor="hsl(var(--warning))" onClick={() => navigate('/nrw')} />
+              </div>
             </div>
-          </div>
         </div>
       </section>
     </Shell>
