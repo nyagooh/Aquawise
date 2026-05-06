@@ -12,7 +12,9 @@ export default function Landing() {
         </Link>
         <div className="landing-nav-links">
           <a href="#how">How it works</a>
+          <a href="#outcomes">Outcomes</a>
           <a href="#features">Platform</a>
+          <a href="#roi">ROI</a>
           <Link to="/gis">GIS demo</Link>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -28,17 +30,16 @@ export default function Landing() {
         <div className="hero-eyebrow"><span className="dot" />GIS-first · live demo</div>
         <h1 className="hero-title">Smart Water Grid for Modern Utilities</h1>
         <p className="hero-sub">
-          Real-time monitoring of pressure, tank levels, and sensors across your network.
-          Detect issues early and reduce water loss with a GIS-based platform built for utility teams.
+          Real-time pressure, tank, sensor, and NRW visibility in one GIS-first operations platform.
         </p>
         <div className="hero-ctas">
-          <Link to="/dashboard" className="btn btn-primary">Open demo dashboard →</Link>
+          <Link to="/dashboard" className="btn btn-primary">View demo →</Link>
           <Link to="/gis" className="btn btn-ghost">Open GIS map</Link>
         </div>
         <div className="hero-meta">
           <span><span className="dot" />No password required</span>
           <span><span className="dot" />Real aerial map</span>
-          <span><span className="dot" />Sandbox data</span>
+          <span><span className="dot" />Data-heavy operator workflows</span>
         </div>
       </section>
 
@@ -61,70 +62,97 @@ export default function Landing() {
         </Link>
       </div>
 
-      <section className="landing-section" id="how">
-        <div className="landing-eyebrow">Demo flow</div>
-        <h2>How it works</h2>
-        <p className="lede">Three quick steps. No passwords, no setup — sandbox utility data, live aerial map.</p>
-        <div className="steps">
-          <div className="step">
-            <div className="step-num">1</div>
-            <h3>Open the dashboard</h3>
-            <p>Network-wide KPIs, recent alerts, and a small map preview at a glance.</p>
-          </div>
-          <div className="step">
-            <div className="step-num">2</div>
-            <h3>Drill into the GIS map</h3>
-            <p>Real aerial map with zones, pipes, tanks and sensors. Click any feature for live readings.</p>
-          </div>
-          <div className="step">
-            <div className="step-num">3</div>
-            <h3>Investigate &amp; resolve</h3>
-            <p>Search a zone, sensor or pipe. Jump from alerts straight to the right point on the map.</p>
+      <section className="landing-strip">
+        <div className="strip-item"><span className="k">For</span><span className="v">Water utilities</span></div>
+        <div className="strip-item"><span className="k">Tracks</span><span className="v">Pressure · Tank · pH · NRW</span></div>
+        <div className="strip-item"><span className="k">Modules</span><span className="v">Dashboard · GIS · Alerts · Reports</span></div>
+        <div className="strip-item"><span className="k">Flow</span><span className="v">See → Locate → Understand → Act</span></div>
+      </section>
+
+      <section className="metrics-band">
+        <div className="metric">
+          <strong>86,200</strong>
+          <span>People Connected</span>
+        </div>
+        <div className="metric">
+          <strong>142</strong>
+          <span>Pipe Segments Tracked</span>
+        </div>
+        <div className="metric">
+          <strong>10</strong>
+          <span>Live Sensors</span>
+        </div>
+        <div className="metric">
+          <strong>4</strong>
+          <span>Active Alerts</span>
+        </div>
+      </section>
+
+      <section className="landing-section visual-flow" id="outcomes">
+        <div className="landing-eyebrow">Product glimpse</div>
+        <h2>What operators see live</h2>
+        <div className="visual-grid">
+          <VisualCard title="Dashboard Pulse" sub="Network health at a glance" />
+          <VisualCard title="GIS Incident Zoom" sub="Alert to map focus instantly" />
+          <VisualCard title="Asset Intelligence" sub="Pipes, sensors, tanks, zones" />
+        </div>
+      </section>
+
+      <section className="landing-band">
+        <div className="band-inner">
+          <div className="landing-eyebrow">Why teams switch</div>
+          <h2 className="band-title">Faster response. Lower loss. Better visibility.</h2>
+          <div className="outcomes-grid">
+            <Outcome title="Instant triage" sub="Alert → exact zone → root cause context." />
+            <Outcome title="NRW control" sub="Zone ranking and loss hotspots in one view." />
+            <Outcome title="Field alignment" sub="Control room and crews share one source." />
+            <Outcome title="Report-ready" sub="Daily, weekly, and monthly performance exports." />
           </div>
         </div>
       </section>
 
       <section className="landing-section" id="features">
-        <div className="landing-eyebrow">Platform</div>
-        <h2>Built for utility operations</h2>
-        <p className="lede">Pressure, flow, tank levels, water quality — all on a real GIS map, joined to historical context.</p>
-        <div className="feat-grid">
-          <Feature
-            icon={<><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx={12} cy={10} r={3} /></>}
-            title="GIS-based network view"
-            sub="Aerial map of your distribution network — zones, DMAs, tanks, valves, sensors — colour-coded by status."
-          />
-          <Feature
-            icon={<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />}
-            title="Real-time telemetry"
-            sub="Pressure, flow, level and quality readings stream in continuously."
-          />
-          <Feature
-            icon={<><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1={12} y1={9} x2={12} y2={13} /><line x1={12} y1={17} x2={12.01} y2={17} /></>}
-            title="Early-warning alerts"
-            sub="Threshold breaches surface within seconds — with one-click drill-down to the sensor and history."
-          />
-          <Feature
-            icon={<><line x1={18} y1={20} x2={18} y2={10} /><line x1={12} y1={20} x2={12} y2={4} /><line x1={6} y1={20} x2={6} y2={14} /></>}
-            title="Loss & NRW analytics"
-            sub="Track non-revenue water across DMAs and zones. Spot leaks before they compound."
-          />
-          <Feature
-            icon={<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></>}
-            title="Historical context"
-            sub="Replay any sensor over the last 90 days. Compare against thresholds and seasonal trends."
-          />
-          <Feature
-            icon={<><circle cx={12} cy={12} r={10} /><polyline points="12 6 12 12 16 14" /></>}
-            title="Built for the field"
-            sub="Mobile-friendly layouts and touch controls. Field crews and control-room operators see the same picture."
-          />
+        <div className="landing-eyebrow">Modules</div>
+        <h2>Complete operational suite</h2>
+        <div className="module-rail">
+          <Module title="Dashboard" sub="Live KPIs + risk zones" />
+          <Module title="GIS Map" sub="Aerial network intelligence" />
+          <Module title="Alerts" sub="Severity, zone, and timeline" />
+          <Module title="NRW" sub="Loss trend + zone ranking" />
+          <Module title="Sensors" sub="Pressure, level, pH health" />
+          <Module title="Reports" sub="Ops and governance exports" />
+        </div>
+      </section>
+
+      <section className="landing-section" id="how">
+        <div className="landing-eyebrow">Flow</div>
+        <h2>Dashboard → GIS → Action</h2>
+        <div className="steps">
+          <div className="step"><div className="step-num">1</div><h3>See</h3><p>Live network health and alerts.</p></div>
+          <div className="step"><div className="step-num">2</div><h3>Locate</h3><p>Jump to exact zone, pipe, or sensor.</p></div>
+          <div className="step"><div className="step-num">3</div><h3>Act</h3><p>Investigate, dispatch, verify recovery.</p></div>
+        </div>
+      </section>
+
+      <section className="landing-cta">
+        <div className="landing-cta-inner">
+          <div>
+            <div className="landing-eyebrow" style={{ textAlign: 'left', marginBottom: 6 }}>Next step</div>
+            <h2>See your full water network like an operations center</h2>
+            <p>
+              Explore the demo flow now: Dashboard → GIS Map → Alerts → NRW → Sensors → Reports.
+            </p>
+          </div>
+          <div className="landing-cta-actions">
+            <Link to="/dashboard" className="btn btn-primary">View demo →</Link>
+            <Link to="/gis" className="btn btn-ghost">Go straight to GIS</Link>
+          </div>
         </div>
       </section>
 
       <footer className="landing-footer">
         AquaWatch — Smart Water Grid for Modern Utilities ·{' '}
-        <Link to="/dashboard" style={{ color: 'hsl(var(--primary))' }}>Open demo</Link>
+        <Link to="/dashboard" style={{ color: 'hsl(var(--primary))' }}>View demo</Link>
       </footer>
     </div>
   );
@@ -145,6 +173,40 @@ function Feature({ icon, title, sub }: { icon: React.ReactNode; title: string; s
       <div className="feat-icon">
         <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{icon}</svg>
       </div>
+      <h3>{title}</h3>
+      <p>{sub}</p>
+    </div>
+  );
+}
+
+function Outcome({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="outcome">
+      <h3>{title}</h3>
+      <p>{sub}</p>
+    </div>
+  );
+}
+
+function VisualCard({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="visual-card">
+      <div className="visual-canvas">
+        <span className="pin p1" />
+        <span className="pin p2" />
+        <span className="pin p3" />
+        <span className="line l1" />
+        <span className="line l2" />
+      </div>
+      <h3>{title}</h3>
+      <p>{sub}</p>
+    </div>
+  );
+}
+
+function Module({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="module-chip">
       <h3>{title}</h3>
       <p>{sub}</p>
     </div>
