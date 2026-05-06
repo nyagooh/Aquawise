@@ -136,8 +136,8 @@ export default function Dashboard() {
           >
             <div ref={mapRef} style={{ height: 320, width: '100%' }} />
             <div className="map-zoom-controls">
-              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomIn(); }}>+</button>
-              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomOut(); }}>−</button>
+              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomIn(); }} aria-label="Zoom in">+</button>
+              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomOut(); }} aria-label="Zoom out">−</button>
             </div>
             <div style={{
               position: 'absolute', bottom: 12, right: 12,

@@ -393,11 +393,13 @@ button { font-family: inherit; }
 .kpi-trend.down { color: hsl(var(--danger)); }
 .kpi-trend.flat { color: hsl(var(--muted-foreground)); }
 
-/* status accent strip — thin, top */
-.kpi-accent { border-top: 2px solid hsl(var(--primary)); }
-.kpi-safe   { border-top: 2px solid hsl(var(--safe)); }
-.kpi-warn   { border-top: 2px solid hsl(var(--warning)); }
-.kpi-danger { border-top: 2px solid hsl(var(--danger)); }
+/* remove top color strips for flatter card look */
+.kpi-accent,
+.kpi-safe,
+.kpi-warn,
+.kpi-danger {
+  border-top: 1px solid hsl(var(--border));
+}
 
 /* ─── Pills ─── */
 .pill {
@@ -798,22 +800,24 @@ button { font-family: inherit; }
   background: rgba(239, 68, 68, 0.08);
   color: hsl(var(--foreground));
 }
+
 .map-zoom-controls {
   position: absolute;
   top: 10px;
   left: 10px;
-  z-index: 300;
+  z-index: 320;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 .map-zoom-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--r-md);
-  border: 1px solid hsl(var(--border));
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border-strong));
   background: hsl(var(--card));
   color: hsl(var(--foreground));
-  font-size: 1rem;
+  font-size: 1.1rem;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
