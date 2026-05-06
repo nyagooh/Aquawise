@@ -2,9 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zones, sensors, pipes } from '../data';
 
-type Props = { title: string; sub?: string };
+type Props = {
+  title: string;
+  sub?: string;
+  onToggleNav?: () => void;
+};
 
-export function Topbar({ title, sub }: Props) {
+export function Topbar({ title, sub, onToggleNav }: Props) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,9 +49,20 @@ export function Topbar({ title, sub }: Props) {
 
   return (
     <header className="topbar">
-      <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {onToggleNav && (
+          <button className="topbar-icon-btn" onClick={onToggleNav} title="Toggle navigation">
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <line x1={3} y1={6} x2={21} y2={6} />
+              <line x1={3} y1={12} x2={21} y2={12} />
+              <line x1={3} y1={18} x2={21} y2={18} />
+            </svg>
+          </button>
+        )}
+        <div>
         <div className="tb-title">{title}</div>
         {sub && <div className="tb-sub">{sub}</div>}
+        </div>
       </div>
       <div className="search" ref={containerRef}>
         <svg className="search-icon" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
