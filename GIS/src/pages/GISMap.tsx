@@ -12,24 +12,28 @@ import {
   type Zone, type Sensor, type Pipe
 } from '../data';
 
-type FocusKind = 'zone' | 'sensor' | 'pipe' | null;
+type FocusKind = 'zone' | 'sensor' | 'pipe' | 'overview' | null;
 type Focus = { kind: FocusKind; id: string | null };
 type Layers = { zones: boolean; pipes: boolean; tanks: boolean; sensors: boolean };
 
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a>';
+const TECH_BLUE = '#165DCC';
 
 export default function GISMap() {
   const [params] = useSearchParams();
   const { mode } = useTheme();
   const [focus, setFocus] = useState<Focus>({ kind: null, id: null });
   const [layers, setLayers] = useState<Layers>({ zones: true, pipes: true, tanks: true, sensors: true });
+  const [overviewPoint, setOverviewPoint] = useState<[number, number] | null>(null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
+  const beepCtxRef = useRef<AudioContext | null>(null);
   const layerGroups = useRef<{ zones: L.LayerGroup; pipes: L.LayerGroup; tanks: L.LayerGroup; sensors: L.LayerGroup } | null>(null);
+  const hasCritical = alerts.some(a => a.status === 'active' && a.severity === 'critical');
 
   /* ── init map once ── */
   useEffect(() => {
@@ -91,15 +95,25 @@ export default function GISMap() {
       L.marker(zoneCenters[zid], { icon: labelIcon, interactive: false }).addTo(groups.zones);
     });
 
+    // Click on blank map => overview at touched position
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      setOverviewPoint([e.latlng.lat, e.latlng.lng]);
+      setFocus({ kind: 'overview', id: null });
+    });
+
     // ── Pipes (polylines) ──
     pipeLatLng.forEach(p => {
-      const color = p.main ? '#3B82F6' : '#94A3B8';
-      const layer = L.polyline(p.path, {
-        color,
-        weight: p.main ? 4 : 3,
-        opacity: 0.85
-      }).addTo(groups.pipes);
       const pipeData = pipes.find(pp => pp.id === p.id);
+      const materialColor =
+        pipeData?.type === 'PVC' ? '#22D3EE' :
+        pipeData?.type === 'HDPE' ? TECH_BLUE :
+        '#A78BFA';
+      const layer = L.polyline(p.path, {
+        color: materialColor,
+        weight: p.main ? 4 : 3,
+        opacity: 0.9,
+        dashArray: p.main ? undefined : '4 4'
+      }).addTo(groups.pipes);
       if (pipeData) {
         layer.bindPopup(`<b>${pipeData.id}</b><br/>${pipeData.type} · ⌀${pipeData.diameter} · ${pipeData.pressure}`);
         layer.on('click', () => setFocus({ kind: 'pipe', id: pipeData.id }));
@@ -164,6 +178,36 @@ export default function GISMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // init only once
 
+  // Danger alert sound + red flash whenever critical alert exists.
+  useEffect(() => {
+    if (!hasCritical) return;
+    const beep = () => {
+      try {
+        const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (!Ctx) return;
+        if (!beepCtxRef.current) beepCtxRef.current = new Ctx();
+        const ctx = beepCtxRef.current;
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = 'sawtooth';
+        o.frequency.value = 880;
+        g.gain.value = 0.0001;
+        o.connect(g);
+        g.connect(ctx.destination);
+        const now = ctx.currentTime;
+        g.gain.exponentialRampToValueAtTime(0.06, now + 0.03);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        o.start(now);
+        o.stop(now + 0.3);
+      } catch {
+        // ignore audio failures silently
+      }
+    };
+    beep();
+    const id = window.setInterval(beep, 18000);
+    return () => window.clearInterval(id);
+  }, [hasCritical]);
+
   /* ── theme: swap tile layer ── */
   useEffect(() => {
     const map = leafletRef.current;
@@ -222,11 +266,29 @@ export default function GISMap() {
   const focusedPipe = useMemo<Pipe | null>(() =>
     focus.kind === 'pipe' ? pipes.find(p => p.id === focus.id) || null : null,
     [focus]);
+  const nearestZone = useMemo<Zone | null>(() => {
+    if (!overviewPoint) return null;
+    const [lat, lng] = overviewPoint;
+    let best: Zone | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    zones.forEach(z => {
+      const c = zoneCenters[z.id];
+      const d = Math.hypot(c[0] - lat, c[1] - lng);
+      if (d < bestDist) {
+        bestDist = d;
+        best = z;
+      }
+    });
+    return best;
+  }, [overviewPoint]);
 
   return (
     <Shell active="gis" title="GIS Map" sub="Aerial view · zones, pipes, tanks &amp; sensors" pagePadding={false}>
-      <div className="gis-canvas">
+      <div className={`gis-canvas${hasCritical ? ' danger-active' : ''}`}>
         <div ref={mapRef} className="gis-leaflet" />
+        {hasCritical && (
+          <div className="danger-pill">Danger Alert Active · Zone D low pressure</div>
+        )}
 
         <div className="chip-row">
           {(['zones', 'pipes', 'tanks', 'sensors'] as const).map(layer => (
@@ -257,10 +319,32 @@ export default function GISMap() {
           <div className="legend-row"><span className="swatch" style={{ background: '#EF4444' }} />Critical</div>
           <div className="legend-row"><span className="swatch" style={{ background: '#64748B' }} />Offline</div>
           <div style={{ height: 6 }} />
-          <div className="legend-row"><span className="swatch line" style={{ background: '#3B82F6' }} />Main pipe</div>
+          <div className="legend-row"><span className="swatch line" style={{ background: TECH_BLUE }} />Main pipe</div>
           <div className="legend-row"><span className="swatch line" style={{ background: '#94A3B8' }} />Branch pipe</div>
         </div>
       </div>
+
+      <SidePanel
+        open={focus.kind === 'overview'}
+        onClose={() => setFocus({ kind: null, id: null })}
+        kind="Map overview"
+        title={overviewPoint ? `${overviewPoint[0].toFixed(4)}, ${overviewPoint[1].toFixed(4)}` : 'Overview'}
+        pill={nearestZone ? { tone: nearestZone.status, label: `Nearest: ${nearestZone.id}` } : undefined}
+      >
+        {overviewPoint && nearestZone && (
+          <>
+            <SpRow label="Nearest zone" value={nearestZone.name} />
+            <SpRow label="People served" value={nearestZone.people.toLocaleString()} mono />
+            <SpRow label="Pressure status" value={`${nearestZone.pressure} bar`} mono />
+            <SpRow label="Active alerts" value={nearestZone.alerts} />
+            <SpRow label="Estimated loss" value={`${nearestZone.loss}%`} mono />
+            <div style={{ height: 16 }} />
+            <button className="btn btn-primary btn-sm" onClick={() => setFocus({ kind: 'zone', id: nearestZone.id })}>
+              Open zone details
+            </button>
+          </>
+        )}
+      </SidePanel>
 
       <SidePanel
         open={!!focusedZone}
