@@ -22,25 +22,32 @@ const ITEMS: Array<{ key: Active; label: string; href: string }> = [
   { key: 'reports',   label: 'Reports',   href: '/reports' }
 ];
 
-export function Sidebar({ active }: { active: Active }) {
+export function Sidebar({ active, collapsed, onToggle }: { active: Active; collapsed?: boolean; onToggle?: () => void }) {
   const { mode, toggle } = useTheme();
   const activeAlertCount = allAlerts.filter(a => a.status === 'active').length;
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <Link to="/" className="sb-brand" style={{ color: 'inherit' }}>
         <svg width={20} height={20} viewBox="0 0 28 28" fill="none">
           <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
           <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
         </svg>
-        Aqua<span className="accent">Watch</span>
+        <span className="sb-text">Aqua<span className="accent">Watch</span></span>
       </Link>
-      <div className="sb-section">Platform</div>
+      <div className="sb-section sb-text">Platform</div>
+      {onToggle && (
+        <button className="theme-toggle icon-only" onClick={onToggle} title="Collapse or expand navigation">
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+      )}
       {ITEMS.map(item => (
-        <Link key={item.key} to={item.href} className={`sb-link${item.key === active ? ' active' : ''}`}>
+        <Link key={item.key} to={item.href} title={item.label} className={`sb-link${item.key === active ? ' active' : ''}`}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
             {ICONS[item.key]}
           </svg>
-          {item.label}
+          <span className="sb-text">{item.label}</span>
           {item.key === 'alerts' && activeAlertCount > 0 && <span className="badge">{activeAlertCount}</span>}
         </Link>
       ))}
@@ -63,11 +70,11 @@ export function Sidebar({ active }: { active: Active }) {
               <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
             </svg>
           )}
-          {mode === 'dark' ? 'Light mode' : 'Dark mode'}
+          <span className="sb-text">{mode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
         </button>
         <div className="sb-user">
           <div className="sb-avatar">DM</div>
-          <div className="sb-user-meta">
+          <div className="sb-user-meta sb-text">
             <span className="sb-user-name">Demo User</span>
             <span className="sb-user-sub">Read-only sandbox</span>
           </div>
