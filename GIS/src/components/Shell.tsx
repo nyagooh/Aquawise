@@ -1,5 +1,6 @@
 import { ReactNode } from 'react';
 import { useState } from 'react';
+import { useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
@@ -12,8 +13,15 @@ type Props = {
 };
 
 export function Shell({ active, title, sub, children, pagePadding = true }: Props) {
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('aw-nav-collapsed') === '1';
+  });
   const [drawerPanel, setDrawerPanel] = useState<'profile' | 'ai' | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('aw-nav-collapsed', navCollapsed ? '1' : '0');
+  }, [navCollapsed]);
   return (
     <div className={`app${navCollapsed ? ' nav-collapsed' : ''}`}>
       <Sidebar
