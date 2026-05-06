@@ -35,6 +35,7 @@ export function Shell({ active, title, sub, children, pagePadding = true }: Prop
         <div className="right-edge-icons">
         <button
           className={`rail-icon-btn${drawerPanel === 'profile' ? ' active' : ''}`}
+          aria-label="Open profile drawer"
           title="Profile panel"
           onClick={() => setDrawerPanel(p => (p === 'profile' ? null : 'profile'))}
         >
@@ -45,6 +46,7 @@ export function Shell({ active, title, sub, children, pagePadding = true }: Prop
         </button>
         <button
           className={`rail-icon-btn${drawerPanel === 'ai' ? ' active' : ''}`}
+          aria-label="Open AI drawer"
           title="AI panel"
           onClick={() => setDrawerPanel(p => (p === 'ai' ? null : 'ai'))}
         >
