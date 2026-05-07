@@ -8,7 +8,7 @@ from django.utils import timezone as dj_timezone
 
 from api.models import (
     Alert, ForecastDay, Region, RegionPrediction,
-    SensorParameter, TimeSeriesReading, WaterSource,
+    SensorParameter, StationReading, TimeSeriesReading, WaterSource,
 )
 
 
@@ -55,16 +55,19 @@ class Command(BaseCommand):
             )
             sources[sid] = ws
 
-        # ── 24-hour time series ────────────────────────────────────────────
+        # ── 30-day time series (hourly) ────────────────────────────────────
         TimeSeriesReading.objects.all().delete()
         now = datetime.now(tz=timezone.utc)
         random.seed(42)
-        for i in range(23, -1, -1):
+        total_hours = 30 * 24
+        ts_rows = []
+        for i in range(total_hours - 1, -1, -1):
             t = now - timedelta(hours=i)
             hour = t.hour
+            day_offset = i / total_hours  # 1.0 → oldest, 0.0 → newest
             temp_base = 24 + 4 * math.sin((hour - 6) * math.pi / 12)
             turb_base = 3.2 + (2.5 if 6 <= hour <= 10 else 0) + random.random() * 0.8
-            TimeSeriesReading.objects.create(
+            ts_rows.append(TimeSeriesReading(
                 timestamp=t,
                 temperature=round(temp_base + (random.random() - 0.5) * 0.6, 1),
                 turbidity=round(turb_base + (random.random() - 0.5) * 0.5, 2),
@@ -72,7 +75,8 @@ class Command(BaseCommand):
                 dissolved_oxygen=round(7.8 + (random.random() - 0.5) * 0.6, 2),
                 conductivity=round(410 + (random.random() - 0.5) * 30),
                 nitrates=round(4.2 + (random.random() - 0.5) * 1.2, 2),
-            )
+            ))
+        TimeSeriesReading.objects.bulk_create(ts_rows)
 
         # ── Full WHO parameter catalogue ───────────────────────────────────
         # (param_id, name, unit, safe_min, safe_max, category, is_real, description)
@@ -238,5 +242,45 @@ class Command(BaseCommand):
             pred.forecast_days.all().delete()
             for order, (day, score_val) in enumerate(forecast):
                 ForecastDay.objects.create(prediction=pred, day=day, score=score_val, order=order)
+
+        # ── Station readings (3 days, hourly, per source) ──────────────────
+        # Values are tuned to each station's risk level so charts look realistic.
+        # (source_id, ph_base, turb_base, temp_base, do_base, cond_base, nit_base,
+        #  free_cl_base, tds_base)  — None means the sensor doesn't measure it.
+        station_profiles = {
+            'ws1': dict(ph=7.2,  turb=2.1,  temp=24.0, do_=8.0,  cond=415, nit=4.2,  cl=0.50, tds=280),
+            'ws2': dict(ph=7.4,  turb=3.8,  temp=26.0, do_=7.2,  cond=520, nit=11.5, cl=0.30, tds=None),
+            'ws3': dict(ph=7.8,  turb=8.5,  temp=27.0, do_=6.5,  cond=480, nit=9.8,  cl=None, tds=None),
+            'ws4': dict(ph=7.3,  turb=1.8,  temp=23.0, do_=8.5,  cond=390, nit=3.5,  cl=None, tds=250),
+            'ws5': dict(ph=8.2,  turb=2.5,  temp=25.0, do_=None, cond=445, nit=None, cl=None, tds=None),
+        }
+
+        StationReading.objects.all().delete()
+        sr_rows = []
+        random.seed(99)
+        hours_back = 3 * 24  # 72 hourly readings per source
+        for sid, p in station_profiles.items():
+            ws = sources[sid]
+            for i in range(hours_back - 1, -1, -1):
+                t = now - timedelta(hours=i)
+                hour = t.hour
+                diurnal = math.sin((hour - 6) * math.pi / 12)
+
+                def _v(base, spread):
+                    return round(base + diurnal * spread * 0.3 + (random.random() - 0.5) * spread, 2) if base is not None else None
+
+                sr_rows.append(StationReading(
+                    station=ws,
+                    timestamp=t,
+                    ph=_v(p['ph'], 0.35),
+                    turbidity=_v(p['turb'], 1.2),
+                    temperature=_v(p['temp'], 1.5),
+                    dissolved_oxygen=_v(p['do_'], 0.7) if p['do_'] is not None else None,
+                    conductivity=_v(p['cond'], 40),
+                    nitrates=_v(p['nit'], 1.5) if p['nit'] is not None else None,
+                    free_chlorine=_v(p['cl'], 0.12) if p['cl'] is not None else None,
+                    tds=_v(p['tds'], 25) if p['tds'] is not None else None,
+                ))
+        StationReading.objects.bulk_create(sr_rows)
 
         self.stdout.write(self.style.SUCCESS('Done. Database seeded successfully.'))
