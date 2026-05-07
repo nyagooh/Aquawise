@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone as dj_tz
 
 RISK_CHOICES = [('safe', 'Safe'), ('warning', 'Warning'), ('danger', 'Danger')]
 
@@ -140,7 +141,7 @@ class StationReading(models.Model):
     station = models.ForeignKey(
         WaterSource, on_delete=models.SET_NULL, null=True, blank=True, related_name='readings'
     )
-    timestamp = models.DateTimeField(auto_now_add=True)
+    timestamp = models.DateTimeField(default=dj_tz.now)
     # IoT-sensor-measurable parameters
     temperature = models.FloatField(null=True, blank=True)
     turbidity = models.FloatField(null=True, blank=True)
