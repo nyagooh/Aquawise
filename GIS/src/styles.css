@@ -29,14 +29,12 @@
   --warning-bg:        38 92% 50% / 0.10;
   --danger-bg:         0 84% 60% / 0.10;
   --info-bg:           217 91% 60% / 0.10;
-  --map-overlay:       0 0% 0% / 0;          /* no overlay in light */
+  --map-overlay:       0 0% 0% / 0;
 
-  /* Map tile URL */
   --map-tile: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 }
 
 [data-theme="dark"] {
-  /* shadcn-style HSL tokens (dark — zinc, NOT navy) */
   --background:        240 10% 3.9%;
   --foreground:        0 0% 98%;
   --card:              240 10% 3.9%;
@@ -49,7 +47,7 @@
   --border-strong:     240 4% 22%;
   --input:             240 3.7% 15.9%;
   --ring:              217 91% 60%;
-  --primary:           218 79% 47%;
+  --primary:           218 79% 47%;          /* TechBlue #2563EB */
   --primary-strong:    218 83% 41%;
   --primary-foreground: 0 0% 100%;
   --safe:              142 71% 45%;
@@ -61,7 +59,6 @@
   --danger-bg:         0 84% 60% / 0.14;
   --info-bg:           217 91% 60% / 0.14;
 
-  /* Map tile URL — dark variant */
   --map-tile: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 }
 
@@ -1210,23 +1207,34 @@ button { font-family: inherit; }
 
 /* hero preview frame */
 .hero-preview {
-  max-width: 1440px;
+  width: 100%;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 0 var(--s6);
+  padding: 0 32px;
+}
+@media (max-width: 900px) {
+  .hero-preview { padding: 0 var(--s4); }
+}
+@media (max-width: 560px) {
+  .hero-preview { padding: 0 var(--s3); }
 }
 .hero-preview-frame {
-  background: hsl(var(--card));
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--r-lg);
+  background: #111318;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px;
   overflow: hidden;
+  box-shadow:
+    0 48px 120px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(37,99,235,0.20),
+    0 0 100px rgba(37,99,235,0.12);
 }
 .hero-preview-bar {
   display: flex; gap: 6px;
-  padding: 10px var(--s4);
-  border-bottom: 1px solid hsl(var(--border));
-  background: hsl(var(--card-muted));
+  padding: 11px var(--s4);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: #1a1d26;
 }
-.hero-preview-bar .d { width: 9px; height: 9px; border-radius: 50%; }
+.hero-preview-bar .d { width: 10px; height: 10px; border-radius: 50%; }
 .hero-preview-img {
   height: 380px;
   background:
