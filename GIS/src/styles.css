@@ -6,7 +6,6 @@
 @import 'leaflet/dist/leaflet.css';
 
 :root, [data-theme="light"] {
-  /* shadcn-style HSL tokens (light) */
   --background:        0 0% 100%;
   --foreground:        240 10% 3.9%;
   --card:              0 0% 100%;
@@ -19,8 +18,8 @@
   --border-strong:     240 5.9% 82%;
   --input:             240 5.9% 90%;
   --ring:              217 91% 60%;
-  --primary:           218 79% 47%;          /* Deep Tech Blue */
-  --primary-strong:    218 83% 41%;          /* Deeper press state */
+  --primary:           218 79% 47%;          /* TechBlue #2563EB */
+  --primary-strong:    218 83% 41%;
   --primary-foreground: 0 0% 100%;
   --safe:              142 71% 45%;
   --warning:           38 92% 50%;
