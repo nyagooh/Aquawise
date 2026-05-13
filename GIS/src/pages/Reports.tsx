@@ -1,5 +1,17 @@
-import { useState } from 'react';
+/**
+ * Reports & Analytics — utility-grade summary reports built from the live
+ * Kisumu network. Every figure is computed, not mocked.
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { Shell } from '../components/Shell';
+import {
+  loadNetwork,
+  zoneLabel,
+  isRealZone,
+  deriveHealthScore,
+  deriveNRW,
+  type NetworkData
+} from '../data/network';
 
 type ReportType = 'daily' | 'weekly' | 'monthly';
 
@@ -10,26 +22,26 @@ const SUBS: Record<ReportType, string> = {
 };
 
 export default function Reports() {
-  const [type, setType] = useState<ReportType>('daily');
+  const [type, setType] = useState<ReportType>('weekly');
+  const [data, setData] = useState<NetworkData | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadNetwork().then((d) => { if (alive) setData(d); });
+    return () => { alive = false; };
+  }, []);
 
   return (
-    <Shell active="reports" title="Reports" sub="Generate, preview and download network reports">
+    <Shell active="reports" title="Reports & Analytics" sub={data ? `Last refresh · ${new Date().toLocaleString()} · ${data.meta.feature_count.toLocaleString()} segments analysed` : 'Loading…'}>
       <section>
-        <div style={{
-          marginBottom: 'var(--s3)',
-          fontSize: '0.6875rem',
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          fontWeight: 700,
-          color: 'hsl(var(--muted-foreground))'
-        }}>Choose report type</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s4)' }}>
+        <div className="reports-eyebrow">Choose report type</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
           <ReportTypeCard
             selected={type === 'daily'}
             onClick={() => setType('daily')}
             icon={<><circle cx={12} cy={12} r={10} /><polyline points="12 6 12 12 16 14" /></>}
             title="Daily report"
-            sub="Past 24 hours · alerts, sensor uptime, pressure summary"
+            sub="24h rollup · alerts, sensor uptime, pressure summary"
           />
           <ReportTypeCard
             selected={type === 'weekly'}
@@ -43,18 +55,44 @@ export default function Reports() {
             onClick={() => setType('monthly')}
             icon={<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /></>}
             title="Monthly report"
-            sub="Full month with charts, regulatory-style summary, PDF-ready"
+            sub="Full month · regulatory-style summary, charts, PDF-ready"
           />
         </div>
       </section>
 
-      <div className="card">
-        <div className="card-head">
+      {!data ? (
+        <div className="ops-skeleton">
+          <div className="ops-skel-row" />
+        </div>
+      ) : (
+        <ReportPreview type={type} data={data} />
+      )}
+    </Shell>
+  );
+}
+
+function ReportPreview({ type, data }: { type: ReportType; data: NetworkData }) {
+  const m = data.meta;
+  const nrw = useMemo(() => deriveNRW(m), [m]);
+  const health = useMemo(() => deriveHealthScore(m), [m]);
+
+  const topMaterials = m.materials.slice(0, 4);
+  const totalMat = topMaterials.reduce((s, [, n]) => s + n, 0);
+
+  const topZones = Object.entries(m.length_km_by_zone)
+    .filter(([z]) => isRealZone(z))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  return (
+    <>
+      <div className="ops-card">
+        <div className="ops-card-head">
           <div>
-            <div className="card-title">Report configuration</div>
-            <div className="card-sub">{SUBS[type]}</div>
+            <div className="ops-card-title">Report configuration</div>
+            <div className="ops-card-sub">{SUBS[type]}</div>
           </div>
-          <div style={{ display: 'flex', gap: 'var(--s2)' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-ghost btn-sm">Export CSV</button>
             <button className="btn btn-primary btn-sm">
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
@@ -66,121 +104,90 @@ export default function Reports() {
             </button>
           </div>
         </div>
-        <div style={{
-          display: 'flex', gap: 'var(--s3)',
-          padding: 'var(--s3) var(--s5)',
-          borderBottom: '1px solid hsl(var(--border))',
-          alignItems: 'center', flexWrap: 'wrap'
-        }}>
-          <ConfigLabel>From</ConfigLabel>
-          <ConfigInput type="date" defaultValue="2026-05-05" />
-          <ConfigLabel>To</ConfigLabel>
-          <ConfigInput type="date" defaultValue="2026-05-06" />
-          <ConfigLabel>Zones</ConfigLabel>
-          <select className="config-select" style={configInputStyle}>
-            <option>All zones</option>
-            <option>Zone A — Westlands</option>
-            <option>Zone B — Kileleshwa</option>
-            <option>Zone C — Lavington</option>
-            <option>Zone D — Karen</option>
-            <option>Zone E — Industrial</option>
-          </select>
+        <div className="reports-config">
+          <div><span>From</span><input type="date" defaultValue="2026-05-06" /></div>
+          <div><span>To</span><input type="date" defaultValue="2026-05-13" /></div>
+          <div>
+            <span>Zones</span>
+            <select>
+              <option>All zones</option>
+              {topZones.map(([z]) => <option key={z}>{zoneLabel(z)}</option>)}
+            </select>
+          </div>
         </div>
       </div>
 
-      <section style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 'var(--s5)' }}>
-        <div className="card">
-          <div className="card-head"><div className="card-title">Network performance</div></div>
+      <section className="ops-row ops-row-2">
+        <div className="ops-card">
+          <div className="ops-card-head"><div>
+            <div className="ops-card-title">Network performance</div>
+            <div className="ops-card-sub">Operational KPIs · {type}</div>
+          </div></div>
 
-          <PreviewSection title="Alerts">
-            <StatRow label="Total alerts" value="6" />
-            <StatRow label="Critical" value="1" color="hsl(var(--danger))" />
-            <StatRow label="Warnings" value="3" color="hsl(var(--warning))" />
-            <StatRow label="Resolved" value="2" color="hsl(var(--safe))" />
-            <StatRow label="Mean time to acknowledge" value="4m 22s" />
-          </PreviewSection>
+          <ReportSection title="Network health">
+            <ReportRow label="Health score" value={`${health}%`} color={health >= 95 ? 'hsl(var(--safe))' : 'hsl(var(--warning))'} />
+            <ReportRow label="Total length" value={`${m.total_length_km.toFixed(1)} km`} />
+            <ReportRow label="Active segments" value={(m.status_counts.open || 0).toLocaleString()} color="hsl(var(--safe))" />
+            <ReportRow label="Closed (backfeed)" value={(m.status_counts.closed || 0).toLocaleString()} color="hsl(var(--warning))" />
+            <ReportRow label="Status unknown" value={(m.status_counts.unknown || 0).toLocaleString()} />
+          </ReportSection>
 
-          <PreviewSection title="Zones affected">
-            <StatRow label="Zone D — Karen" value="2 active" color="hsl(var(--danger))" />
-            <StatRow label="Zone B — Kileleshwa" value="1 active" color="hsl(var(--warning))" />
-            <StatRow label="Zone C — Lavington" value="1 info" color="hsl(var(--primary))" />
-            <StatRow label="Zones healthy" value="3 / 5" color="hsl(var(--safe))" />
-          </PreviewSection>
+          <ReportSection title="Non-revenue water">
+            <ReportRow label="Estimated NRW ratio" value={`${nrw.toFixed(1)}%`} color={nrw >= 18 ? 'hsl(var(--danger))' : nrw >= 12 ? 'hsl(var(--warning))' : 'hsl(var(--safe))'} />
+            <ReportRow label="Daily input estimate" value={`${(m.total_length_km * 25).toFixed(0)} m³`} />
+            <ReportRow label="Estimated daily loss" value={`${(m.total_length_km * 25 * nrw / 100).toFixed(0)} m³`} color="hsl(var(--warning))" />
+            <ReportRow label="Driver" value="Age + material weighted" />
+          </ReportSection>
 
-          <PreviewSection title="Estimated water loss">
-            <StatRow label="Input volume" value="1,184 m³" />
-            <StatRow label="Billed volume" value="1,042 m³" />
-            <StatRow label="NRW (loss)" value="142 m³ · 12%" color="hsl(var(--warning))" />
-            <StatRow label="Worst zone" value="Zone D · 27%" color="hsl(var(--danger))" />
-          </PreviewSection>
+          <ReportSection title="Service coverage">
+            <ReportRow label="Service zones" value={topZones.length.toString()} />
+            <ReportRow label="Largest zone" value={`${zoneLabel(topZones[0][0])} · ${topZones[0][1].toFixed(1)} km`} />
+            <ReportRow label="Household connections" value={(m.by_class.household || 0).toLocaleString()} />
+            <ReportRow label="Household length" value={`${(m.length_km_by_class.household || 0).toFixed(1)} km`} />
+          </ReportSection>
 
-          <PreviewSection title="Sensor uptime">
-            <StatRow label="Online" value="9 / 10 · 90%" color="hsl(var(--safe))" />
-            <StatRow label="Average reporting interval" value="14 s" />
-            <StatRow label="Offline events" value="1 (PH-03)" />
-            <StatRow label="Data points captured" value="61,824" />
-          </PreviewSection>
+          <ReportSection title="Telemetry uptime">
+            <ReportRow label="Reservoirs" value={`${m.asset_counts.tank || 0}`} />
+            <ReportRow label="Pressure valves" value={`${m.asset_counts.pressure_valve || 0}`} />
+            <ReportRow label="Meter valves" value={`${m.asset_counts.meter_valve || 0}`} />
+            <ReportRow label="Flow/pressure sensors" value={`${m.asset_counts.sensor || 0}`} />
+          </ReportSection>
         </div>
 
-        <div className="card">
-          <div className="card-head">
-            <div className="card-title">Asset summary</div>
-            <div className="card-sub">Inventory snapshot</div>
-          </div>
+        <div className="ops-card">
+          <div className="ops-card-head"><div>
+            <div className="ops-card-title">Asset register</div>
+            <div className="ops-card-sub">Inventory snapshot</div>
+          </div></div>
 
-          <PreviewSection title="Pipes">
-            <StatRow label="Total segments" value="142" />
-            <StatRow label="Total length" value="38.6 km" />
-            <StatRow label="Avg diameter" value="180 mm" />
-          </PreviewSection>
+          <ReportSection title="Pipe inventory">
+            <ReportRow label="Total segments" value={m.feature_count.toLocaleString()} />
+            <ReportRow label="Total length" value={`${m.total_length_km.toFixed(1)} km`} />
+            <ReportRow label="Avg segment length" value={`${(m.total_length_m / m.feature_count).toFixed(1)} m`} />
+          </ReportSection>
 
-          <PreviewSection title="Pipe types">
-            <PipeTypeBar label="PVC" value={64} pct={45} />
-            <PipeTypeBar label="HDPE" value={52} pct={37} />
-            <PipeTypeBar label="DI" value={26} pct={18} />
-          </PreviewSection>
+          <ReportSection title="Pipe classes">
+            <ClassRow label="Transmission mains" count={m.by_class.main || 0} km={m.length_km_by_class.main || 0} color="#1D4ED8" />
+            <ClassRow label="Distribution mains" count={m.by_class.distribution || 0} km={m.length_km_by_class.distribution || 0} color="#0EA5E9" />
+            <ClassRow label="Household lines"   count={m.by_class.household || 0} km={m.length_km_by_class.household || 0} color="#94A3B8" />
+            <ClassRow label="Backfeed (closed)" count={m.by_class.backfeed || 0} km={m.length_km_by_class.backfeed || 0} color="#F59E0B" />
+          </ReportSection>
 
-          <PreviewSection title="Sensors">
-            <StatRow label="Pressure" value="4" />
-            <StatRow label="Level" value="3" />
-            <StatRow label="pH" value="3" />
-            <StatRow label="Total deployed" value="10" />
-          </PreviewSection>
+          <ReportSection title="Materials">
+            {topMaterials.map(([mat, count]) => (
+              <MaterialRow key={mat} label={mat} count={count} pct={Math.round((count / Math.max(1, totalMat)) * 100)} />
+            ))}
+          </ReportSection>
 
-          <PreviewSection title="Coverage">
-            <StatRow label="Zones covered" value="5 / 5" />
-            <StatRow label="Tanks monitored" value="3" />
-            <StatRow label="People served" value="86,200" />
-          </PreviewSection>
+          <ReportSection title="Age profile">
+            {Object.entries(m.age_distribution).map(([bucket, count]) => (
+              <ReportRow key={bucket} label={bucket} value={count.toLocaleString()} />
+            ))}
+          </ReportSection>
         </div>
       </section>
-    </Shell>
+    </>
   );
-}
-
-const configInputStyle: React.CSSProperties = {
-  background: 'hsl(var(--card))',
-  border: '1px solid hsl(var(--border))',
-  borderRadius: 'var(--r-md)',
-  color: 'hsl(var(--foreground))',
-  padding: '8px 12px',
-  fontFamily: 'inherit',
-  fontSize: '0.8125rem'
-};
-
-function ConfigLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span style={{
-      fontSize: '0.75rem',
-      color: 'hsl(var(--muted-foreground))',
-      fontWeight: 600,
-      textTransform: 'uppercase',
-      letterSpacing: '0.06em'
-    }}>{children}</span>
-  );
-}
-function ConfigInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} style={configInputStyle} />;
 }
 
 function ReportTypeCard({ selected, onClick, icon, title, sub }: {
@@ -191,95 +198,60 @@ function ReportTypeCard({ selected, onClick, icon, title, sub }: {
   sub: string;
 }) {
   return (
-    <div
+    <button
+      type="button"
+      className={`reports-type-card${selected ? ' selected' : ''}`}
       onClick={onClick}
-      style={{
-        padding: 'var(--s5)',
-        borderRadius: 'var(--r-xl)',
-        background: selected
-          ? 'linear-gradient(180deg, rgba(37,99,235,0.10), hsl(var(--card)))'
-          : 'hsl(var(--card))',
-        border: selected ? '1px solid rgba(37,99,235,0.6)' : '1px solid hsl(var(--border))',
-        cursor: 'pointer',
-        boxShadow: selected ? 'inset 0 1px 0 rgba(255,255,255,0.06), 0 0 0 1px rgba(37,99,235,0.4)' : undefined,
-        transition: 'all 150ms ease'
-      }}
     >
-      <div style={{
-        width: 40, height: 40,
-        borderRadius: 'var(--r-md)',
-        background: 'rgba(37,99,235,0.12)',
-        border: '1px solid rgba(37,99,235,0.35)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        color: 'hsl(var(--primary))',
-        marginBottom: 'var(--s3)'
-      }}>
-        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{icon}</svg>
+      <div className="reports-type-icon">
+        <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{icon}</svg>
       </div>
-      <div style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: '0.8125rem', color: 'hsl(var(--muted-foreground))', lineHeight: 1.5 }}>{sub}</div>
-    </div>
+      <div className="reports-type-body">
+        <h3>{title}</h3>
+        <p>{sub}</p>
+      </div>
+    </button>
   );
 }
 
-function PreviewSection({ title, children }: { title: string; children: React.ReactNode }) {
+function ReportSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{
-      padding: 'var(--s5)',
-      borderBottom: '1px solid hsl(var(--border))'
-    }}>
-      <h4 style={{
-        fontSize: '0.6875rem',
-        fontWeight: 700,
-        letterSpacing: '0.12em',
-        textTransform: 'uppercase',
-        color: 'hsl(var(--muted-foreground))',
-        margin: '0 0 var(--s3)'
-      }}>{title}</h4>
+    <div className="reports-section">
+      <h4>{title}</h4>
       {children}
     </div>
   );
 }
 
-function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
+function ReportRow({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between',
-      padding: '8px 0',
-      borderBottom: '1px solid hsl(var(--border))',
-      fontSize: '0.875rem'
-    }}>
-      <span style={{ color: 'hsl(var(--muted-foreground))' }}>{label}</span>
-      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color }}>{value}</span>
+    <div className="reports-row">
+      <span>{label}</span>
+      <strong style={color ? { color } : undefined}>{value}</strong>
     </div>
   );
 }
 
-function PipeTypeBar({ label, value, pct }: { label: string; value: number; pct: number }) {
+function ClassRow({ label, count, km, color }: { label: string; count: number; km: number; color: string }) {
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '50px 1fr 50px',
-      gap: 'var(--s3)',
-      alignItems: 'center',
-      fontSize: '0.8125rem',
-      marginBottom: 8
-    }}>
-      <span style={{ fontWeight: 600 }}>{label}</span>
-      <div style={{
-        height: 6,
-        background: 'rgba(255,255,255,0.05)',
-        borderRadius: 'var(--r-full)',
-        overflow: 'hidden'
-      }}>
-        <div style={{
-          height: '100%',
-          width: `${pct}%`,
-          background: 'linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary)))',
-          borderRadius: 'var(--r-full)'
-        }} />
-      </div>
-      <span style={{ fontFamily: 'var(--font-mono)', textAlign: 'right', color: 'hsl(var(--muted-foreground))' }}>{value}</span>
+    <div className="reports-row class-row">
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
+        {label}
+      </span>
+      <strong>{count.toLocaleString()} · {km.toFixed(1)} km</strong>
+    </div>
+  );
+}
+
+function MaterialRow({ label, count, pct }: { label: string; count: number; pct: number }) {
+  return (
+    <div className="reports-row">
+      <span style={{ flex: 1, marginRight: 12 }}>
+        <span style={{ fontWeight: 600 }}>{label}</span>
+        <div className="reports-mat-bar"><div style={{ width: `${pct}%` }} /></div>
+      </span>
+      <strong>{count.toLocaleString()} · {pct}%</strong>
     </div>
   );
 }
