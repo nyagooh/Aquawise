@@ -4,8 +4,8 @@
  * Primary colour: TechBlue #2563EB. Alternating neutral / deep-navy-blue sections.
  * Layout: copy text centred at top, full-width product mockup below.
  */
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../theme';
 
 function useReveal() {
@@ -22,6 +22,8 @@ function useReveal() {
 
 export default function Landing() {
   const { mode, toggle } = useTheme();
+  const navigate = useNavigate();
+  const openDemo = useCallback(() => navigate('/demo'), [navigate]);
   useReveal();
 
   return (
@@ -38,14 +40,16 @@ export default function Landing() {
           <a href="#sensors">Sensors</a>
           <a href="#assets">Assets</a>
           <a href="#how">How it works</a>
-          <Link to="/gis">Live demo</Link>
+          <button type="button" className="nav-as-link" onClick={openDemo}>Live demo</button>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button className="theme-toggle" onClick={toggle} title={`Switch to ${mode === 'dark' ? 'light' : 'dark'} mode`}>
             {mode === 'dark' ? <SunIcon /> : <MoonIcon />}
             {mode === 'dark' ? 'Light' : 'Dark'}
           </button>
-          <Link to="/dashboard" className="btn btn-primary btn-lg">Book Demo →</Link>
+          <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>
+            Explore Live Demo →
+          </button>
         </div>
       </nav>
 
@@ -68,8 +72,8 @@ export default function Landing() {
           Account for every asset — on one live platform.
         </p>
         <div className="hero-ctas reveal reveal-delay-3">
-          <Link to="/dashboard" className="btn btn-primary btn-lg">Get a Live Demo →</Link>
-          <Link to="/gis" className="btn btn-ghost btn-lg">Explore the Platform</Link>
+          <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
+          <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
         </div>
         <div className="hero-meta reveal reveal-delay-3">
           <span><span className="dot" />Free 30-minute demo</span>
@@ -80,7 +84,7 @@ export default function Landing() {
 
       {/* Hero product screenshot */}
       <div className="hero-preview reveal" style={{ marginBottom: 0 }}>
-        <Link to="/gis" className="hero-preview-frame" style={{ display: 'block' }}>
+        <button type="button" onClick={openDemo} className="hero-preview-frame" style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
           <div className="hero-preview-bar">
             <span className="d" style={{ background: '#FF5F57' }} />
             <span className="d" style={{ background: '#FEBC2E' }} />
@@ -91,7 +95,7 @@ export default function Landing() {
             <span style={{ fontSize: 10, color: 'hsl(var(--primary))', fontFamily: 'var(--font-mono)', fontWeight: 600, marginRight: 4 }}>● LIVE</span>
           </div>
           <HeroPipeNetworkMockup />
-        </Link>
+        </button>
       </div>
 
       {/* Testimonials */}
@@ -130,7 +134,7 @@ export default function Landing() {
               <li>Search any pipe, valve, hydrant, or customer in one click</li>
               <li>One source of truth shared by operations, planning, and field crews</li>
             </ul>
-            <Link to="/gis" className="btn btn-primary btn-lg">Open the live map →</Link>
+            <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Open the live map →</button>
           </div>
           <div className="story-stacked-visual reveal reveal-delay-1">
             <MockupBar url="Map · Kisumu Service Area" />
@@ -159,7 +163,7 @@ export default function Landing() {
               <li>Colour-code by status, rehabilitation priority, or risk score</li>
               <li>DMA and pressure zone boundaries overlaid on live imagery</li>
             </ul>
-            <Link to="/gis" className="btn btn-primary btn-lg">See the GIS network →</Link>
+            <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>See the GIS network →</button>
           </div>
           <div className="story-stacked-visual reveal reveal-delay-1">
             <MockupBar url="GIS · Pipe Network Detail" />
@@ -217,7 +221,7 @@ export default function Landing() {
               <li>Filter your whole network by age, risk, or material type</li>
               <li>Build replacement programmes from data — not guesswork</li>
             </ul>
-            <Link to="/gis" className="btn btn-primary btn-lg">Explore the asset register →</Link>
+            <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore the asset register →</button>
           </div>
           <div className="story-stacked-visual reveal reveal-delay-1">
             <MockupBar url="Asset Register · Pipe Segments" />
@@ -355,8 +359,8 @@ export default function Landing() {
             assets the way they were meant to be seen.
           </p>
           <div className="final-cta-actions">
-            <Link to="/dashboard" className="btn btn-primary btn-lg">Book a Free Demo →</Link>
-            <Link to="/gis" className="btn btn-ghost btn-lg">Explore the live GIS</Link>
+            <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
+            <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
           </div>
           <div className="final-trust">
             <span><span className="dot-safe" />Free 30-minute demo</span>
