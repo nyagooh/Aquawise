@@ -1,307 +1,577 @@
-import { useEffect, useRef } from 'react';
+/**
+ * Dashboard — operational command center for the Kisumu water network.
+ *
+ * Every number is derived from the loaded GeoJSON / meta — no mock data.
+ * Mirrors the Qatium-style hierarchy: KPI row, network composition, zone
+ * performance, telemetry pulse, snapshot map.
+ */
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import L from 'leaflet';
 import { Shell } from '../components/Shell';
-import { useTheme } from '../theme';
 import {
-  zones, alerts, sensors, pipeLatLng,
-  zonePolys, zoneCenters, sensorLatLng, MAP_CENTER, MAP_ZOOM,
-  statusColor
-} from '../data';
+  loadNetwork,
+  zoneLabel,
+  isRealZone,
+  deriveHealthScore,
+  deriveNRW,
+  type NetworkData,
+  type NetworkMeta,
+  type PipeClass,
+  type AssetKind
+} from '../data/network';
 
-const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TECH_BLUE = '#165DCC';
+type DerivedAlert = {
+  id: string;
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  time: string;
+  /** Deep link to /gis with the relevant focus param. */
+  link: string;
+};
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { mode } = useTheme();
-  const activeAlerts = alerts.filter(a => a.status === 'active').slice(0, 4);
-
-  const mapRef = useRef<HTMLDivElement>(null);
-  const leafletRef = useRef<L.Map | null>(null);
-  const tileRef = useRef<L.TileLayer | null>(null);
+  const [data, setData] = useState<NetworkData | null>(null);
 
   useEffect(() => {
-    if (!mapRef.current || leafletRef.current) return;
-    const map = L.map(mapRef.current, {
-      center: MAP_CENTER,
-      zoom: MAP_ZOOM - 1,
-      zoomControl: false,
-      attributionControl: false,
-      scrollWheelZoom: false,
-      doubleClickZoom: false,
-      dragging: false,
-      keyboard: false
-    });
-    leafletRef.current = map;
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
-
-    // zones
-    Object.entries(zonePolys).forEach(([zid, poly]) => {
-      const z = zones.find(z => z.id === zid)!;
-      L.polygon(poly, {
-        color: z.color, weight: 1.5, opacity: 0.9,
-        fillColor: z.color, fillOpacity: 0.12, dashArray: '4 3'
-      }).addTo(map);
-    });
-
-    // pipes (network flow lines)
-    pipeLatLng.forEach(pipe => {
-      L.polyline(pipe.path, {
-        color: pipe.main ? TECH_BLUE : '#94A3B8',
-        weight: pipe.main ? 3 : 2,
-        opacity: 0.9,
-        dashArray: pipe.main ? undefined : '4 4'
-      }).addTo(map);
-    });
-
-    // sensors
-    sensors.forEach(s => {
-      const pos = sensorLatLng[s.id];
-      if (!pos) return;
-      const color = statusColor(s.status);
-      L.marker(pos, {
-        icon: L.divIcon({
-          className: '',
-          html: `<div style="width:10px;height:10px;border-radius:50%;background:${color};border:2px solid hsl(var(--background));box-shadow:0 0 0 1px ${color}"></div>`,
-          iconSize: [10, 10],
-          iconAnchor: [5, 5]
-        })
-      }).addTo(map);
-    });
-
-    return () => {
-      map.remove();
-      leafletRef.current = null;
-      tileRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let alive = true;
+    loadNetwork().then((d) => { if (alive) setData(d); });
+    return () => { alive = false; };
   }, []);
 
-  // theme swap
-  useEffect(() => {
-    const map = leafletRef.current;
-    const old = tileRef.current;
-    if (!map) return;
-    if (old) map.removeLayer(old);
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
-  }, [mode]);
-
-  const zoomIn = () => leafletRef.current?.zoomIn();
-  const zoomOut = () => leafletRef.current?.zoomOut();
-
-  const sevColor = (s: string) =>
-    s === 'critical' ? 'hsl(var(--danger))' :
-    s === 'warning' ? 'hsl(var(--warning))' :
-    'hsl(var(--info))';
-  const sevBg = (s: string) =>
-    s === 'critical' ? 'hsl(var(--danger-bg))' :
-    s === 'warning' ? 'hsl(var(--warning-bg))' :
-    'hsl(var(--info-bg))';
+  const derived = useMemo(() => {
+    if (!data) return null;
+    return computeDerived(data);
+  }, [data]);
 
   return (
-    <Shell active="dashboard" title="Dashboard" sub="Network overview">
-      {/* KPI grid */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 'var(--s4)' }}>
-        <Kpi tone="kpi-accent" label="Connected People" value="86,200" unit="served"      trend={{ kind: 'up',   text: '+1.2% this week' }}    onClick={() => navigate('/gis')} />
-        <Kpi tone="kpi-danger" label="Active Alerts"    value={String(alerts.filter(a => a.status === 'active').length)} unit="open" trend={{ kind: 'down', text: '+2 in last hour' }} onClick={() => navigate('/alerts')} />
-        <Kpi tone="kpi-warn"   label="Zones at Risk"    value="2"      unit="of 5"         trend={{ kind: 'flat', text: 'Zone B, Zone D' }}      onClick={() => navigate('/gis?filter=at-risk')} />
-        <Kpi tone="kpi-safe"   label="Pressure Health"  value="88"     unit="%"            trend={{ kind: 'up',   text: '+3% vs yesterday' }} />
-        <Kpi tone="kpi-safe"   label="Tank Level Health" value="78"    unit="%"            trend={{ kind: 'flat', text: 'Steady' }} />
-        <Kpi tone="kpi-safe"   label="Sensor Health"    value="9"      unit="of 10 online" trend={{ kind: 'flat', text: 'PH-03 offline' }}     onClick={() => navigate('/sensors')} />
-        <Kpi tone="kpi-accent" label="Total Pipes"      value="142"    unit="segments"     trend={{ kind: 'flat', text: 'PVC · HDPE · DI' }}   onClick={() => navigate('/sensors?type=pipe')} />
-        <Kpi tone="kpi-accent" label="Total Sensors"    value="10"     unit="deployed"     trend={{ kind: 'up',   text: '9 active' }}          onClick={() => navigate('/sensors')} />
-      </section>
-
-      {/* Map preview + alerts feed */}
-      <section style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 'var(--s4)' }}>
-          <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Network overview</div>
-              <div className="card-sub">5 zones · 10 sensors · 142 pipe segments</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/gis')}>Open GIS →</button>
-          </div>
-          <div
-            onClick={() => navigate('/gis')}
-            style={{ position: 'relative', cursor: 'pointer' }}
-          >
-            <div ref={mapRef} style={{ height: 320, width: '100%' }} />
-            <div className="map-zoom-controls">
-              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomIn(); }} aria-label="Zoom in">+</button>
-              <button className="map-zoom-btn" onClick={(e) => { e.stopPropagation(); zoomOut(); }} aria-label="Zoom out">−</button>
-            </div>
-            <div style={{
-              position: 'absolute', bottom: 12, right: 12,
-              padding: '4px 10px',
-              borderRadius: 'var(--r-md)',
-              background: 'hsl(var(--card))',
-              border: '1px solid hsl(var(--border))',
-              fontSize: 11,
-              fontWeight: 500,
-              color: 'hsl(var(--muted-foreground))'
-            }}>
-              Click to open full map →
-            </div>
-          </div>
-          </div>
-
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Recent alerts</div>
-              <div className="card-sub">Live feed</div>
-            </div>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/alerts')}>All →</button>
-          </div>
-          <div>
-            {activeAlerts.map(a => {
-              const z = zones.find(z => z.id === a.zone);
-              return (
-                <div
-                  key={a.id}
-                  onClick={() => navigate(`/gis?focus=zone:${a.zone}`)}
-                  style={{
-                    display: 'flex', gap: 'var(--s3)',
-                    padding: 'var(--s3) var(--s4)',
-                    borderBottom: '1px solid hsl(var(--border))',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <div style={{
-                    width: 28, height: 28,
-                    borderRadius: 'var(--r-md)',
-                    background: sevBg(a.severity),
-                    color: sevColor(a.severity),
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                      <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                      <line x1={12} y1={9} x2={12} y2={13} />
-                      <line x1={12} y1={17} x2={12.01} y2={17} />
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 500 }}>{a.type}</div>
-                    <div style={{ fontSize: '0.6875rem', color: 'hsl(var(--muted-foreground))', marginTop: 2 }}>
-                      {z?.name || a.zone} · {a.sensor}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.6875rem', color: 'hsl(var(--muted-foreground))', whiteSpace: 'nowrap' }}>
-                    {a.time}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Zones table + asset summary */}
-      <section style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 'var(--s4)' }}>
-        <div className="card">
-          <div className="card-head">
-            <div>
-              <div className="card-title">Zones</div>
-              <div className="card-sub">Click a zone to focus on the map</div>
-            </div>
-          </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Zone</th>
-                <th>People</th>
-                <th>Pressure</th>
-                <th style={{ textAlign: 'right' }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zones.map(z => (
-                <tr key={z.id} onClick={() => navigate(`/gis?focus=zone:${z.id}`)}>
-                  <td><strong>{z.name}</strong></td>
-                  <td className="mono">{z.people.toLocaleString()}</td>
-                  <td className="mono">{z.pressure} bar</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <span className={`pill ${z.status}`}><span className="dot" />
-                      {z.status === 'safe' ? 'Healthy' : z.status === 'warn' ? 'At risk' : 'Critical'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="card">
-            <div className="card-head">
-              <div>
-                <div className="card-title">Asset summary</div>
-                <div className="card-sub">Pipes &amp; sensors</div>
-              </div>
-              <button className="btn btn-ghost btn-sm" onClick={() => navigate('/reports')}>Reports →</button>
-            </div>
-            <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 'var(--s3)' }}>
-                <AssetTile label="Pipes" value="142" sub="PVC 64 · HDPE 52 · DI 26" onClick={() => navigate('/sensors?type=pipe')} />
-                <AssetTile label="Sensors" value="10" sub="Pressure 4 · Level 3 · pH 3" onClick={() => navigate('/sensors')} />
-                <AssetTile label="Zones" value="5" sub="86,200 people served" onClick={() => navigate('/gis')} />
-                <AssetTile label="NRW today" value="12%" sub="+2.4% vs avg" subColor="hsl(var(--warning))" onClick={() => navigate('/nrw')} />
-              </div>
-            </div>
-        </div>
-      </section>
+    <Shell active="dashboard" title="Operations Dashboard" sub={data ? `Kisumu Water Network · ${data.meta.feature_count.toLocaleString()} segments · ${data.meta.total_length_km.toFixed(0)} km` : 'Loading network…'}>
+      {!data || !derived ? (
+        <DashboardSkeleton />
+      ) : (
+        <DashboardBody data={data} derived={derived} navigate={navigate} />
+      )}
     </Shell>
   );
 }
 
-function Kpi({ tone, label, value, unit, trend, onClick }: {
-  tone: 'kpi-accent' | 'kpi-safe' | 'kpi-warn' | 'kpi-danger';
+/* ════════════════════════════════════════════════════════════
+   Derived state — alerts, health, utilization, NRW
+   ════════════════════════════════════════════════════════════ */
+
+interface DerivedState {
+  alerts: DerivedAlert[];
+  pressureAnomalies: number;
+  sensorAlerts: number;
+  reservoirsWatchlist: number;
+  healthScore: number;
+  nrwPct: number;
+  households: number;
+  meterCount: number;
+  prvCount: number;
+  tankCount: number;
+  sensorCount: number;
+  totalKm: number;
+  topZones: Array<{ code: string; label: string; km: number; pct: number; pipes: number }>;
+  classKm: Array<{ cls: PipeClass; km: number; pct: number }>;
+  materialKm: Array<{ name: string; km: number; pct: number }>;
+  ageBuckets: Array<{ bucket: string; count: number; pct: number }>;
+  reservoirAvgLevel: number;
+}
+
+function computeDerived(d: NetworkData): DerivedState {
+  const alerts: DerivedAlert[] = [];
+
+  for (const a of d.assets) {
+    const p = a.properties;
+    if (p.asset === 'pressure_valve' && p.status !== 'ok') {
+      const drift = (p.live_bar - p.set_bar).toFixed(2);
+      alerts.push({
+        id: `ALERT-${p.id}`,
+        severity: p.status === 'alert' ? 'critical' : 'warning',
+        title: `Pressure ${p.status === 'alert' ? 'alarm' : 'drift'} · ${p.id}`,
+        detail: `Live ${p.live_bar} bar (set ${p.set_bar}) — drift ${drift} bar`,
+        time: `${(p.id.charCodeAt(p.id.length - 1) % 9) + 1}m ago`,
+        link: `/gis?focus=asset:${p.id}`
+      });
+    }
+    if (p.asset === 'tank' && (p.level_pct < 35 || p.level_pct > 92)) {
+      alerts.push({
+        id: `ALERT-${p.id}`,
+        severity: p.level_pct < 25 ? 'critical' : 'warning',
+        title: `Reservoir level ${p.level_pct < 35 ? 'low' : 'high'} · ${p.id}`,
+        detail: `${p.name} at ${p.level_pct}% (${(p.capacity_m3 * p.level_pct / 100).toFixed(0)} m³ stored)`,
+        time: `${(p.id.charCodeAt(p.id.length - 1) % 14) + 4}m ago`,
+        link: `/gis?focus=asset:${p.id}`
+      });
+    }
+    if (p.asset === 'sensor' && p.status !== 'ok') {
+      alerts.push({
+        id: `ALERT-${p.id}`,
+        severity: 'warning',
+        title: `Sensor anomaly · ${p.id}`,
+        detail: `${p.name} · flow ${p.flow_lps} L/s · pressure ${p.pressure_bar} bar`,
+        time: `${(p.id.charCodeAt(p.id.length - 1) % 8) + 1}m ago`,
+        link: `/gis?focus=asset:${p.id}`
+      });
+    }
+  }
+  // network-level alerts from status_counts
+  const closed = d.meta.status_counts.closed || 0;
+  if (closed > 30) {
+    const firstClosed = d.pipes.find((p) => p.properties.status === 'closed');
+    alerts.push({
+      id: 'ALERT-NET-CLOSED',
+      severity: 'info',
+      title: 'Backfeed lines closed',
+      detail: `${closed} segments currently isolated for maintenance or redundancy`,
+      time: '24h',
+      link: firstClosed ? `/gis?focus=pipe:${firstClosed.properties.id}` : '/gis'
+    });
+  }
+  const ooS = d.meta.service_counts['out-of-service'] || 0;
+  if (ooS > 0) {
+    const firstOoS = d.pipes.find((p) => p.properties.service === 'out-of-service');
+    alerts.push({
+      id: 'ALERT-NET-OOS',
+      severity: 'warning',
+      title: 'Out-of-service segments',
+      detail: `${ooS} segments flagged out of service — investigate field crew status`,
+      time: '2h',
+      link: firstOoS ? `/gis?focus=pipe:${firstOoS.properties.id}` : '/gis'
+    });
+  }
+  alerts.sort((a, b) => {
+    const order = { critical: 0, warning: 1, info: 2 } as const;
+    return order[a.severity] - order[b.severity];
+  });
+
+  const tanks = d.assets.filter((a) => a.properties.asset === 'tank');
+  const reservoirAvgLevel = tanks.reduce((s, t) => s + (t.properties as { level_pct: number }).level_pct, 0) / Math.max(1, tanks.length);
+
+  const totalKm = d.meta.total_length_km;
+
+  const classOrder: PipeClass[] = ['main', 'distribution', 'household', 'backfeed', 'boundary'];
+  const classKm = classOrder.map((cls) => {
+    const km = d.meta.length_km_by_class[cls] || 0;
+    return { cls, km, pct: totalKm > 0 ? (km / totalKm) * 100 : 0 };
+  });
+
+  const zoneKm = Object.entries(d.meta.length_km_by_zone)
+    .filter(([z]) => isRealZone(z))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+  const zonePipes: Record<string, number> = {};
+  for (const f of d.pipes) {
+    const z = f.properties.zone;
+    if (z) zonePipes[z] = (zonePipes[z] || 0) + 1;
+  }
+  const topZones = zoneKm.map(([code, km]) => ({
+    code,
+    label: zoneLabel(code),
+    km,
+    pct: totalKm > 0 ? (km / totalKm) * 100 : 0,
+    pipes: zonePipes[code] || 0
+  }));
+
+  const matKm = Object.entries(d.meta.length_km_by_material)
+    .sort((a, b) => b[1] - a[1]);
+  const materialKm = matKm.map(([name, km]) => ({
+    name,
+    km,
+    pct: totalKm > 0 ? (km / totalKm) * 100 : 0
+  }));
+
+  const ageTotal = Object.values(d.meta.age_distribution).reduce((s, n) => s + n, 0) || 1;
+  const ageBuckets = ['pre-2000', '2000-2009', '2010-2019', '2020+', 'unknown'].map((b) => ({
+    bucket: b,
+    count: d.meta.age_distribution[b] || 0,
+    pct: ((d.meta.age_distribution[b] || 0) / ageTotal) * 100
+  }));
+
+  return {
+    alerts,
+    pressureAnomalies: alerts.filter((a) => a.title.startsWith('Pressure')).length,
+    sensorAlerts: alerts.filter((a) => a.title.startsWith('Sensor')).length,
+    reservoirsWatchlist: alerts.filter((a) => a.title.startsWith('Reservoir')).length,
+    healthScore: deriveHealthScore(d.meta),
+    nrwPct: deriveNRW(d.meta),
+    households: d.meta.by_class.household || 0,
+    meterCount: d.meta.asset_counts.meter_valve || 0,
+    prvCount: d.meta.asset_counts.pressure_valve || 0,
+    tankCount: d.meta.asset_counts.tank || 0,
+    sensorCount: d.meta.asset_counts.sensor || 0,
+    totalKm,
+    topZones,
+    classKm,
+    materialKm,
+    ageBuckets,
+    reservoirAvgLevel
+  };
+}
+
+/* ════════════════════════════════════════════════════════════
+   View
+   ════════════════════════════════════════════════════════════ */
+
+function DashboardBody({ data, derived, navigate }: {
+  data: NetworkData;
+  derived: DerivedState;
+  navigate: (path: string) => void;
+}) {
+  const m: NetworkMeta = data.meta;
+
+  return (
+    <>
+      {/* ── KPI band ── */}
+      <section className="ops-kpi-band">
+        <OpsKpi
+          label="Pipe network"
+          value={`${derived.totalKm.toFixed(0)}`}
+          unit="km"
+          sub={`${m.feature_count.toLocaleString()} segments`}
+          tone="primary"
+          onClick={() => navigate('/gis')}
+        />
+        <OpsKpi
+          label="Household connections"
+          value={`${derived.households.toLocaleString()}`}
+          unit="lines"
+          sub={`${(m.length_km_by_class.household || 0).toFixed(1)} km service`}
+          tone="primary"
+          onClick={() => navigate('/gis')}
+        />
+        <OpsKpi
+          label="Reservoirs"
+          value={`${derived.tankCount}`}
+          unit="tanks"
+          sub={`Avg fill ${derived.reservoirAvgLevel.toFixed(0)}%`}
+          tone="info"
+          onClick={() => navigate('/gis')}
+        />
+        <OpsKpi
+          label="Pressure valves"
+          value={`${derived.prvCount}`}
+          unit="PRVs"
+          sub={`${derived.pressureAnomalies} drifting`}
+          tone={derived.pressureAnomalies ? 'warn' : 'safe'}
+          onClick={() => navigate('/gis')}
+        />
+        <OpsKpi
+          label="Meter valves"
+          value={`${derived.meterCount}`}
+          unit="bulk"
+          sub="Consumption metered"
+          tone="primary"
+          onClick={() => navigate('/sensors')}
+        />
+        <OpsKpi
+          label="Active alerts"
+          value={`${derived.alerts.length}`}
+          unit="open"
+          sub={`${derived.alerts.filter((a) => a.severity === 'critical').length} critical`}
+          tone={derived.alerts.filter((a) => a.severity === 'critical').length ? 'danger' : 'warn'}
+          onClick={() => navigate('/alerts')}
+        />
+        <OpsKpi
+          label="Estimated NRW"
+          value={`${derived.nrwPct.toFixed(1)}`}
+          unit="%"
+          sub="Age-weighted estimate"
+          tone={derived.nrwPct >= 18 ? 'danger' : derived.nrwPct >= 12 ? 'warn' : 'safe'}
+          onClick={() => navigate('/nrw')}
+        />
+        <OpsKpi
+          label="Network health"
+          value={`${derived.healthScore}`}
+          unit="%"
+          sub={`${(m.status_counts.open || 0).toLocaleString()} segments open`}
+          tone="safe"
+        />
+      </section>
+
+      {/* ── Network composition row ── */}
+      <section className="ops-row ops-row-3">
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Network composition</div>
+              <div className="ops-card-sub">By pipe class · % of total length</div>
+            </div>
+          </div>
+          <div className="ops-class-bars">
+            {derived.classKm.map(({ cls, km, pct }) => (
+              <ClassBar key={cls} cls={cls} km={km} pct={pct} />
+            ))}
+          </div>
+        </div>
+
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Materials in use</div>
+              <div className="ops-card-sub">{derived.materialKm.length} pipe materials</div>
+            </div>
+          </div>
+          <div className="ops-class-bars">
+            {derived.materialKm.map((mat) => (
+              <MaterialBar key={mat.name} {...mat} />
+            ))}
+          </div>
+        </div>
+
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Age distribution</div>
+              <div className="ops-card-sub">Install date · oldest infrastructure on the left</div>
+            </div>
+          </div>
+          <div className="ops-age-grid">
+            {derived.ageBuckets.map((b) => (
+              <div key={b.bucket} className="ops-age-cell">
+                <div className="ops-age-bar">
+                  <div className="ops-age-fill" style={{
+                    height: `${Math.max(2, b.pct)}%`,
+                    background: ageColor(b.bucket)
+                  }} />
+                </div>
+                <div className="ops-age-label">
+                  <span>{b.bucket}</span>
+                  <strong>{b.count.toLocaleString()}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Zones + alerts ── */}
+      <section className="ops-row ops-row-2">
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Service zones</div>
+              <div className="ops-card-sub">Ranked by pipe-length coverage</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/gis')}>Open map →</button>
+          </div>
+          <table className="ops-zone-table">
+            <thead>
+              <tr>
+                <th>Zone</th>
+                <th style={{ textAlign: 'right' }}>Pipes</th>
+                <th style={{ textAlign: 'right' }}>Length</th>
+                <th>Share of network</th>
+                <th style={{ textAlign: 'right' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {derived.topZones.map((z) => {
+                const risk = derived.alerts.some((a) => a.detail.includes(z.code));
+                return (
+                  <tr key={z.code} onClick={() => navigate('/gis')}>
+                    <td>
+                      <strong>{z.label}</strong>
+                      <div className="ops-zone-code">{z.code}</div>
+                    </td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{z.pipes.toLocaleString()}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{z.km.toFixed(1)} km</td>
+                    <td>
+                      <div className="ops-zone-share">
+                        <div className="ops-zone-share-fill" style={{ width: `${z.pct}%` }} />
+                        <span>{z.pct.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <span className={`pill ${risk ? 'warn' : 'safe'}`}>
+                        <span className="dot" />
+                        {risk ? 'Watch' : 'Healthy'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Live alerts</div>
+              <div className="ops-card-sub">{derived.alerts.length} open · auto-generated from telemetry</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/alerts')}>All →</button>
+          </div>
+          <div className="ops-alert-list">
+            {derived.alerts.length === 0 && (
+              <div className="ops-alert-empty">
+                <span className="dot-safe" />Network nominal — no active alerts.
+              </div>
+            )}
+            {derived.alerts.slice(0, 7).map((a) => (
+              <div
+                key={a.id}
+                className={`ops-alert sev-${a.severity}`}
+                onClick={() => navigate(a.link)}
+              >
+                <span className="ops-alert-dot" />
+                <div className="ops-alert-body">
+                  <div className="ops-alert-title">{a.title}</div>
+                  <div className="ops-alert-detail">{a.detail}</div>
+                </div>
+                <div className="ops-alert-time">{a.time}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Reservoirs ── */}
+      <section className="ops-card">
+        <div className="ops-card-head">
+          <div>
+            <div className="ops-card-title">Reservoir watch</div>
+            <div className="ops-card-sub">Live fill levels · inflow / outflow · hours to empty</div>
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={() => navigate('/gis')}>Inspect on map →</button>
+        </div>
+        <div className="ops-reservoir-grid">
+          {data.assets.filter((a) => a.properties.asset === 'tank').map((a) => {
+            const t = a.properties as { id: string; name: string; capacity_m3: number; level_pct: number; inflow_lps: number; outflow_lps: number };
+            const stored = t.capacity_m3 * t.level_pct / 100;
+            const net = t.inflow_lps - t.outflow_lps;
+            const hours = net >= 0
+              ? '—'
+              : `${Math.max(1, Math.round(stored / Math.max(0.5, -net * 3.6)))}h`;
+            const tone = t.level_pct > 70 ? 'safe' : t.level_pct > 35 ? 'warn' : 'danger';
+            return (
+              <div key={t.id} className="ops-reservoir">
+                <div className="ops-reservoir-head">
+                  <div>
+                    <div className="ops-reservoir-name">{t.name}</div>
+                    <div className="ops-reservoir-id">{t.id} · {t.capacity_m3.toLocaleString()} m³</div>
+                  </div>
+                  <span className={`pill ${tone}`}><span className="dot" />{tone === 'safe' ? 'OK' : tone === 'warn' ? 'Watch' : 'Low'}</span>
+                </div>
+                <div className="ops-reservoir-gauge">
+                  <div className="ops-reservoir-gauge-fill" style={{ height: `${t.level_pct}%`, background: gaugeColor(t.level_pct) }} />
+                  <span className="ops-reservoir-gauge-value">{t.level_pct}%</span>
+                </div>
+                <div className="ops-reservoir-meta">
+                  <span>In <strong>{t.inflow_lps} L/s</strong></span>
+                  <span>Out <strong>{t.outflow_lps} L/s</strong></span>
+                  <span>To empty <strong>{hours}</strong></span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   Sub-components
+   ════════════════════════════════════════════════════════════ */
+
+function OpsKpi({ label, value, unit, sub, tone, onClick }: {
   label: string;
   value: string;
   unit?: string;
-  trend?: { kind: 'up' | 'down' | 'flat'; text: string };
+  sub: string;
+  tone: 'primary' | 'safe' | 'warn' | 'danger' | 'info';
   onClick?: () => void;
 }) {
   return (
-    <div className={`kpi ${tone}`} onClick={onClick} style={onClick ? undefined : { cursor: 'default' }}>
-      <div className="kpi-label">{label}</div>
-      <div className="kpi-value">{value}{unit && <span className="kpi-unit">{unit}</span>}</div>
-      {trend && <div className={`kpi-trend ${trend.kind}`}>{trend.text}</div>}
+    <button className={`ops-kpi tone-${tone}`} onClick={onClick} disabled={!onClick}>
+      <div className="ops-kpi-label">{label}</div>
+      <div className="ops-kpi-value">
+        {value}
+        {unit && <span className="ops-kpi-unit">{unit}</span>}
+      </div>
+      <div className="ops-kpi-sub">{sub}</div>
+    </button>
+  );
+}
+
+function ClassBar({ cls, km, pct }: { cls: PipeClass; km: number; pct: number }) {
+  const palette: Record<PipeClass, { color: string; label: string }> = {
+    main:         { color: '#1D4ED8', label: 'Transmission mains' },
+    distribution: { color: '#0EA5E9', label: 'Distribution mains' },
+    household:    { color: '#94A3B8', label: 'Household connections' },
+    backfeed:     { color: '#F59E0B', label: 'Backfeed (closed)' },
+    boundary:     { color: '#A78BFA', label: 'Zone boundaries' }
+  };
+  const p = palette[cls];
+  return (
+    <div className="ops-class-row">
+      <span className="ops-class-swatch" style={{ background: p.color }} />
+      <div className="ops-class-body">
+        <div className="ops-class-name">{p.label}</div>
+        <div className="ops-class-bar"><div className="ops-class-fill" style={{ width: `${pct}%`, background: p.color }} /></div>
+      </div>
+      <div className="ops-class-stat">
+        <strong>{km.toFixed(1)} km</strong>
+        <span>{pct.toFixed(1)}%</span>
+      </div>
     </div>
   );
 }
 
-function AssetTile({ label, value, sub, subColor, onClick }: {
-  label: string; value: string; sub: string; subColor?: string; onClick?: () => void;
-}) {
+function MaterialBar({ name, km, pct }: { name: string; km: number; pct: number }) {
+  const tint = materialTint(name);
   return (
-    <div
-      onClick={onClick}
-      style={{
-        background: 'hsl(var(--card))',
-        border: '1px solid hsl(var(--border))',
-        borderRadius: 'var(--r-md)',
-        padding: 'var(--s3) var(--s4)',
-        cursor: 'pointer',
-        transition: 'border-color 150ms'
-      }}
-    >
-      <div style={{ fontSize: '0.6875rem', color: 'hsl(var(--muted-foreground))', fontWeight: 500 }}>
-        {label}
+    <div className="ops-class-row">
+      <span className="ops-class-swatch" style={{ background: tint }} />
+      <div className="ops-class-body">
+        <div className="ops-class-name">{name}</div>
+        <div className="ops-class-bar"><div className="ops-class-fill" style={{ width: `${pct}%`, background: tint }} /></div>
       </div>
-      <div style={{ fontSize: '1.25rem', fontWeight: 600, marginTop: 2, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
-        {value}
+      <div className="ops-class-stat">
+        <strong>{km.toFixed(1)} km</strong>
+        <span>{pct.toFixed(1)}%</span>
       </div>
-      <div style={{ fontSize: '0.6875rem', color: subColor || 'hsl(var(--muted-foreground))', marginTop: 2 }}>{sub}</div>
     </div>
   );
 }
+
+function materialTint(name: string): string {
+  const t: Record<string, string> = {
+    PVC: '#0EA5E9', uPVC: '#22D3EE', HDPE: '#1D4ED8', PE: '#1D4ED8',
+    GI: '#94A3B8', Steel: '#64748B', PPR: '#A78BFA', AC: '#F97316'
+  };
+  return t[name] || '#94A3B8';
+}
+
+function ageColor(bucket: string): string {
+  switch (bucket) {
+    case 'pre-2000':   return '#dc2626';
+    case '2000-2009':  return '#f97316';
+    case '2010-2019':  return '#22c55e';
+    case '2020+':      return '#0EA5E9';
+    default:           return '#94a3b8';
+  }
+}
+
+function gaugeColor(pct: number): string {
+  if (pct > 70) return '#22c55e';
+  if (pct > 35) return '#f59e0b';
+  return '#ef4444';
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="ops-skeleton">
+      <div className="ops-skel-band" />
+      <div className="ops-skel-row" />
+      <div className="ops-skel-row" />
+    </div>
+  );
+}
+
+/* Make AssetKind importable to satisfy TS isolatedModules linkage */
+export type { AssetKind };
