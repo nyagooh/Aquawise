@@ -1,0 +1,254 @@
+{
+  "source": "Kisumu Water & Sanitation Co.",
+  "feature_count": 4849,
+  "skipped": 111,
+  "asset_count": 70,
+  "asset_counts": {
+    "tank": 6,
+    "pressure_valve": 18,
+    "meter_valve": 20,
+    "sensor": 26
+  },
+  "by_class": {
+    "backfeed": 35,
+    "distribution": 4034,
+    "main": 108,
+    "household": 663,
+    "boundary": 9
+  },
+  "length_km_by_class": {
+    "backfeed": 17.06,
+    "distribution": 700.86,
+    "main": 39.13,
+    "household": 45.59,
+    "boundary": 0.07
+  },
+  "length_km_by_zone": {
+    "KREKAJ": 174.31,
+    "MYT": 215.62,
+    "MIL": 146.9,
+    "CBD": 166.6,
+    "ME": 36.59,
+    "KRE": 6.91,
+    "MTY": 0.06,
+    "RIAT C": 14.72,
+    "OBA": 22.31,
+    "HDPE": 0.09
+  },
+  "length_km_by_material": {
+    "HDPE": 87.24,
+    "PVC": 407.2,
+    "GI": 67.55,
+    "Steel": 50.29,
+    "AC": 24.63,
+    "PPR": 14.51,
+    "uPVC": 12.62,
+    "PE": 0.05
+  },
+  "top_zones": [
+    [
+      "MYT",
+      1462
+    ],
+    [
+      "MIL",
+      1460
+    ],
+    [
+      "KREKAJ",
+      749
+    ],
+    [
+      "CBD",
+      715
+    ],
+    [
+      "ME",
+      237
+    ],
+    [
+      "OBA",
+      50
+    ],
+    [
+      "RIAT C",
+      31
+    ],
+    [
+      "KRE",
+      24
+    ],
+    [
+      "MTY",
+      1
+    ],
+    [
+      "HDPE",
+      1
+    ]
+  ],
+  "zones_normalized": [
+    [
+      "MYT",
+      1462
+    ],
+    [
+      "MIL",
+      1460
+    ],
+    [
+      "KREKAJ",
+      749
+    ],
+    [
+      "CBD",
+      715
+    ],
+    [
+      "ME",
+      237
+    ],
+    [
+      "OBA",
+      50
+    ],
+    [
+      "RIAT C",
+      31
+    ],
+    [
+      "KRE",
+      24
+    ],
+    [
+      "MTY",
+      1
+    ],
+    [
+      "HDPE",
+      1
+    ]
+  ],
+  "materials": [
+    [
+      "PVC",
+      1603
+    ],
+    [
+      "GI",
+      371
+    ],
+    [
+      "HDPE",
+      285
+    ],
+    [
+      "Steel",
+      168
+    ],
+    [
+      "PPR",
+      159
+    ],
+    [
+      "AC",
+      84
+    ],
+    [
+      "uPVC",
+      24
+    ],
+    [
+      "PE",
+      1
+    ]
+  ],
+  "common_diameters_mm": [
+    [
+      17,
+      1098
+    ],
+    [
+      50,
+      954
+    ],
+    [
+      20,
+      424
+    ],
+    [
+      32,
+      404
+    ],
+    [
+      75,
+      365
+    ],
+    [
+      100,
+      333
+    ],
+    [
+      40,
+      324
+    ],
+    [
+      25,
+      262
+    ],
+    [
+      150,
+      170
+    ],
+    [
+      200,
+      87
+    ],
+    [
+      350,
+      41
+    ],
+    [
+      225,
+      36
+    ]
+  ],
+  "diameter_distribution": {
+    "100-199 mm": 518,
+    "50-99 mm": 1340,
+    "<50 mm": 2517,
+    "200-349 mm": 183,
+    ">=350 mm": 102,
+    "unknown": 189
+  },
+  "age_distribution": {
+    "2010-2019": 2067,
+    "pre-2000": 1,
+    "2020+": 529,
+    "unknown": 2251,
+    "2000-2009": 1
+  },
+  "status_counts": {
+    "closed": 37,
+    "open": 4665,
+    "unknown": 147
+  },
+  "service_counts": {
+    "pending": 9,
+    "in-service": 4661,
+    "out-of-service": 24,
+    "unknown": 155
+  },
+  "total_length_m": 802724.1,
+  "total_length_km": 802.72,
+  "bbox": [
+    34.24681143817533,
+    -0.2779620675373075,
+    35.019811484787965,
+    0.047248186133649055
+  ],
+  "center": [
+    34.63331146148165,
+    -0.11535694070182922
+  ]
+}
