@@ -1769,6 +1769,33 @@ button { font-family: inherit; }
   width: 5px; height: 5px; border-radius: 50%; background: hsl(var(--safe));
 }
 
+/* ─── Landing responsive container ───
+   Desktop (≥1440px): max-w 1240px, side pad 64–80px
+   Laptop / tablet (768–1439px): side pad 32–48px
+   Mobile (<768px): side pad 16–24px
+*/
+:root {
+  --landing-max-w: 1240px;
+  --landing-pad-x: 20px;
+}
+@media (min-width: 768px)  { :root { --landing-pad-x: 40px; } }
+@media (min-width: 1440px) { :root { --landing-pad-x: 72px; } }
+
+.landing-nav        { padding: var(--s3) var(--landing-pad-x); }
+.hero               { padding: 96px var(--landing-pad-x) var(--s10); max-width: var(--landing-max-w); }
+.hero-preview       { max-width: var(--landing-max-w); padding: 0 var(--landing-pad-x); }
+.testimonial-row    { max-width: var(--landing-max-w); padding: 0 var(--landing-pad-x); }
+.story-stacked      { padding: var(--s16) var(--landing-pad-x); }
+.story-stacked-inner{ max-width: var(--landing-max-w); }
+.hiw-section        { max-width: var(--landing-max-w); padding: var(--s16) var(--landing-pad-x); }
+.feat-section       { max-width: var(--landing-max-w); padding: var(--s12) var(--landing-pad-x) var(--s16); }
+.feat-section > div { max-width: 100%; padding: var(--s16) 0; }
+.final-cta-section  { padding: var(--s16) var(--landing-pad-x); }
+.landing-footer     { padding: var(--s6) var(--landing-pad-x); }
+
+@media (max-width: 900px) { .hero-preview { padding: 0 var(--landing-pad-x); } }
+@media (max-width: 560px) { .hero-preview { padding: 0 var(--landing-pad-x); } }
+
 /* ============================================================
    Demo launcher modal + upload zone
    ============================================================ */
