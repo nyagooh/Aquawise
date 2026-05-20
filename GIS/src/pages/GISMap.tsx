@@ -1,12 +1,3 @@
-/**
- * GISMap — real Kisumu water supply network.
- *
- * Renders 4,951 pipe segments from the converted shapefile across five
- * operational layers (mains, distribution, service, backfeed, zone boundary)
- * plus a synthesized telemetry overlay (tanks, pressure valves, meter
- * valves, flow+pressure sensors). Click any asset to see its full operational
- * profile in the side panel.
- */
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
@@ -27,6 +18,91 @@ import {
   STATUS_COLOR,
   zoneLabel
 } from '../data/network';
+import { useNetwork } from '../context/NetworkContext';
+import { usePipes } from '../hooks/useNetworkQueries';
+import type { PipeFeature as ApiPipeFeature, GeoJSONGeometry } from '../types/api';
+
+/* ── API → local pipe adapter ── */
+
+function deriveUiClass(diameter_mm: number | null, status: string): PipeClass {
+  if (status === 'closed' || status === 'out_of_service') return 'backfeed';
+  if ((diameter_mm ?? 0) >= 200) return 'main';
+  if ((diameter_mm ?? 0) >= 75) return 'distribution';
+  return 'household';
+}
+
+function adaptApiPipes(features: ApiPipeFeature[]): PipeFeature[] {
+  const result: PipeFeature[] = [];
+  for (const feat of features) {
+    const p = feat.properties;
+    const ui_class = deriveUiClass(p.diameter_mm, p.status);
+    const props = {
+      id: p.external_id || p.id,
+      class: (ui_class === 'main' ? 'transmission' : ui_class === 'distribution' ? 'distribution' : 'service') as PipeFeature['properties']['class'],
+      ui_class,
+      network_raw: null,
+      material: p.material,
+      diameter_mm: p.diameter_mm,
+      length_m: p.length_m,
+      status: (p.status === 'open' || p.status === 'pending' ? 'open' : 'closed') as PipeFeature['properties']['status'],
+      service: (p.status === 'out_of_service' ? 'out-of-service' : 'in-service') as PipeFeature['properties']['service'],
+      zone: p.zone_id,
+      installed: p.installation_year,
+      node_from: null,
+      node_to: null,
+      remarks: null,
+      layer: null,
+    };
+    const geom = feat.geometry as GeoJSONGeometry;
+    if (geom.type === 'MultiLineString') {
+      for (const coords of (geom as { type: 'MultiLineString'; coordinates: [number, number][][] }).coordinates) {
+        result.push({ type: 'Feature', id: props.id, geometry: { type: 'LineString', coordinates: coords }, properties: props });
+      }
+    } else if (geom.type === 'LineString') {
+      result.push({ type: 'Feature', id: props.id, geometry: { type: 'LineString', coordinates: (geom as { type: 'LineString'; coordinates: [number, number][] }).coordinates }, properties: props });
+    }
+  }
+  return result;
+}
+
+function buildMetaFromApi(network: { total_length_km: number | null; total_pipes: number; bbox: GeoJSONGeometry | null; name: string }, pipes: PipeFeature[]): NetworkData['meta'] {
+  let bboxArr: [number, number, number, number] = [36.7, -0.2, 36.9, 0.0];
+  const bbox = network.bbox;
+  if (bbox && bbox.type === 'Polygon') {
+    const coords = (bbox as { type: 'Polygon'; coordinates: [number, number][][] }).coordinates[0];
+    const lons = coords.map((c) => c[0]);
+    const lats = coords.map((c) => c[1]);
+    bboxArr = [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)];
+  }
+  const center: [number, number] = [(bboxArr[0] + bboxArr[2]) / 2, (bboxArr[1] + bboxArr[3]) / 2];
+  const byClass: Partial<Record<PipeClass, number>> = {};
+  for (const p of pipes) {
+    const k = p.properties.ui_class;
+    byClass[k] = (byClass[k] ?? 0) + 1;
+  }
+  return {
+    source: network.name,
+    feature_count: pipes.length,
+    asset_count: 0,
+    asset_counts: {},
+    by_class: byClass,
+    length_km_by_class: {},
+    length_km_by_zone: {},
+    length_km_by_material: {},
+    top_zones: [],
+    zones_normalized: [],
+    materials: [],
+    common_diameters_mm: [],
+    diameter_distribution: {},
+    age_distribution: {},
+    status_counts: { open: 0, closed: 0, unknown: 0 },
+    service_counts: { 'in-service': 0, 'out-of-service': 0, pending: 0, unknown: 0 },
+    total_length_m: (network.total_length_km ?? 0) * 1000,
+    total_length_km: network.total_length_km ?? 0,
+    bbox: bboxArr,
+    center,
+  };
+}
 
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -63,6 +139,9 @@ export default function GISMap() {
   const [layers, setLayers] = useState<LayerVis>(DEFAULT_LAYERS);
   const [focus, setFocus] = useState<Focus>(null);
 
+  const { activeNetwork } = useNetwork();
+  const { data: apiPipesFC, isLoading: apiLoading, error: apiError } = usePipes(activeNetwork?.id ?? null);
+
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
@@ -70,9 +149,15 @@ export default function GISMap() {
   const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
   const focusOutlineRef = useRef<L.Layer | null>(null);
 
-  /* ── 1. fetch network ── */
+  /* ── 1. fetch network — API when activeNetwork set, static otherwise ── */
   useEffect(() => {
+    if (activeNetwork) {
+      // API mode — driven by the apiPipesFC query below
+      setLoadError(null);
+      return;
+    }
     let alive = true;
+    setNetwork(null);
     loadNetwork()
       .then((data) => { if (alive) setNetwork(data); })
       .catch((err) => {
@@ -80,7 +165,27 @@ export default function GISMap() {
         if (alive) setLoadError(err.message || 'Unable to load network data.');
       });
     return () => { alive = false; };
-  }, []);
+  }, [activeNetwork]);
+
+  /* Build NetworkData from API result */
+  useEffect(() => {
+    if (!activeNetwork) return;
+    if (apiError) {
+      setLoadError((apiError as Error).message || 'Unable to load network from API.');
+      return;
+    }
+    if (!apiPipesFC) return;
+    const pipes = adaptApiPipes(apiPipesFC.features);
+    const meta = buildMetaFromApi(activeNetwork, pipes);
+    // Destroy existing map so it re-initialises with new data
+    if (leafletRef.current) {
+      leafletRef.current.remove();
+      leafletRef.current = null;
+      layerGroupsRef.current = {};
+      tileRef.current = null;
+    }
+    setNetwork({ pipes, assets: [], meta });
+  }, [activeNetwork, apiPipesFC, apiError]);
 
   /* ── 2. initialise map once we have data ── */
   useEffect(() => {
@@ -321,15 +426,23 @@ export default function GISMap() {
   }, [network]);
 
   return (
-    <Shell active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" pagePadding={false} hideRightRail>
+    <Shell active="gis" title="GIS Map" sub={activeNetwork ? `${activeNetwork.name} · live operational view` : 'Kisumu Water Supply Network · demo view'} pagePadding={false} hideRightRail>
       <div className="gis-canvas gis-canvas--real">
         <div ref={mapRef} className="gis-leaflet" />
 
-        {!network && !loadError && (
+        {(!network && !loadError) && (
           <div className="map-loading">
             <div className="map-loading-spinner" />
-            <div className="map-loading-text">Loading Kisumu water network …</div>
-            <div className="map-loading-sub">4,951 polylines · reprojecting UTM 36S → WGS84</div>
+            <div className="map-loading-text">
+              {activeNetwork && apiLoading
+                ? `Loading ${activeNetwork.name} …`
+                : 'Loading water network …'}
+            </div>
+            <div className="map-loading-sub">
+              {activeNetwork
+                ? `${activeNetwork.total_pipes.toLocaleString()} pipes · fetching from API`
+                : '4,951 polylines · reprojecting UTM 36S → WGS84'}
+            </div>
           </div>
         )}
         {loadError && (
