@@ -1,8 +1,15 @@
 from .base import *  # noqa: F401, F403
+import os  # noqa: E402
 
 DEBUG = True
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+# Run Celery tasks synchronously in-process when Redis is not available.
+# Set REDIS_URL in your .env to switch to a real broker for testing async behaviour.
+if not os.environ.get("REDIS_URL"):
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 INSTALLED_APPS += ["debug_toolbar"]  # noqa: F405
 

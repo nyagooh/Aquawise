@@ -109,7 +109,7 @@ def _normalize_node_type(val):
     return Node.NodeType.JUNCTION
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, ignore_result=True)
 def ingest_shapefile(self, upload_id: str):
     try:
         upload = NetworkUpload.objects.get(id=upload_id)

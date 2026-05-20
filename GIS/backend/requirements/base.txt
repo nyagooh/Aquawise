@@ -10,7 +10,7 @@ channels[daphne]>=4.0
 channels-redis>=4.2
 
 # Geospatial
-GDAL>=3.0
+GDAL==3.8.4
 geopandas>=0.14
 fiona>=1.9
 shapely>=2.0

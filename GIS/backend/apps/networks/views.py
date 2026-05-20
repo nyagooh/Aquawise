@@ -65,7 +65,12 @@ class NetworkUploadView(APIView):
 
         if ext == "zip":
             from .tasks import ingest_shapefile
-            ingest_shapefile.delay(str(upload.id))
+            try:
+                ingest_shapefile.delay(str(upload.id))
+            except Exception:
+                # Redis unavailable — task will not run until broker is up.
+                # Upload record is saved; operator can re-queue manually.
+                pass
         # EPANET (.inp) ingestion task — TODO
 
         return Response({"upload_id": upload.id, "status": upload.status}, status=status.HTTP_202_ACCEPTED)
