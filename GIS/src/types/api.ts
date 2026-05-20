@@ -109,6 +109,30 @@ export interface NetworkStats {
   total_length_km: number | null;
 }
 
+export interface MaterialBreakdown {
+  material: PipeMaterial;
+  count: number;
+  length_km: number;
+}
+
+export interface ZoneBreakdown {
+  id: string;
+  name: string;
+  code: string;
+  pipe_count: number;
+  length_km: number;
+}
+
+export interface EnhancedNetworkStats {
+  total_pipes: number;
+  total_nodes: number;
+  total_length_km: number | null;
+  materials_breakdown: MaterialBreakdown[];
+  status_breakdown: Partial<Record<PipeStatus, number>>;
+  age_distribution: Record<string, number>;
+  zones_breakdown: ZoneBreakdown[];
+}
+
 export type PipeMaterial = 'PVC' | 'GI' | 'HDPE' | 'Steel' | 'PPR' | 'CI' | 'AC' | 'Unknown';
 export type PipeStatus = 'open' | 'closed' | 'out_of_service' | 'pending';
 

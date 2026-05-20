@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { NetworkProvider } from './context/NetworkContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
@@ -20,7 +21,7 @@ function ProtectedApp() {
       <Route path="/demo" element={<DemoHub />} />
       <Route path="/demo/upload" element={<DemoHub />} />
 
-      {/* Protected routes */}
+      {/* Protected routes share a single NetworkProvider so active network persists across pages */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/gis"       element={<ProtectedRoute><GISMap /></ProtectedRoute>} />
       <Route path="/alerts"    element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
@@ -36,7 +37,9 @@ function ProtectedApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <ProtectedApp />
+      <NetworkProvider>
+        <ProtectedApp />
+      </NetworkProvider>
     </AuthProvider>
   );
 }
