@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path("", views.NetworkListView.as_view(), name="network-list"),
     path("upload/", views.NetworkUploadView.as_view(), name="network-upload"),
     path("<uuid:pk>/", views.WaterNetworkDetailView.as_view(), name="network-detail"),
     path("<uuid:pk>/validate/", views.NetworkValidationReportView.as_view(), name="network-validate"),

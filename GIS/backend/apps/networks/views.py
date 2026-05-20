@@ -4,12 +4,33 @@ import os
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.contrib.gis.geos import Polygon
+from django.db.models import Case, CharField, Count, Sum, Value, When
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import Asset, NetworkUpload, Node, Pipe, WaterNetwork, Zone
+
+
+class NetworkListView(APIView):
+    def get(self, request):
+        networks = WaterNetwork.objects.filter(
+            organisation=request.user.organisation
+        ).order_by("-created_at")
+        return Response([
+            {
+                "id": str(n.id),
+                "name": n.name,
+                "total_pipes": n.total_pipes,
+                "total_nodes": n.total_nodes,
+                "total_length_km": n.total_length_km,
+                "source_crs": n.source_crs,
+                "bbox": json.loads(n.bbox.geojson) if n.bbox else None,
+                "created_at": n.created_at,
+            }
+            for n in networks
+        ])
 
 
 class NetworkUploadView(APIView):
@@ -228,8 +249,63 @@ class NetworkStatsView(APIView):
             network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
         except WaterNetwork.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
+
+        pipes_qs = Pipe.objects.filter(network=network)
+
+        materials = list(
+            pipes_qs.values("material")
+            .annotate(count=Count("id"), length_km=Sum("length_m"))
+            .order_by("-count")
+        )
+
+        status_breakdown = {
+            row["status"]: row["count"]
+            for row in pipes_qs.values("status").annotate(count=Count("id"))
+        }
+
+        age_buckets = list(
+            pipes_qs.annotate(
+                bucket=Case(
+                    When(installation_year__lt=2000, then=Value("pre-2000")),
+                    When(installation_year__lt=2010, then=Value("2000-2009")),
+                    When(installation_year__lt=2020, then=Value("2010-2019")),
+                    When(installation_year__isnull=False, then=Value("2020+")),
+                    default=Value("unknown"),
+                    output_field=CharField(),
+                )
+            )
+            .values("bucket")
+            .annotate(count=Count("id"))
+        )
+        age_distribution = {row["bucket"]: row["count"] for row in age_buckets}
+
+        zones_breakdown = []
+        for zone in Zone.objects.filter(network=network):
+            agg = pipes_qs.filter(zone=zone).aggregate(
+                count=Count("id"), total_m=Sum("length_m")
+            )
+            zones_breakdown.append({
+                "id": str(zone.id),
+                "name": zone.name,
+                "code": zone.code,
+                "pipe_count": agg["count"] or 0,
+                "length_km": round((agg["total_m"] or 0) / 1000, 3),
+            })
+        zones_breakdown.sort(key=lambda z: z["length_km"], reverse=True)
+
         return Response({
             "total_pipes": network.total_pipes,
             "total_nodes": network.total_nodes,
             "total_length_km": network.total_length_km,
+            "materials_breakdown": [
+                {
+                    "material": m["material"],
+                    "count": m["count"],
+                    "length_km": round((m["length_km"] or 0) / 1000, 3),
+                }
+                for m in materials
+            ],
+            "status_breakdown": status_breakdown,
+            "age_distribution": age_distribution,
+            "zones_breakdown": zones_breakdown,
         })
