@@ -139,7 +139,7 @@ export default function GISMap() {
   const [layers, setLayers] = useState<LayerVis>(DEFAULT_LAYERS);
   const [focus, setFocus] = useState<Focus>(null);
 
-  const { activeNetwork } = useNetwork();
+  const { activeNetwork, isLoading: networksLoading, hasNetworks } = useNetwork();
   const { data: apiPipesFC, isLoading: apiLoading, error: apiError } = usePipes(activeNetwork?.id ?? null);
 
   const mapRef = useRef<HTMLDivElement>(null);
@@ -149,13 +149,14 @@ export default function GISMap() {
   const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
   const focusOutlineRef = useRef<L.Layer | null>(null);
 
-  /* ── 1. fetch network — API when activeNetwork set, static otherwise ── */
+  /* ── 1. fetch network — API when activeNetwork set, static when demo mode ── */
   useEffect(() => {
     if (activeNetwork) {
-      // API mode — driven by the apiPipesFC query below
       setLoadError(null);
       return;
     }
+    // Don't load demo data while networks are still fetching, or if user has no networks
+    if (networksLoading || !hasNetworks) return;
     let alive = true;
     setNetwork(null);
     loadNetwork()
@@ -165,7 +166,7 @@ export default function GISMap() {
         if (alive) setLoadError(err.message || 'Unable to load network data.');
       });
     return () => { alive = false; };
-  }, [activeNetwork]);
+  }, [activeNetwork, networksLoading, hasNetworks]);
 
   /* Build NetworkData from API result */
   useEffect(() => {
@@ -426,8 +427,11 @@ export default function GISMap() {
   }, [network]);
 
   return (
-    <Shell active="gis" title="GIS Map" sub={activeNetwork ? `${activeNetwork.name} · live operational view` : 'Kisumu Water Supply Network · demo view'} pagePadding={false} hideRightRail>
-      <div className="gis-canvas gis-canvas--real">
+    <Shell active="gis" title="GIS Map" sub={activeNetwork ? `${activeNetwork.name} · live operational view` : hasNetworks ? 'Kisumu Water Supply Network · demo view' : 'Upload a network to get started'} pagePadding={false} hideRightRail>
+      {!networksLoading && !hasNetworks && !activeNetwork ? (
+        <GISMapEmpty />
+      ) : null}
+      <div className="gis-canvas gis-canvas--real" style={(!networksLoading && !hasNetworks && !activeNetwork) ? { display: 'none' } : undefined}>
         <div ref={mapRef} className="gis-leaflet" />
 
         {(!network && !loadError) && (
@@ -474,6 +478,32 @@ export default function GISMap() {
         <AssetPanel feature={focus.feature} onClose={() => setFocus(null)} />
       )}
     </Shell>
+  );
+}
+
+/* ─────────────────────────────────────────
+   Empty state — shown when user has no networks
+   ───────────────────────────────────────── */
+
+function GISMapEmpty() {
+  return (
+    <div className="empty-state" style={{ position: 'absolute', inset: 0, zIndex: 10 }}>
+      <div className="empty-state-icon">
+        <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+          <line x1="9" y1="3" x2="9" y2="18" />
+          <line x1="15" y1="6" x2="15" y2="21" />
+        </svg>
+      </div>
+      <h2 className="empty-state-title">No network to display</h2>
+      <p className="empty-state-sub">
+        Upload your water network shapefile to see pipes, zones, and assets on the live map.
+      </p>
+      <div className="empty-state-actions">
+        <a href="/demo/upload" className="btn btn-primary btn-lg">Upload your network →</a>
+        <a href="/demo" className="btn btn-ghost btn-lg">Explore with demo data</a>
+      </div>
+    </div>
   );
 }
 

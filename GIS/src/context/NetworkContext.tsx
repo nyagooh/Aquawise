@@ -10,12 +10,13 @@ interface NetworkContextValue {
   activeNetwork: WaterNetwork | null;
   setActiveNetwork: (network: WaterNetwork | null) => void;
   isLoading: boolean;
+  hasNetworks: boolean; // true once fetch completed and at least one network exists
 }
 
 const NetworkContext = createContext<NetworkContextValue | null>(null);
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
-  const { data: networks = [], isLoading } = useNetworks();
+  const { data: networks = [], isLoading, isFetched } = useNetworks();
   const [activeNetwork, setActiveNetworkState] = useState<WaterNetwork | null>(null);
 
   // Rehydrate from localStorage, then confirm it's in the fetched list
@@ -40,7 +41,7 @@ export function NetworkProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <NetworkContext.Provider value={{ networks, activeNetwork, setActiveNetwork, isLoading }}>
+    <NetworkContext.Provider value={{ networks, activeNetwork, setActiveNetwork, isLoading, hasNetworks: isFetched && networks.length > 0 }}>
       {children}
     </NetworkContext.Provider>
   );

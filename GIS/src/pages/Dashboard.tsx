@@ -28,16 +28,18 @@ type DerivedAlert = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { activeNetwork } = useNetwork();
+  const { activeNetwork, isLoading: networksLoading, hasNetworks } = useNetwork();
   const { data: apiStats, isLoading: statsLoading } = useNetworkStats(activeNetwork?.id ?? null);
 
   const [staticData, setStaticData] = useState<NetworkData | null>(null);
   useEffect(() => {
-    if (activeNetwork) return;
+    // Only load demo data when the user explicitly has networks but none is active yet,
+    // never for a fresh account with no networks.
+    if (activeNetwork || !hasNetworks) return;
     let alive = true;
     loadNetwork().then((d) => { if (alive) setStaticData(d); });
     return () => { alive = false; };
-  }, [activeNetwork]);
+  }, [activeNetwork, hasNetworks]);
 
   const derived = useMemo(() => {
     if (activeNetwork && apiStats) return computeApiDerived(activeNetwork, apiStats);
@@ -45,16 +47,19 @@ export default function Dashboard() {
     return null;
   }, [activeNetwork, apiStats, staticData]);
 
-  const isLoading = activeNetwork ? statsLoading : !staticData;
+  const noNetworks = !networksLoading && !hasNetworks;
+  const isLoading = networksLoading || (activeNetwork ? statsLoading : !staticData && hasNetworks);
   const subTitle = activeNetwork && apiStats
     ? `${activeNetwork.name} · ${activeNetwork.total_pipes.toLocaleString()} segments · ${(apiStats.total_length_km ?? 0).toFixed(0)} km`
     : staticData
       ? `Kisumu Water Network · ${staticData.meta.feature_count.toLocaleString()} segments · ${staticData.meta.total_length_km.toFixed(0)} km`
-      : 'Loading network…';
+      : 'Operations Dashboard';
 
   return (
     <Shell active="dashboard" title="Operations Dashboard" sub={subTitle}>
-      {isLoading || !derived ? (
+      {noNetworks ? (
+        <DashboardEmpty navigate={navigate} />
+      ) : isLoading || !derived ? (
         <DashboardSkeleton />
       ) : activeNetwork ? (
         <DashboardApiBody network={activeNetwork} stats={apiStats!} derived={derived} navigate={navigate} />
@@ -62,6 +67,32 @@ export default function Dashboard() {
         <DashboardBody data={staticData!} derived={derived} navigate={navigate} />
       )}
     </Shell>
+  );
+}
+
+function DashboardEmpty({ navigate }: { navigate: (path: string) => void }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon">
+        <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+          <circle cx={12} cy={10} r={3} />
+        </svg>
+      </div>
+      <h2 className="empty-state-title">No network yet</h2>
+      <p className="empty-state-sub">
+        Upload your water network shapefile to start monitoring pipes, sensors, and alerts.
+        It takes less than a minute.
+      </p>
+      <div className="empty-state-actions">
+        <button className="btn btn-primary btn-lg" onClick={() => navigate('/demo/upload')}>
+          Upload your network →
+        </button>
+        <button className="btn btn-ghost btn-lg" onClick={() => navigate('/demo')}>
+          Explore with demo data
+        </button>
+      </div>
+    </div>
   );
 }
 
