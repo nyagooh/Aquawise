@@ -47,9 +47,8 @@ export default function Landing() {
             {mode === 'dark' ? <SunIcon /> : <MoonIcon />}
             {mode === 'dark' ? 'Light' : 'Dark'}
           </button>
-          <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>
-            Explore Live Demo →
-          </button>
+          <Link to="/login" className="btn btn-ghost btn-sm" style={{ fontWeight: 500 }}>Sign in</Link>
+          <Link to="/signup" className="btn btn-primary btn-sm">Get started →</Link>
         </div>
       </nav>
 
@@ -73,7 +72,7 @@ export default function Landing() {
         </p>
         <div className="hero-ctas reveal reveal-delay-3">
           <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-          <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
+          <Link to="/login" className="btn btn-ghost btn-lg">Sign in</Link>
         </div>
         <div className="hero-meta reveal reveal-delay-3">
           <span><span className="dot" />Free 30-minute demo</span>
@@ -360,7 +359,7 @@ export default function Landing() {
           </p>
           <div className="final-cta-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-            <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
+            <Link to="/login" className="btn btn-ghost btn-lg">Sign in →</Link>
           </div>
           <div className="final-trust">
             <span><span className="dot-safe" />Free 30-minute demo</span>

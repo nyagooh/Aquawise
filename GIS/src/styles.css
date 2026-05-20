@@ -3949,3 +3949,26 @@ button { font-family: inherit; }
   width: 100%;
   margin-top: 0.5rem;
 }
+
+.login-divider {
+  height: 1px;
+  background: hsl(var(--border));
+  margin: 1.5rem 0 1rem;
+}
+
+.login-signup-row {
+  font-size: 0.8125rem;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  margin: 0;
+}
+
+.login-signup-link {
+  color: hsl(var(--primary));
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.login-signup-link:hover {
+  text-decoration: underline;
+}

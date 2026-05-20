@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -87,6 +87,12 @@ export default function Login() {
             {isSubmitting ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <div className="login-divider" />
+        <p className="login-signup-row">
+          Don't have an account?{' '}
+          <Link to="/signup" className="login-signup-link">Sign up →</Link>
+        </p>
       </div>
     </div>
   );

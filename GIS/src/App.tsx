@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import { NetworkProvider } from './context/NetworkContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
 import Landing from './pages/Landing';
 import DemoHub from './pages/DemoHub';
 import Dashboard from './pages/Dashboard';
@@ -18,6 +19,7 @@ function ProtectedApp() {
       {/* Public routes */}
       <Route path="/" element={<Landing />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
       <Route path="/demo" element={<DemoHub />} />
       <Route path="/demo/upload" element={<DemoHub />} />
 
