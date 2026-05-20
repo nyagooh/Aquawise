@@ -1,6 +1,7 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { alerts as allAlerts } from '../data';
 import { useTheme } from '../theme';
+import { useAuth } from '../context/AuthContext';
 
 type Active = 'dashboard' | 'gis' | 'alerts' | 'nrw' | 'sensors' | 'reports';
 
@@ -24,7 +25,20 @@ const ITEMS: Array<{ key: Active; label: string; href: string }> = [
 
 export function Sidebar({ active, collapsed, onToggle }: { active: Active; collapsed?: boolean; onToggle?: () => void }) {
   const { mode, toggle } = useTheme();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const activeAlertCount = allAlerts.filter(a => a.status === 'active').length;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
+  const displayName = user
+    ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
+    : 'Demo User';
+  const displaySub = user?.organisation?.name ?? user?.role ?? 'Read-only sandbox';
+  const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <Link to="/" className="sb-brand" style={{ color: 'inherit' }}>
@@ -73,12 +87,22 @@ export function Sidebar({ active, collapsed, onToggle }: { active: Active; colla
           <span className="sb-text">{mode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
         </button>
         <div className="sb-user">
-          <div className="sb-avatar">DM</div>
+          <div className="sb-avatar">{initials}</div>
           <div className="sb-user-meta sb-text">
-            <span className="sb-user-name">Demo User</span>
-            <span className="sb-user-sub">Read-only sandbox</span>
+            <span className="sb-user-name">{displayName}</span>
+            <span className="sb-user-sub">{displaySub}</span>
           </div>
         </div>
+        {user && (
+          <button className="theme-toggle" onClick={handleLogout} title="Sign out">
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1={21} y1={12} x2={9} y2={12} />
+            </svg>
+            <span className="sb-text">Sign out</span>
+          </button>
+        )}
       </div>
     </aside>
   );
