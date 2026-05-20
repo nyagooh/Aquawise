@@ -14,7 +14,7 @@
 Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5
 Foundation   Spatial     Hydraulic   Real-Time   ML &
 & Ingestion  Network     Engine      Operations  Intelligence
-             Viewer
+    ✅         Viewer
 ```
 
 Each phase ends with a working API that the frontend can consume — no phase is "backend only with nothing to show."
@@ -32,39 +32,55 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [x] GeoDjango configured with PostGIS (PostgreSQL 16, port 5433)
 - [x] Docker Compose: PostgreSQL+PostGIS, Redis, Django, Celery, MinIO, Mosquitto
 - [x] `.env` pattern set up (django-environ, split settings base/dev/prod)
-- [x] JWT authentication wired (`/api/v1/auth/token/`)
+- [x] JWT authentication wired (`/api/v1/auth/token/`, `/api/v1/auth/token/refresh/`)
+- [x] `GET /api/v1/auth/me/` — returns authenticated user profile (id, username, email, role, organisation) *(added — was not in original plan)*
 - [x] Multi-tenant `Organisation` + `Project` + `CustomUser` (role-based) models
 - [x] All migrations applied — 26 migrations across 6 apps
 - [x] Dev data seeded (KIWASCO org, admin user, Kisumu project)
+- [x] DRF router wired with versioned URL includes at `/api/v1/` *(added — was not in original plan)*
 - [ ] `ruff` linting configured
 
-#### 1.2 Shapefile Ingestion Pipeline (Day 3–6) 🔧
-- [x] `POST /api/v1/networks/upload/` endpoint — file validation stub wired
-- [ ] Celery task: unzip → detect geometry type → validate schema (required columns)
-- [ ] Auto-detect and reproject any CRS → EPSG:4326 using `pyproj`
-- [ ] Roughness fill: populate zero-roughness values from material lookup table (Hazen-Williams defaults: PVC=150, GI=100, Steel=95, HDPE=140)
+#### 1.2 Shapefile Ingestion Pipeline ✅
+- [x] `POST /api/v1/networks/upload/` endpoint — accepts `.zip` shapefile, saves to `media/uploads/<org_id>/<upload_id>.zip`
+- [x] Celery task `ingest_shapefile`: unzip → classify `.shp` by geometry type (line→Pipe, point→Node, polygon→Zone) → validate schema
+- [x] Auto-detect and reproject any CRS → EPSG:4326 using `pyproj` + `shapely.ops.transform`
+- [x] Roughness fill: populate zero-roughness values from material lookup table (Hazen-Williams defaults: PVC=150, GI=100, Steel=95, HDPE=140, PPR=140, CI=130, AC=120)
+- [x] Fuzzy field-name matching for common column aliases (e.g. `diam`, `diameter_mm`, `DIAMETER`)
+- [x] Bulk inserts via `bulk_create(batch_size=500)` for performance
+- [x] PostGIS `ST_Intersects` zone assignment after pipe ingestion
+- [x] `ST_Length(geography)` for accurate total network length
+- [x] `ST_Extent` for bounding box computation
+- [x] Upload status lifecycle: `pending → processing → complete / complete_warnings / failed` with `validation_report` JSON
 - [ ] Topology repair: flag disconnected segments, duplicate geometries
-- [ ] Store `Pipe`, `Node`, `Zone` into PostGIS
-- [ ] `GET /api/v1/networks/{id}/validate/` — returns structured validation report JSON
 
-#### 1.3 EPANET Ingestion (Day 7–9) ⬜
+#### 1.3 EPANET Ingestion ⬜
 - [ ] `POST /api/v1/networks/upload/` — also accepts `.inp` files
 - [ ] Parse with `wntr`: extract pipe graph, node coordinates, demands
 - [ ] Map EPANET network onto same `Pipe`/`Node` schema as shapefile path
 - [ ] Link EPANET nodes to spatial positions (geocode if coordinates present)
 
-#### 1.4 Network API (Day 10–12) 🔧
-- [x] URL routes wired for pipes, nodes, zones, assets, stats
-- [ ] `GET /api/v1/networks/{id}/pipes/` — real GeoJSON with `bbox` and `zone` query params
-- [ ] `GET /api/v1/networks/{id}/nodes/` — real GeoJSON
-- [ ] `GET /api/v1/networks/{id}/stats/` — summary (total pipes, length, materials breakdown, data quality flags)
+#### 1.4 Network API ✅
+- [x] `GET /api/v1/networks/` — lists all networks for the authenticated organisation (`NetworkListView`) *(added — was listed as "URL route wired" only)*
+- [x] `GET /api/v1/networks/{id}/` — network detail with `source_crs` and `bbox` GeoJSON
+- [x] `GET /api/v1/networks/{id}/pipes/` — GeoJSON `FeatureCollection` with `?bbox=minx,miny,maxx,maxy` and `?zone=<uuid>` params; uses `.iterator(chunk_size=500)`
+- [x] `GET /api/v1/networks/{id}/nodes/` — GeoJSON `FeatureCollection` with same bbox/zone filters
+- [x] `GET /api/v1/networks/{id}/zones/` — GeoJSON `FeatureCollection` of zone polygons
+- [x] `GET /api/v1/networks/{id}/assets/` — GeoJSON `FeatureCollection` with bbox filter
+- [x] `GET /api/v1/networks/{id}/validate/` — structured validation report JSON (upload status polling)
+- [x] `GET /api/v1/networks/{id}/stats/` — enhanced stats with full breakdown *(extended beyond original plan)*:
+  - `total_pipes`, `total_nodes`, `total_length_km`
+  - `materials_breakdown` — per-material pipe count and length km
+  - `status_breakdown` — per-status pipe count (open/closed/out_of_service/pending)
+  - `age_distribution` — pipe count bucketed by install decade (pre-2000, 2000-2009, 2010-2019, 2020+, unknown) via Django ORM `Case/When`
+  - `zones_breakdown` — per-zone pipe count and length km
+- [x] Trained ML model artifacts committed: Random Forest water quality predictors + Isolation Forest anomaly detector *(added — not in original plan)*
 
-#### 1.5 Tests & Docs (Day 13–14) ⬜
+#### 1.5 Tests & Docs ⬜
 - [ ] Pytest suite for upload, validation, and API endpoints
 - [ ] Kisumu water supply network used as integration test fixture
 - [x] OpenAPI schema auto-generated via DRF spectacular (`/api/docs/`)
 
-**Phase 1 success criteria:** Upload the Kisumu shapefile, get back a clean GeoJSON response with pipes coloured by material, and a validation report listing roughness gaps.
+**Phase 1 success criteria:** ✅ Upload the Kisumu shapefile, get back a clean GeoJSON response with pipes coloured by material, and a validation report listing roughness gaps.
 
 ---
 
@@ -81,9 +97,10 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [ ] Nearest pipe/node to a coordinate
 
 #### 2.2 Asset Management ⬜
-- [x] `Asset` model defined (pumps, valves, meters, treatment plants, boreholes, intakes)
+- [x] `Asset` model defined (pumps, valves, meters, treatment plants, boreholes, intakes, storage tanks)
+- [x] `GET /api/v1/networks/{id}/assets/` — GeoJSON with asset type symbology hints *(already implemented in Phase 1)*
 - [ ] `POST /api/v1/networks/{id}/assets/` — add asset with lat/lon + type
-- [ ] `GET /api/v1/networks/{id}/assets/` — GeoJSON with asset type symbology hints
+- [ ] `PATCH/DELETE /api/v1/networks/{id}/assets/{id}/` — edit + remove asset
 
 #### 2.3 Network Topology ⬜
 - [ ] Connectivity graph built with `networkx` from `Pipe` adjacency
@@ -92,7 +109,8 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 #### 2.4 Service Zones ⬜
 - [x] `Zone` model defined with geometry
-- [ ] `Zone` CRUD endpoints
+- [x] `GET /api/v1/networks/{id}/zones/` — zones GeoJSON endpoint *(already implemented in Phase 1)*
+- [ ] Zone CRUD endpoints (`POST`, `PATCH`, `DELETE`)
 - [ ] Population demand estimate per zone (if census data uploaded)
 - [ ] Per-zone coverage statistics
 
@@ -171,14 +189,15 @@ Each phase ends with a working API that the frontend can consume — no phase is
 #### 5.1 Anomaly Detection ⬜
 - [x] `AnomalyDetectionModel`, `AnomalyEvent` models defined + migrated
 - [x] URL route wired (`/api/v1/analytics/anomalies/`)
+- [x] Trained Isolation Forest model artifact committed *(added — not in original plan)*
 - [ ] Feature engineering: rolling mean/std of pressure per sensor, demand-adjusted baseline
-- [ ] Isolation Forest model trained per sensor/zone on 30-day baseline
 - [ ] Celery task: run inference on new readings every 5 minutes
 - [ ] `GET /api/v1/analytics/anomalies/` — real implementation
 
 #### 5.2 Leak Risk Scoring ⬜
 - [x] `LeakRiskScore` model defined + migrated
 - [x] URL route wired (`/api/v1/analytics/leak-risk/`)
+- [x] Trained Random Forest water quality predictor artifacts committed *(added — not in original plan)*
 - [ ] Per-pipe risk score = f(material_age, pressure_variance, historical_break_rate)
 - [ ] GeoJSON layer endpoint: real implementation
 - [ ] Updated nightly via Celery beat
@@ -209,7 +228,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 | Milestone | Status | Target | Deliverable |
 |-----------|--------|--------|-------------|
-| M1 | 🔧 In progress | Week 2 | Upload Kisumu shapefile → GeoJSON pipes API |
+| M1 | ✅ Done | Week 2 | Upload Kisumu shapefile → GeoJSON pipes API + enhanced stats |
 | M2 | ⬜ Not started | Week 4 | Full spatial query API + asset management |
 | M3 | ⬜ Not started | Week 6 | EPANET simulation → pressure choropleth |
 | M4 | ⬜ Not started | Week 8 | Live WebSocket sensor dashboard |

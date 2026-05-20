@@ -13,15 +13,15 @@
 
 | Area | Frontend Now | Backend Now | Gap |
 |------|-------------|-------------|-----|
-| Auth | None — hardcoded "Demo User" | JWT (`/api/v1/auth/token/`) | Login page + token management |
-| Network data | Static GeoJSON from `/public/data/` | `GET /api/v1/networks/{id}/pipes/` etc. | Replace static files with API calls |
+| Auth | ✅ JWT login, protected routes, AuthContext | JWT (`/api/v1/auth/token/`) | — done |
+| Network data | ✅ API when active network; static GeoJSON fallback | `GET /api/v1/networks/{id}/pipes/` etc. | bbox tile loading, zone overlays |
 | Upload | UI exists, no actual POST | `POST /api/v1/networks/upload/` + Celery | Wire upload form to real endpoint |
 | Sensors | Synthesized mock telemetry | `Sensor`, `SensorReading` models + WebSocket | Real sensor API + live WebSocket |
 | Alerts | Auto-generated from static data | `AlertRule`, `AlertEvent` models | Real alert feed from API |
 | Analytics / NRW | Age-weighted NRW estimate (hardcoded) | `LeakRiskScore`, `AnomalyEvent` models | Replace with real ML scores |
-| Multi-tenancy | None | `Organisation` + `Project` per user | Org/project context in UI |
-| API client | None — plain fetch to `/public/data/` | DRF at `/api/v1/` | Axios + React Query |
-| Environment | No `.env`, no backend URL | DRF at `http://localhost:8000` | `.env` + proxy config |
+| Multi-tenancy | ✅ Org name shown in sidebar via AuthContext | `Organisation` + `Project` per user | Project switcher |
+| API client | ✅ Axios + React Query + JWT interceptor | DRF at `/api/v1/` | — done |
+| Environment | ✅ `.env` + proxy config | DRF at `http://localhost:8000` | — done |
 | WebSocket | None | Django Channels at `ws/sensors/{network_id}/` | WebSocket hook |
 
 ---
@@ -31,89 +31,100 @@
 ```
 Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
 API Client   Network      Upload      Sensors     Alerts      Analytics
-& Auth       Map from     Pipeline    Live Data   & Rules     & NRW
+& Auth  ✅   Map from ✅  Pipeline    Live Data   & Rules     & NRW
              Backend
 ```
 
 ---
 
-## Phase 1 — API Client, Auth & Environment ⬜
+## Phase 1 — API Client, Auth & Environment ✅
 **Goal:** Every page can talk to the backend. Users log in with real credentials.
 
-### 1.1 Project setup ⬜
-- [ ] Add dependencies: `axios`, `@tanstack/react-query`, `react-hook-form`, `zod`
-- [ ] Create `.env` / `.env.example`:
-  ```
-  VITE_API_BASE_URL=http://localhost:8000/api/v1
-  VITE_WS_BASE_URL=ws://localhost:8000
-  ```
-- [ ] Add Vite proxy in `vite.config.ts` so `/api` → `http://localhost:8000` (avoids CORS in dev)
-- [ ] Create `src/lib/api.ts` — Axios instance with:
+### 1.1 Project setup ✅
+- [x] Add dependencies: `axios`, `@tanstack/react-query`, `react-hook-form`, `zod`, `@hookform/resolvers`
+- [x] Create `.env` / `.env.example` with `VITE_API_BASE_URL` and `VITE_WS_BASE_URL`
+- [x] Add Vite proxy in `vite.config.ts` — `/api` → `http://localhost:8000`, `/ws` → `ws://localhost:8000`
+- [x] Create `src/lib/api.ts` — Axios instance with:
   - `baseURL` from `VITE_API_BASE_URL`
   - Request interceptor: attach `Authorization: Bearer <token>` from localStorage
-  - Response interceptor: 401 → redirect to `/login`, 403 → toast error
-- [ ] Wrap `main.tsx` with `<QueryClientProvider>`
+  - Response interceptor: 401 → silent refresh (queued), redirect to `/login` if refresh fails
+- [x] Wrap `main.tsx` with `<QueryClientProvider>` (staleTime 30s, no retry on 4xx)
+- [x] Create `src/vite-env.d.ts` — TypeScript `ImportMetaEnv` declarations for Vite env vars *(added — was not in original plan)*
 
-### 1.2 Auth context ⬜
-- [ ] Create `src/context/AuthContext.tsx`:
-  - State: `user` (id, email, role, organisation), `accessToken`, `refreshToken`
-  - Actions: `login()`, `logout()`, `refreshAccess()`
-  - Persist tokens to `localStorage` (`aw-access`, `aw-refresh`)
-- [ ] `login()` calls `POST /api/v1/auth/token/` (SimpleJWT) with `{username, password}`
-- [ ] `refreshAccess()` calls `POST /api/v1/auth/token/refresh/`
-- [ ] Axios interceptor retries on 401 using refresh token before redirect
+### 1.2 Auth context ✅
+- [x] Create `src/context/AuthContext.tsx`:
+  - State: `user` (id, email, role, organisation), `isLoading`
+  - Actions: `login()`, `logout()`
+  - Persist tokens to `localStorage` (`aw-access`, `aw-refresh`) via `tokenStorage` helper
+  - Rehydrates on mount by calling `GET /api/v1/auth/me/` if access token exists
+- [x] `login()` calls `POST /api/v1/auth/token/` → then `GET /api/v1/auth/me/` to populate user
+- [x] Axios interceptor retries on 401 with `POST /api/v1/auth/token/refresh/`; queues concurrent requests during refresh
 
-### 1.3 Login page ⬜
-- [ ] Create `src/pages/Login.tsx` — email + password form using `react-hook-form` + `zod`
-- [ ] Add route `/login` in `App.tsx`
-- [ ] `<ProtectedRoute>` wrapper: redirects to `/login` if no valid token
-- [ ] Wrap all dashboard routes (`/dashboard`, `/gis`, `/alerts`, etc.) in `<ProtectedRoute>`
-- [ ] Sidebar: replace hardcoded "Demo User" with user from `AuthContext` (name, role badge)
-- [ ] Topbar: add logout button
+### 1.3 Login page ✅
+- [x] Create `src/pages/Login.tsx` — username + password form using `react-hook-form` + `zod`
+- [x] Add route `/login` in `App.tsx`
+- [x] `<ProtectedRoute>` wrapper: redirects to `/login` with `state.from` if no valid token; shows spinner while loading
+- [x] Wrap all dashboard routes (`/dashboard`, `/gis`, `/alerts`, `/nrw`, `/sensors`, `/reports`) in `<ProtectedRoute>`
+- [x] Sidebar: replaced hardcoded "Demo User" with real user from `AuthContext` (display name, org name / role, initials avatar)
+- [x] Sidebar: sign-out button calls `logout()` + navigates to `/login`
 
-### 1.4 Type definitions ⬜
-- [ ] Create `src/types/api.ts` — shared TypeScript interfaces matching backend models:
-  - `Organisation`, `Project`, `WaterNetwork`
-  - `Pipe`, `Node`, `Zone`, `Asset` (GeoJSON Feature wrappers)
-  - `Sensor`, `SensorReading`, `AlertRule`, `AlertEvent`
-  - `NetworkUpload`, `ValidationReport`
-  - `PaginatedResponse<T>`, `GeoJSONFeatureCollection<T>`
+### 1.4 Type definitions ✅
+- [x] Create `src/types/api.ts` — shared TypeScript interfaces matching all backend models:
+  - `Organisation`, `AuthUser`, `UserRole`, `Project`
+  - `WaterNetwork`, `NetworkUpload`, `ValidationReport`, `UploadStatus`
+  - `NetworkStats`, `EnhancedNetworkStats`, `MaterialBreakdown`, `ZoneBreakdown` *(extended — added rich stats types)*
+  - `PipeProperties`, `NodeProperties`, `ZoneProperties`, `AssetProperties` + GeoJSON Feature/FeatureCollection wrappers
+  - `Sensor`, `SensorReading`, `AnomalyEvent`, `LeakRiskScore`, `LeakRiskFeatureCollection` *(added — not in original plan)*
+  - `AlertRule`, `AlertEvent`, `Notification`
+  - `SimulationRun`, `HydraulicScenario`, `PressureResult`, `FlowResult` *(added — not in original plan)*
+  - `WSSensorReading`, `WSAlertEvent`, `WSMessage` — discriminated union for WebSocket messages *(added — not in original plan)*
+  - `PaginatedResponse<T>`, `GeoJSONGeometry`, `GeoJSONFeature<P>`, `GeoJSONFeatureCollection<P>`
 
 ---
 
-## Phase 2 — Network Map from Backend API ⬜
+## Phase 2 — Network Map from Backend API ✅
 **Goal:** GISMap page loads pipes, nodes, zones, and stats from the live backend instead of `/public/data/`.
 
-### 2.1 Network selection ⬜
-- [ ] Create `src/context/NetworkContext.tsx`:
-  - State: `networks[]`, `activeNetwork` (the selected `WaterNetwork`)
-  - On login: fetch `GET /api/v1/networks/` → populate list
-  - Persist `activeNetworkId` to `localStorage`
-- [ ] Add a network selector dropdown in Topbar (or dedicated `/networks` page)
-- [ ] All map + dashboard pages read `activeNetwork` from context
+### 2.1 Network selection ✅
+- [x] Create `src/context/NetworkContext.tsx`:
+  - State: `networks[]`, `activeNetwork`, `isLoading`
+  - On mount: fetch `GET /api/v1/networks/` via `useNetworks()` hook → populate list
+  - Persist `activeNetworkId` to `localStorage` (`aw-active-network`); rehydrates and validates against fetched list on load
+- [x] Add `NetworkSelector` dropdown in Topbar — shows globe icon + network name + chevron; dropdown lists all networks with pipe count and km
+- [x] All map + dashboard pages read `activeNetwork` from context
 
-### 2.2 Replace static data loader ⬜
-- [ ] Replace `src/data/network.ts` `loadNetwork()` with React Query hooks:
-  - `useNetworkStats(networkId)` → `GET /api/v1/networks/{id}/stats/`
+### 2.2 React Query hooks ✅
+- [x] Create `src/hooks/useNetworkQueries.ts`:
+  - `useNetworks()` → `GET /api/v1/networks/`
   - `useNetworkDetail(networkId)` → `GET /api/v1/networks/{id}/`
-  - `usePipes(networkId, bbox?, zoneId?)` → `GET /api/v1/networks/{id}/pipes/`
-  - `useNodes(networkId, bbox?, zoneId?)` → `GET /api/v1/networks/{id}/nodes/`
+  - `useNetworkStats(networkId)` → `GET /api/v1/networks/{id}/stats/`
+  - `usePipes(networkId, bbox?)` → `GET /api/v1/networks/{id}/pipes/`
+  - `useNodes(networkId, bbox?)` → `GET /api/v1/networks/{id}/nodes/`
   - `useZones(networkId)` → `GET /api/v1/networks/{id}/zones/`
   - `useAssets(networkId, bbox?)` → `GET /api/v1/networks/{id}/assets/`
-- [ ] Keep static `/public/data/kisumu-*.geojson` as a fallback for demo/offline mode only
+  - `useUploadStatus(uploadId)` → polls `GET /api/v1/networks/{id}/validate/` every 3s until terminal status *(added ahead of Phase 3)*
+- [x] Keep static `/public/data/kisumu-*.geojson` as fallback for demo/offline mode
 
-### 2.3 GISMap dynamic loading ⬜
-- [ ] GISMap passes current map bounds as `?bbox=minx,miny,maxx,maxy` on every move
-- [ ] Debounce bbox updates (300ms) to avoid excessive requests
-- [ ] Loading spinner while fetching; error banner on failure
-- [ ] Zones rendered as polygon overlays using `GET /api/v1/networks/{id}/zones/`
-- [ ] SidePanel pipe/asset detail reads from feature `properties` (same structure as API response)
+### 2.3 GISMap dynamic loading ✅ (partial)
+- [x] GISMap loads pipes from `usePipes(activeNetwork.id)` when a network is selected
+- [x] API pipe adapter: derives `ui_class` from diameter/status (≥200mm→main, ≥75mm→distribution, else→household, closed/out_of_service→backfeed); flattens `MultiLineString` → multiple `LineString` features
+- [x] Builds synthetic `NetworkMeta` from `WaterNetwork` + adapted pipes (bbox from PostGIS polygon, center, pipe class counts)
+- [x] Loading spinner shows network name + pipe count while API fetch is in flight
+- [x] Error banner shown on API failure
+- [x] Shell subtitle reflects active network name vs. demo label
+- [x] Falls back to static Kisumu GeoJSON when no active network (demo mode fully preserved)
+- [ ] Pass current map bounds as `?bbox=minx,miny,maxx,maxy` on map move (debounced 300ms) *(deferred)*
+- [ ] Zone polygon overlay layer from `useZones()` *(deferred)*
+- [ ] Node layer from `useNodes()` *(deferred)*
 
-### 2.4 Dashboard KPIs from API ⬜
-- [ ] Dashboard KPI band: replace hardcoded values with data from `useNetworkStats()`
-  - Total pipes, total length km, health score (open / total), materials breakdown
-- [ ] Zones table: replace mock rows with zones from `useZones()`
-- [ ] Materials donut / bar: derive from `stats.materials_breakdown` (to be added to stats endpoint)
+### 2.4 Dashboard KPIs from API ✅
+- [x] Dashboard dual-mode: uses `useNetworkStats()` when `activeNetwork` set, static data otherwise
+- [x] API KPI band: pipe network km, open pipe count, total nodes, health %, material types, zone count
+- [x] Materials bar chart from `stats.materials_breakdown`
+- [x] Age distribution chart from `stats.age_distribution`
+- [x] Pipe status breakdown (open/closed/out_of_service) from `stats.status_breakdown`
+- [x] Service zones table from `stats.zones_breakdown`
+- [x] Loading skeleton shown while stats fetch is in flight
 
 ---
 
@@ -127,7 +138,7 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - [ ] On success (202): receive `{ upload_id, status }` → enter polling state
 
 ### 3.2 Status polling ⬜
-- [ ] Poll `GET /api/v1/networks/{upload_id}/validate/` every 3 seconds until status ∈ `{complete, complete_warnings, failed}`
+- [ ] Use `useUploadStatus(uploadId)` hook (already built in Phase 2) to poll every 3s
 - [ ] Show animated progress steps: Uploading → Processing → Validating → Done
 - [ ] On `complete` / `complete_warnings`: show `ValidationReport` card
   - Pipe count, node count, warnings list, roughness gaps
@@ -158,7 +169,7 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
   // Emits: { type: 'reading', sensor_id, value, unit, timestamp }
   ```
   - Reconnects automatically on disconnect (exponential backoff)
-  - Passes JWT as query param (Django Channels auth: `?token=<access_token>`)
+  - Passes JWT as query param (Django Channels auth)
 - [ ] On incoming reading: update the relevant sensor in React Query cache (`queryClient.setQueryData`)
 
 ### 4.3 Live map updates ⬜
@@ -168,8 +179,7 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - [ ] "Last updated" timestamp shown on asset tooltip
 
 ### 4.4 MQTT mock for development ⬜
-- [ ] Add `scripts/mock_mqtt.py` (or document the existing backend mock publisher)
-  - Publishes random readings to `aquawise/{org_id}/sensors/{sensor_id}/reading` every 5 s
+- [ ] Add `scripts/mock_mqtt.py` — publishes random readings to `aquawise/{org_id}/sensors/{sensor_id}/reading` every 5s
   - Used in dev to test the full WebSocket pipeline without real hardware
 
 ---
@@ -232,28 +242,27 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - [ ] Skeleton loaders for cards + map layer while data loads
 
 ### Map performance ⬜
-- [ ] For networks > 2,000 pipes: switch from L.polyline per feature to a single GeoJSON layer (`L.geoJSON`) using the backend's `iterator` streaming
-- [ ] Implement bbox-based tile loading: only fetch pipes visible in current viewport, re-fetch on significant pan/zoom
+- [ ] Bbox-based tile loading: fetch only pipes visible in viewport, re-fetch on significant pan/zoom (debounced 300ms)
+- [ ] For networks > 2,000 pipes: switch from per-feature `L.polyline` to `L.geoJSON` layer
 - [ ] Consider `leaflet.vectorgrid` for very large networks (Phase 2+)
 
 ### TypeScript & code quality ⬜
-- [ ] Enable `"strict": true` throughout (already on in tsconfig — enforce for new files)
 - [ ] Add `eslint` + `@typescript-eslint` + `prettier` (align with backend's `ruff`)
-- [ ] Remove `/src/data/data.ts` (legacy mock data file) once Phase 2 is complete
+- [ ] Remove `/src/data/data.ts` (legacy mock data file) once Phase 3 is complete
 - [ ] Remove `/public/data/*.geojson` once Phase 3 is complete (or move to a fixtures folder)
 
 ---
 
 ## Milestone Summary
 
-| Milestone | Phase | Deliverable |
-|-----------|-------|-------------|
-| F-M1 | Phase 1 | Login works; JWT stored; all routes protected; API client configured |
-| F-M2 | Phase 2 | GISMap loads pipes/nodes/zones from backend API; Dashboard KPIs are live |
-| F-M3 | Phase 3 | Shapefile upload → real validation report → network appears on map |
-| F-M4 | Phase 4 | Sensor readings are real; map updates live via WebSocket |
-| F-M5 | Phase 5 | Alerts feed from backend; rule CRUD; real-time alert toast |
-| F-M6 | Phase 6 | Leak risk layer on map; anomaly events on dashboard; real NRW per zone |
+| Milestone | Status | Deliverable |
+|-----------|--------|-------------|
+| F-M1 | ✅ Done | Login works; JWT stored; all routes protected; API client configured |
+| F-M2 | ✅ Done | GISMap loads pipes from backend API; Dashboard KPIs live from stats endpoint |
+| F-M3 | ⬜ Not started | Shapefile upload → real validation report → network appears on map |
+| F-M4 | ⬜ Not started | Sensor readings are real; map updates live via WebSocket |
+| F-M5 | ⬜ Not started | Alerts feed from backend; rule CRUD; real-time alert toast |
+| F-M6 | ⬜ Not started | Leak risk layer on map; anomaly events on dashboard; real NRW per zone |
 
 ---
 
@@ -261,8 +270,8 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 
 | Phase | Endpoints |
 |-------|-----------|
-| 1 | `POST /api/v1/auth/token/`, `POST /api/v1/auth/token/refresh/` |
-| 2 | `GET /api/v1/networks/`, `GET /api/v1/networks/{id}/`, `GET /api/v1/networks/{id}/pipes/`, `/nodes/`, `/zones/`, `/assets/`, `/stats/` |
+| 1 ✅ | `POST /api/v1/auth/token/`, `POST /api/v1/auth/token/refresh/`, `GET /api/v1/auth/me/` |
+| 2 ✅ | `GET /api/v1/networks/`, `GET /api/v1/networks/{id}/`, `GET /api/v1/networks/{id}/pipes/`, `/nodes/`, `/zones/`, `/assets/`, `/stats/` |
 | 3 | `POST /api/v1/networks/upload/`, `GET /api/v1/networks/{upload_id}/validate/` |
 | 4 | `GET /api/v1/sensors/`, `GET /api/v1/sensors/{id}/readings/`, `WS /ws/sensors/{network_id}/` |
 | 5 | `GET /api/v1/alerts/events/`, `GET/POST/PUT/DELETE /api/v1/alerts/rules/` |
@@ -275,3 +284,4 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - **Static GeoJSON files** (`/public/data/kisumu-*.geojson`) remain usable as demo/offline fallback until Phase 3 is done — don't delete them early.
 - **Backend Phase alignment:** Frontend Phases 1–3 align with Backend Phase 1 (Foundation). Frontend Phase 4 aligns with Backend Phase 4 (Real-Time). Frontend Phase 6 aligns with Backend Phase 5 (ML).
 - **EPANET ingestion** (Backend Phase 1.3) will extend Phase 3 of this roadmap once the backend task is implemented.
+- **Deferred from Phase 2:** bbox viewport-based pipe loading and zone polygon overlays — deferred to avoid complexity; `staleTime: Infinity` on pipe queries means no excess requests for now.
