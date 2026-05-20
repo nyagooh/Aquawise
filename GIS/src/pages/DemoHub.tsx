@@ -7,8 +7,12 @@
  */
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../theme';
 import { loadNetwork, type NetworkMeta } from '../data/network';
+import { api } from '../lib/api';
+import { useUploadStatus } from '../hooks/useNetworkQueries';
+import { useAuth } from '../context/AuthContext';
 
 export default function DemoHub() {
   const location = useLocation();
@@ -176,12 +180,41 @@ function ChooserView() {
    Upload workflow
    ════════════════════════════════════════════════════════════ */
 
+type UploadPhase = 'idle' | 'uploading' | 'processing' | 'done' | 'failed';
+
 function UploadView() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
+
   const [hover, setHover] = useState(false);
   const [staged, setStaged] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [busy, setBusy] = useState(false);
+
+  const [phase, setPhase] = useState<UploadPhase>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadId, setUploadId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const { data: uploadStatus } = useUploadStatus(uploadId);
+
+  // React to polling results
+  useEffect(() => {
+    if (!uploadStatus) return;
+    const s = uploadStatus.status;
+    if (s === 'complete' || s === 'complete_warnings') {
+      setPhase('done');
+    } else if (s === 'failed') {
+      setPhase('failed');
+      setErrorMsg(
+        (uploadStatus.validation_report as { error?: string })?.error
+        || 'Ingestion failed. Check that the zip contains a valid shapefile.'
+      );
+      setUploadId(null);
+    } else {
+      setPhase('processing');
+    }
+  }, [uploadStatus]);
 
   const onFiles = (files: FileList | null) => {
     if (!files) return;
@@ -194,14 +227,138 @@ function UploadView() {
     });
   };
 
-  const submit = () => {
-    setBusy(true);
-    // Simulate ingestion; in production this would parse + POST.
-    setTimeout(() => {
-      setBusy(false);
-      navigate('/gis');
-    }, 1200);
+  const submit = async () => {
+    const zipFile = staged.find((f) => f.name.toLowerCase().endsWith('.zip'));
+    if (!zipFile) {
+      setErrorMsg('Please add a .zip file containing your shapefile components (.shp, .dbf, .shx, .prj).');
+      return;
+    }
+    setErrorMsg(null);
+    setPhase('uploading');
+    setUploadProgress(0);
+
+    const formData = new FormData();
+    formData.append('file', zipFile);
+
+    try {
+      const { data } = await api.post<{ upload_id: string; status: string }>(
+        '/networks/upload/',
+        formData,
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: (e) => {
+            if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          },
+        }
+      );
+      setUploadId(data.upload_id);
+      setPhase('processing');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      setErrorMsg(msg || 'Upload failed. Please try again.');
+      setPhase('failed');
+    }
   };
+
+  const goToMap = async () => {
+    await queryClient.refetchQueries({ queryKey: ['networks'] });
+    navigate('/gis');
+  };
+
+  const reset = () => {
+    setPhase('idle');
+    setStaged([]);
+    setUploadId(null);
+    setErrorMsg(null);
+    setUploadProgress(0);
+  };
+
+  // ── Processing / done / failed overlays ──
+  if (phase === 'uploading' || phase === 'processing' || phase === 'done' || phase === 'failed') {
+    const report = uploadStatus?.validation_report as { pipes?: number; nodes?: number; warnings?: string[] } | undefined;
+    return (
+      <DemoFrame>
+        <header className="demo-hub-head">
+          <div className="demo-hub-eyebrow">
+            {phase !== 'done' && phase !== 'failed' && (
+              <span style={{ color: 'hsl(var(--muted-foreground))' }}>Processing your network…</span>
+            )}
+          </div>
+          <h1>{phase === 'done' ? 'Network ready.' : phase === 'failed' ? 'Ingestion failed.' : 'Uploading & ingesting…'}</h1>
+          <p>
+            {phase === 'done'
+              ? `${(report?.pipes ?? 0).toLocaleString()} pipes ingested${report?.nodes ? ` · ${report.nodes.toLocaleString()} nodes` : ''}.`
+              : phase === 'failed'
+                ? errorMsg
+                : phase === 'uploading'
+                  ? `Sending file… ${uploadProgress}%`
+                  : 'Classifying geometry · reprojecting CRS · building spatial index…'}
+          </p>
+        </header>
+
+        <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 var(--s6)' }}>
+          {(phase === 'uploading' || phase === 'processing') && (
+            <div className="upload-progress-track">
+              <div className="upload-progress-step" data-active={phase === 'uploading' ? 'true' : 'false'}>
+                <span className={phase === 'uploading' ? 'upload-step-spinner' : 'upload-step-done'} />
+                Uploading
+              </div>
+              <div className="upload-progress-step" data-active={phase === 'processing' ? 'true' : 'false'}>
+                <span className={phase === 'processing' ? 'upload-step-spinner' : 'upload-step-pending'} />
+                Ingesting
+              </div>
+              <div className="upload-progress-step" data-active="false">
+                <span className="upload-step-pending" />
+                Ready
+              </div>
+            </div>
+          )}
+
+          {phase === 'done' && (
+            <div className="upload-success-card">
+              <div className="upload-success-icon">✓</div>
+              <div className="upload-success-stats">
+                {report?.pipes != null && <span><strong>{report.pipes.toLocaleString()}</strong> pipes</span>}
+                {report?.nodes != null && <span><strong>{report.nodes.toLocaleString()}</strong> nodes</span>}
+              </div>
+              {report?.warnings && report.warnings.length > 0 && (
+                <details className="upload-warnings">
+                  <summary>{report.warnings.length} warning{report.warnings.length === 1 ? '' : 's'}</summary>
+                  <ul>{report.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                </details>
+              )}
+              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+                <button className="btn btn-primary btn-lg" onClick={goToMap}>Open in map →</button>
+                <button className="btn btn-ghost btn-lg" onClick={reset}>Upload another</button>
+              </div>
+            </div>
+          )}
+
+          {phase === 'failed' && (
+            <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+              <button className="btn btn-primary btn-lg" onClick={reset}>Try again</button>
+            </div>
+          )}
+        </div>
+      </DemoFrame>
+    );
+  }
+
+  // ── Unauthenticated wall ──
+  if (!user) {
+    return (
+      <DemoFrame>
+        <header className="demo-hub-head">
+          <h1>Sign in to upload.</h1>
+          <p>Your network is stored in your account — sign in first, then upload.</p>
+        </header>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', padding: 'var(--s8) 0' }}>
+          <Link to="/login" className="btn btn-primary btn-lg">Sign in →</Link>
+          <Link to="/signup" className="btn btn-ghost btn-lg">Create account</Link>
+        </div>
+      </DemoFrame>
+    );
+  }
 
   return (
     <DemoFrame>
@@ -215,7 +372,7 @@ function UploadView() {
           </Link>
         </div>
         <h1>Upload your GIS data.</h1>
-        <p>Drop a shapefile bundle, GeoJSON, KML or EPANET export — we&apos;ll render it on the map.</p>
+        <p>Drop a <strong>.zip</strong> containing your shapefile components — we&apos;ll reproject, classify, and render it on the map.</p>
       </header>
 
       <section className="demo-upload-grid">
@@ -229,8 +386,7 @@ function UploadView() {
             <input
               ref={inputRef}
               type="file"
-              multiple
-              accept=".shp,.shx,.dbf,.prj,.cpg,.qmd,.geojson,.json,.kml,.kmz,.inp,.zip"
+              accept=".zip"
               onChange={(e) => onFiles(e.target.files)}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
@@ -242,17 +398,17 @@ function UploadView() {
                   <line x1={12} y1={3} x2={12} y2={15} />
                 </svg>
               </div>
-              <div className="demo-upload-headline">Drop your network files here</div>
+              <div className="demo-upload-headline">Drop your .zip shapefile here</div>
               <div className="demo-upload-sub">or <span className="link">browse from your computer</span></div>
               <div className="demo-upload-formats">
-                <span>.shp + .dbf + .shx + .prj</span>
-                <span>.geojson</span>
-                <span>.kml / .kmz</span>
-                <span>EPANET .inp</span>
-                <span>.zip bundle</span>
+                <span>.zip (contains .shp + .dbf + .shx + .prj)</span>
               </div>
             </div>
           </label>
+
+          {errorMsg && (
+            <div className="login-error" style={{ marginTop: 12 }}>{errorMsg}</div>
+          )}
 
           {staged.length > 0 && (
             <div className="demo-upload-staged">
@@ -275,12 +431,8 @@ function UploadView() {
                 ))}
               </ul>
               <div className="demo-upload-staged-foot">
-                <button
-                  className="btn btn-primary btn-lg"
-                  onClick={submit}
-                  disabled={busy}
-                >
-                  {busy ? 'Ingesting…' : 'Ingest & render on live map →'}
+                <button className="btn btn-primary btn-lg" onClick={submit}>
+                  Ingest &amp; render on live map →
                 </button>
                 <button className="btn btn-ghost btn-lg" onClick={() => navigate('/gis')}>
                   Skip — use Kisumu sandbox
@@ -300,15 +452,15 @@ function UploadView() {
               <li><span className="bullet" />DMA / pressure-zone boundaries</li>
               <li><span className="bullet" />Pipe attributes: material, diameter, age, length</li>
               <li><span className="bullet" />Service status: open · closed · in-service</li>
-              <li><span className="bullet" />Topological junctions for valves &amp; tanks</li>
+              <li><span className="bullet" />Any CRS reprojected to WGS84 automatically</li>
             </ul>
           </div>
           <div className="demo-upload-side-card subtle">
-            <h3>Your data is yours</h3>
+            <h3>How it works</h3>
             <p>
-              All parsing runs in your browser for this demo. Nothing is uploaded to a
-              server — close the tab and the data is gone. Production deployments use
-              an isolated tenant ingestion pipeline (PostGIS + Mapbox vector tiles).
+              Your shapefile is sent to our PostGIS ingestion pipeline, classified by
+              geometry type, reprojected to EPSG:4326, and stored under your account.
+              Close the tab and come back — your network will be there.
             </p>
           </div>
         </aside>

@@ -95,7 +95,15 @@ class NetworkValidationReportView(APIView):
             upload = NetworkUpload.objects.get(pk=pk, organisation=request.user.organisation)
         except NetworkUpload.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(upload.validation_report)
+        return Response({
+            "id": str(upload.id),
+            "status": upload.status,
+            "file_name": upload.file_name,
+            "file_type": upload.file_type,
+            "validation_report": upload.validation_report or {},
+            "uploaded_at": upload.uploaded_at,
+            "completed_at": upload.completed_at,
+        })
 
 
 def _bbox_filter(query_params):
