@@ -1,10 +1,3 @@
-/**
- * Dashboard — operational command center for the Kisumu water network.
- *
- * Every number is derived from the loaded GeoJSON / meta — no mock data.
- * Mirrors the Qatium-style hierarchy: KPI row, network composition, zone
- * performance, telemetry pulse, snapshot map.
- */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shell } from '../components/Shell';
@@ -19,6 +12,9 @@ import {
   type PipeClass,
   type AssetKind
 } from '../data/network';
+import { useNetwork } from '../context/NetworkContext';
+import { useNetworkStats } from '../hooks/useNetworkQueries';
+import type { WaterNetwork, EnhancedNetworkStats } from '../types/api';
 
 type DerivedAlert = {
   id: string;
@@ -32,27 +28,235 @@ type DerivedAlert = {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [data, setData] = useState<NetworkData | null>(null);
+  const { activeNetwork } = useNetwork();
+  const { data: apiStats, isLoading: statsLoading } = useNetworkStats(activeNetwork?.id ?? null);
 
+  const [staticData, setStaticData] = useState<NetworkData | null>(null);
   useEffect(() => {
+    if (activeNetwork) return;
     let alive = true;
-    loadNetwork().then((d) => { if (alive) setData(d); });
+    loadNetwork().then((d) => { if (alive) setStaticData(d); });
     return () => { alive = false; };
-  }, []);
+  }, [activeNetwork]);
 
   const derived = useMemo(() => {
-    if (!data) return null;
-    return computeDerived(data);
-  }, [data]);
+    if (activeNetwork && apiStats) return computeApiDerived(activeNetwork, apiStats);
+    if (!activeNetwork && staticData) return computeDerived(staticData);
+    return null;
+  }, [activeNetwork, apiStats, staticData]);
+
+  const isLoading = activeNetwork ? statsLoading : !staticData;
+  const subTitle = activeNetwork && apiStats
+    ? `${activeNetwork.name} · ${activeNetwork.total_pipes.toLocaleString()} segments · ${(apiStats.total_length_km ?? 0).toFixed(0)} km`
+    : staticData
+      ? `Kisumu Water Network · ${staticData.meta.feature_count.toLocaleString()} segments · ${staticData.meta.total_length_km.toFixed(0)} km`
+      : 'Loading network…';
 
   return (
-    <Shell active="dashboard" title="Operations Dashboard" sub={data ? `Kisumu Water Network · ${data.meta.feature_count.toLocaleString()} segments · ${data.meta.total_length_km.toFixed(0)} km` : 'Loading network…'}>
-      {!data || !derived ? (
+    <Shell active="dashboard" title="Operations Dashboard" sub={subTitle}>
+      {isLoading || !derived ? (
         <DashboardSkeleton />
+      ) : activeNetwork ? (
+        <DashboardApiBody network={activeNetwork} stats={apiStats!} derived={derived} navigate={navigate} />
       ) : (
-        <DashboardBody data={data} derived={derived} navigate={navigate} />
+        <DashboardBody data={staticData!} derived={derived} navigate={navigate} />
       )}
     </Shell>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   API-derived state — from EnhancedNetworkStats
+   ════════════════════════════════════════════════════════════ */
+
+function computeApiDerived(network: WaterNetwork, stats: EnhancedNetworkStats): DerivedState {
+  const totalKm = stats.total_length_km ?? 0;
+  const ageTotal = Object.values(stats.age_distribution).reduce((s, n) => s + n, 0) || 1;
+  const ageBuckets = ['pre-2000', '2000-2009', '2010-2019', '2020+', 'unknown'].map((b) => ({
+    bucket: b,
+    count: stats.age_distribution[b] || 0,
+    pct: ((stats.age_distribution[b] || 0) / ageTotal) * 100,
+  }));
+  const materialKm = stats.materials_breakdown.map((m) => ({
+    name: m.material,
+    km: m.length_km,
+    pct: totalKm > 0 ? (m.length_km / totalKm) * 100 : 0,
+  }));
+  const topZones = stats.zones_breakdown.slice(0, 8).map((z) => ({
+    code: z.code,
+    label: z.name,
+    km: z.length_km,
+    pct: totalKm > 0 ? (z.length_km / totalKm) * 100 : 0,
+    pipes: z.pipe_count,
+  }));
+  const openCount = stats.status_breakdown.open ?? 0;
+  const closedCount = stats.status_breakdown.closed ?? 0;
+  const totalCount = network.total_pipes || 1;
+  const healthScore = Math.round((openCount / totalCount) * 100);
+  return {
+    alerts: [],
+    pressureAnomalies: 0,
+    sensorAlerts: 0,
+    reservoirsWatchlist: 0,
+    healthScore,
+    nrwPct: 0,
+    households: stats.status_breakdown.open ?? 0,
+    meterCount: 0,
+    prvCount: 0,
+    tankCount: 0,
+    sensorCount: 0,
+    totalKm,
+    topZones,
+    classKm: [
+      { cls: 'main' as PipeClass, km: 0, pct: 0 },
+      { cls: 'distribution' as PipeClass, km: 0, pct: 0 },
+    ],
+    materialKm,
+    ageBuckets,
+    reservoirAvgLevel: 0,
+    openCount,
+    closedCount,
+  };
+}
+
+function DashboardApiBody({ network, stats, derived, navigate }: {
+  network: WaterNetwork;
+  stats: EnhancedNetworkStats;
+  derived: DerivedState;
+  navigate: (path: string) => void;
+}) {
+  return (
+    <>
+      <section className="ops-kpi-band">
+        <OpsKpi label="Pipe network" value={`${derived.totalKm.toFixed(0)}`} unit="km"
+          sub={`${network.total_pipes.toLocaleString()} segments`} tone="primary" onClick={() => navigate('/gis')} />
+        <OpsKpi label="Open pipes" value={`${(derived.openCount ?? 0).toLocaleString()}`} unit="segs"
+          sub={`${derived.closedCount ?? 0} closed / isolated`} tone="safe" onClick={() => navigate('/gis')} />
+        <OpsKpi label="Total nodes" value={`${stats.total_nodes.toLocaleString()}`} unit="nodes"
+          sub="Junctions, tanks, meters" tone="primary" />
+        <OpsKpi label="Network health" value={`${derived.healthScore}`} unit="%"
+          sub="Open segments ratio" tone={derived.healthScore >= 80 ? 'safe' : 'warn'} />
+        <OpsKpi label="Materials" value={`${stats.materials_breakdown.length}`} unit="types"
+          sub={stats.materials_breakdown[0]?.material ?? '—'} tone="info" />
+        <OpsKpi label="Service zones" value={`${stats.zones_breakdown.length}`} unit="zones"
+          sub="Coverage areas" tone="primary" onClick={() => navigate('/gis')} />
+      </section>
+
+      <section className="ops-row ops-row-3">
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Materials in use</div>
+              <div className="ops-card-sub">{derived.materialKm.length} pipe materials · by length</div>
+            </div>
+          </div>
+          <div className="ops-class-bars">
+            {derived.materialKm.map((mat) => <MaterialBar key={mat.name} {...mat} />)}
+          </div>
+        </div>
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Age distribution</div>
+              <div className="ops-card-sub">Install date · segment count</div>
+            </div>
+          </div>
+          <div className="ops-age-grid">
+            {derived.ageBuckets.map((b) => (
+              <div key={b.bucket} className="ops-age-cell">
+                <div className="ops-age-bar">
+                  <div className="ops-age-fill" style={{ height: `${Math.max(2, b.pct)}%`, background: ageColor(b.bucket) }} />
+                </div>
+                <div className="ops-age-label">
+                  <span>{b.bucket}</span>
+                  <strong>{b.count.toLocaleString()}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Pipe status</div>
+              <div className="ops-card-sub">Operational breakdown</div>
+            </div>
+          </div>
+          <div className="ops-class-bars">
+            {Object.entries(stats.status_breakdown).map(([status, count]) => {
+              const pct = network.total_pipes > 0 ? (count / network.total_pipes) * 100 : 0;
+              const color: Record<string, string> = { open: '#22c55e', closed: '#f59e0b', out_of_service: '#ef4444', pending: '#94a3b8' };
+              return (
+                <div key={status} className="ops-class-row">
+                  <span className="ops-class-swatch" style={{ background: color[status] ?? '#94a3b8' }} />
+                  <div className="ops-class-body">
+                    <div className="ops-class-name">{status.replace('_', ' ')}</div>
+                    <div className="ops-class-bar">
+                      <div className="ops-class-fill" style={{ width: `${pct}%`, background: color[status] ?? '#94a3b8' }} />
+                    </div>
+                  </div>
+                  <div className="ops-class-stat">
+                    <strong>{count.toLocaleString()}</strong>
+                    <span>{pct.toFixed(1)}%</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="ops-row ops-row-2">
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Service zones</div>
+              <div className="ops-card-sub">Ranked by pipe-length coverage</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/gis')}>Open map →</button>
+          </div>
+          <table className="ops-zone-table">
+            <thead>
+              <tr>
+                <th>Zone</th>
+                <th style={{ textAlign: 'right' }}>Pipes</th>
+                <th style={{ textAlign: 'right' }}>Length</th>
+                <th>Share of network</th>
+              </tr>
+            </thead>
+            <tbody>
+              {derived.topZones.map((z) => (
+                <tr key={z.code}>
+                  <td><strong>{z.label}</strong><div className="ops-zone-code">{z.code}</div></td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{z.pipes.toLocaleString()}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{z.km.toFixed(1)} km</td>
+                  <td>
+                    <div className="ops-zone-share">
+                      <div className="ops-zone-share-fill" style={{ width: `${z.pct}%` }} />
+                      <span>{z.pct.toFixed(1)}%</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="ops-card">
+          <div className="ops-card-head">
+            <div>
+              <div className="ops-card-title">Live alerts</div>
+              <div className="ops-card-sub">Sensor-driven · real-time</div>
+            </div>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigate('/alerts')}>All →</button>
+          </div>
+          <div className="ops-alert-list">
+            <div className="ops-alert-empty">
+              <span className="dot-safe" />Real-time alerts coming in Phase 5.
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -78,6 +282,8 @@ interface DerivedState {
   materialKm: Array<{ name: string; km: number; pct: number }>;
   ageBuckets: Array<{ bucket: string; count: number; pct: number }>;
   reservoirAvgLevel: number;
+  openCount?: number;
+  closedCount?: number;
 }
 
 function computeDerived(d: NetworkData): DerivedState {
