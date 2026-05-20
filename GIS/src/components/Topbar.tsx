@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zones, sensors, pipes } from '../data';
+import { NetworkSelector } from './NetworkSelector';
 
 type Props = {
   title: string;
@@ -64,6 +65,7 @@ export function Topbar({ title, sub, onToggleNav }: Props) {
         {sub && <div className="tb-sub">{sub}</div>}
         </div>
       </div>
+      <NetworkSelector />
       <div className="search" ref={containerRef}>
         <svg className="search-icon" width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
           <circle cx={11} cy={11} r={8} />
