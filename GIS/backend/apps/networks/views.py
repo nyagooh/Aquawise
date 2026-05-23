@@ -313,6 +313,12 @@ class NetworkStatsView(APIView):
             })
         zones_breakdown.sort(key=lambda z: z["length_km"], reverse=True)
 
+        nodes_qs = Node.objects.filter(network=network)
+        nodes_breakdown = {
+            row["node_type"]: row["count"]
+            for row in nodes_qs.values("node_type").annotate(count=Count("id"))
+        }
+
         return Response({
             "total_pipes": network.total_pipes,
             "total_nodes": network.total_nodes,
@@ -328,4 +334,5 @@ class NetworkStatsView(APIView):
             "status_breakdown": status_breakdown,
             "age_distribution": age_distribution,
             "zones_breakdown": zones_breakdown,
+            "nodes_breakdown": nodes_breakdown,
         })

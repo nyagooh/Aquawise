@@ -123,6 +123,8 @@ export interface ZoneBreakdown {
   length_km: number;
 }
 
+export type NetworkNodeType = 'junction' | 'reservoir' | 'tank' | 'meter';
+
 export interface EnhancedNetworkStats {
   total_pipes: number;
   total_nodes: number;
@@ -131,6 +133,7 @@ export interface EnhancedNetworkStats {
   status_breakdown: Partial<Record<PipeStatus, number>>;
   age_distribution: Record<string, number>;
   zones_breakdown: ZoneBreakdown[];
+  nodes_breakdown: Partial<Record<NetworkNodeType, number>>;
 }
 
 export type PipeMaterial = 'PVC' | 'GI' | 'HDPE' | 'Steel' | 'PPR' | 'CI' | 'AC' | 'Unknown';

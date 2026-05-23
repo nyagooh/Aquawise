@@ -375,6 +375,70 @@ def ingest_shapefile(self, upload_id: str):
                         [str(network.id), str(network.id)],
                     )
 
+            # Auto-derive junction nodes from pipe endpoints when no point layer was provided.
+            # Rounds to 6 decimal places (~10 cm) to merge coincident points.
+            if total_nodes == 0 and total_pipes > 0:
+                with connection.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO networks_node
+                               (id, network_id, external_id, node_type, geometry, attributes)
+                        SELECT
+                            gen_random_uuid(),
+                            %(net)s::uuid,
+                            '',
+                            'junction',
+                            ST_SetSRID(
+                                ST_MakePoint(
+                                    ROUND(ST_X(pt.geom)::numeric, 6)::float8,
+                                    ROUND(ST_Y(pt.geom)::numeric, 6)::float8
+                                ),
+                                4326
+                            )::geometry(Point, 4326),
+                            '{}'::jsonb
+                        FROM (
+                            SELECT DISTINCT
+                                ROUND(ST_X(geom)::numeric, 6) AS rx,
+                                ROUND(ST_Y(geom)::numeric, 6) AS ry,
+                                ST_MakePoint(
+                                    ROUND(ST_X(geom)::numeric, 6)::float8,
+                                    ROUND(ST_Y(geom)::numeric, 6)::float8
+                                ) AS geom
+                            FROM (
+                                -- Dump each pipe into individual LineStrings, then take start+end
+                                SELECT ST_StartPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                                  FROM networks_pipe WHERE network_id = %(net)s::uuid
+                                UNION ALL
+                                SELECT ST_EndPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                                  FROM networks_pipe WHERE network_id = %(net)s::uuid
+                            ) raw
+                            WHERE geom IS NOT NULL
+                        ) pt
+                        """,
+                        {"net": str(network.id)},
+                    )
+                    total_nodes = cur.rowcount
+                    logger.info(
+                        "Derived %d junction nodes from pipe endpoints for network %s",
+                        total_nodes, network.id,
+                    )
+
+                # Assign zones to derived nodes
+                if Zone.objects.filter(network=network).exists():
+                    with connection.cursor() as cur:
+                        cur.execute(
+                            """
+                            UPDATE networks_node n
+                               SET zone_id = z.id
+                              FROM networks_zone z
+                             WHERE n.network_id = %s
+                               AND z.network_id = %s
+                               AND ST_Within(n.geometry, z.geometry)
+                               AND n.zone_id IS NULL
+                            """,
+                            [str(network.id), str(network.id)],
+                        )
+
             # Network stats + bbox
             network.total_pipes = total_pipes
             network.total_nodes = total_nodes
