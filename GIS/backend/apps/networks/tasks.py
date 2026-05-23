@@ -5,6 +5,7 @@ import tempfile
 import zipfile
 
 import fiona
+from fiona.model import to_dict as fiona_to_dict
 from celery import shared_task
 from django.contrib.gis.geos import GEOSGeometry, MultiLineString, MultiPolygon
 from django.db import connection
@@ -64,8 +65,15 @@ def _make_transformer(crs_wkt):
     return Transformer.from_crs(crs_wkt, "EPSG:4326", always_xy=True)
 
 
+def _geom_to_dict(geom):
+    """Coerce a fiona Geometry object or plain dict to a JSON-serialisable dict."""
+    if isinstance(geom, dict):
+        return geom
+    return fiona_to_dict(geom)
+
+
 def _reproject(geom_dict, transformer):
-    shape = from_geojson(json.dumps(geom_dict))
+    shape = from_geojson(json.dumps(_geom_to_dict(geom_dict)))
     reprojected = transform(transformer.transform, shape)
     return json.loads(to_geojson(reprojected))
 
@@ -169,7 +177,7 @@ def ingest_shapefile(self, upload_id: str):
                     for feat in src:
                         if not feat["geometry"]:
                             continue
-                        geom_dict = feat["geometry"]
+                        geom_dict = _geom_to_dict(feat["geometry"])
                         if needs_reproject:
                             geom_dict = _reproject(geom_dict, transformer)
                         geos = GEOSGeometry(json.dumps(geom_dict))
@@ -206,7 +214,7 @@ def ingest_shapefile(self, upload_id: str):
                     for feat in src:
                         if not feat["geometry"]:
                             continue
-                        geom_dict = feat["geometry"]
+                        geom_dict = _geom_to_dict(feat["geometry"])
                         if needs_reproject:
                             geom_dict = _reproject(geom_dict, transformer)
                         geos = GEOSGeometry(json.dumps(geom_dict))
@@ -258,7 +266,7 @@ def ingest_shapefile(self, upload_id: str):
                     for feat in src:
                         if not feat["geometry"]:
                             continue
-                        geom_dict = feat["geometry"]
+                        geom_dict = _geom_to_dict(feat["geometry"])
                         if needs_reproject:
                             geom_dict = _reproject(geom_dict, transformer)
                         geos = GEOSGeometry(json.dumps(geom_dict))
