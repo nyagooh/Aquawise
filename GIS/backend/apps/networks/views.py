@@ -92,6 +92,14 @@ class WaterNetworkDetailView(APIView):
             "created_at": network.created_at,
         })
 
+    def delete(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        network.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class NetworkValidationReportView(APIView):
     def get(self, request, pk):
