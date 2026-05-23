@@ -209,6 +209,7 @@ def ingest_shapefile(self, upload_id: str):
                     transformer = _make_transformer(src.crs_wkt) if needs_reproject else None
                     if not network.source_crs:
                         network.source_crs = src.crs_wkt[:50]
+                    logger.info("Line layer %s fields: %s", os.path.basename(shp_path), list(src.schema["properties"].keys()))
 
                     pipes = []
                     for feat in src:
@@ -248,6 +249,13 @@ def ingest_shapefile(self, upload_id: str):
                     total_pipes += len(pipes)
                     if not pipes:
                         warnings.append(f"{os.path.basename(shp_path)}: no valid line features")
+                    else:
+                        with connection.cursor() as cur:
+                            cur.execute(
+                                "UPDATE networks_pipe SET length_m = ST_Length(geometry::geography)"
+                                " WHERE network_id = %s AND length_m IS NULL",
+                                [str(network.id)],
+                            )
 
             # --- Nodes (points) ---
             total_nodes = 0
