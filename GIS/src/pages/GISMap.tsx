@@ -19,7 +19,7 @@ import {
   zoneLabel
 } from '../data/network';
 import { useNetwork } from '../context/NetworkContext';
-import { usePipes, useNodes } from '../hooks/useNetworkQueries';
+import { usePipes, useNodes, useNetworkStats } from '../hooks/useNetworkQueries';
 import type { PipeFeature as ApiPipeFeature, NodeFeature as ApiNodeFeature, GeoJSONGeometry } from '../types/api';
 
 /* ── API → local pipe adapter ── */
@@ -91,7 +91,11 @@ function adaptApiNodes(features: ApiNodeFeature[]): AssetFeature[] {
   return result;
 }
 
-function buildMetaFromApi(network: { total_length_km: number | null; total_pipes: number; bbox: GeoJSONGeometry | null; name: string }, pipes: PipeFeature[]): NetworkData['meta'] {
+function buildMetaFromApi(
+  network: { total_length_km: number | null; total_pipes: number; bbox: GeoJSONGeometry | null; name: string },
+  pipes: PipeFeature[],
+  stats?: { zones_breakdown?: { name: string; code: string; length_km: number }[]; materials_breakdown?: { material: string; length_km: number }[]; age_distribution?: Record<string, number>; status_breakdown?: Record<string, number> } | null
+): NetworkData['meta'] {
   let bboxArr: [number, number, number, number] = [36.7, -0.2, 36.9, 0.0];
   const bbox = network.bbox;
   if (bbox && bbox.type === 'Polygon') {
@@ -106,6 +110,17 @@ function buildMetaFromApi(network: { total_length_km: number | null; total_pipes
     const k = p.properties.ui_class;
     byClass[k] = (byClass[k] ?? 0) + 1;
   }
+  const totalKm = network.total_length_km ?? 0;
+  const topZones: [string, number][] = (stats?.zones_breakdown ?? []).map((z) => [z.name || z.code, z.length_km]);
+  const lengthByZone: Record<string, number> = Object.fromEntries(topZones);
+  const lengthByMaterial: Record<string, number> = Object.fromEntries(
+    (stats?.materials_breakdown ?? []).map((m) => [m.material, m.length_km])
+  );
+  const statusCounts = {
+    open: stats?.status_breakdown?.open ?? 0,
+    closed: stats?.status_breakdown?.closed ?? 0,
+    unknown: stats?.status_breakdown?.unknown ?? 0,
+  };
   return {
     source: network.name,
     feature_count: pipes.length,
@@ -113,18 +128,18 @@ function buildMetaFromApi(network: { total_length_km: number | null; total_pipes
     asset_counts: {},
     by_class: byClass,
     length_km_by_class: {},
-    length_km_by_zone: {},
-    length_km_by_material: {},
-    top_zones: [],
-    zones_normalized: [],
-    materials: [],
+    length_km_by_zone: lengthByZone,
+    length_km_by_material: lengthByMaterial,
+    top_zones: topZones,
+    zones_normalized: topZones.map(([name, km]): [string, number] => [name, totalKm > 0 ? km / totalKm : 0]),
+    materials: (stats?.materials_breakdown ?? []).map((m): [string, number] => [m.material, m.length_km]),
     common_diameters_mm: [],
     diameter_distribution: {},
-    age_distribution: {},
-    status_counts: { open: 0, closed: 0, unknown: 0 },
+    age_distribution: stats?.age_distribution ?? {},
+    status_counts: statusCounts,
     service_counts: { 'in-service': 0, 'out-of-service': 0, pending: 0, unknown: 0 },
-    total_length_m: (network.total_length_km ?? 0) * 1000,
-    total_length_km: network.total_length_km ?? 0,
+    total_length_m: totalKm * 1000,
+    total_length_km: totalKm,
     bbox: bboxArr,
     center,
   };
@@ -168,6 +183,7 @@ export default function GISMap() {
   const { activeNetwork, isLoading: networksLoading, hasNetworks } = useNetwork();
   const { data: apiPipesFC, isLoading: apiLoading, error: apiError } = usePipes(activeNetwork?.id ?? null);
   const { data: apiNodesFC } = useNodes(activeNetwork?.id ?? null);
+  const { data: apiStats } = useNetworkStats(activeNetwork?.id ?? null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -205,7 +221,7 @@ export default function GISMap() {
     if (!apiPipesFC) return;
     const pipes = adaptApiPipes(apiPipesFC.features);
     const assets = apiNodesFC ? adaptApiNodes(apiNodesFC.features) : [];
-    const meta = buildMetaFromApi(activeNetwork, pipes);
+    const meta = buildMetaFromApi(activeNetwork, pipes, apiStats);
     // Destroy existing map so it re-initialises with new data
     if (leafletRef.current) {
       leafletRef.current.remove();
@@ -214,7 +230,7 @@ export default function GISMap() {
       tileRef.current = null;
     }
     setNetwork({ pipes, assets, meta });
-  }, [activeNetwork, apiPipesFC, apiNodesFC, apiError]);
+  }, [activeNetwork, apiPipesFC, apiNodesFC, apiStats, apiError]);
 
   /* ── 2. initialise map once we have data ── */
   useEffect(() => {

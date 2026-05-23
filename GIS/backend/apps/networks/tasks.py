@@ -36,12 +36,13 @@ _MATERIAL_MAP = {
 }
 
 _MATERIAL_FIELDS = ["material", "mat", "pipe_mat", "matl", "material_t"]
-_DIAMETER_FIELDS = ["diameter", "diam", "dia", "diameter_mm", "pipe_diam", "width"]
-_STATUS_FIELDS = ["status", "stat", "pipe_stat", "condition"]
-_EXT_ID_FIELDS = ["id", "fid", "pipe_id", "node_id", "external_id", "objectid", "gid", "pipeid"]
+_DIAMETER_FIELDS = ["diameter", "diam", "dia", "diameter_mm", "pipe_diam", "width", "dia_dn", "dia_inch"]
+_STATUS_FIELDS = ["status", "stat", "pipe_stat", "condition", "servicesta"]
+_EXT_ID_FIELDS = ["dc_id", "id", "fid", "pipe_id", "node_id", "external_id", "objectid", "gid", "pipeid"]
 _NODE_TYPE_FIELDS = ["node_type", "type", "feature_ty", "node_t", "feature"]
 _ELEVATION_FIELDS = ["elevation", "elev", "z", "altitude", "elevation_m"]
-_YEAR_FIELDS = ["year", "install_yr", "installation_year", "year_inst"]
+_YEAR_FIELDS = ["year", "install_yr", "installation_year", "year_inst", "inst_date", "date_mapped", "datemapped"]
+_PIPE_ZONE_FIELDS = ["zone", "zone_id", "dma", "dma_id", "zone_name", "district", "network"]
 _ZONE_NAME_FIELDS = ["name", "zone_name", "dma_name", "zone", "district", "label"]
 _ZONE_CODE_FIELDS = ["code", "zone_code", "dma_code", "dma_id"]
 
@@ -90,6 +91,30 @@ def _to_int(val):
         return int(val) if val is not None else None
     except (ValueError, TypeError):
         return None
+
+
+def _extract_year(val):
+    """Extract a 4-digit year from integers, floats, or date strings like '2019-03-15'."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s or s.lower() in ("none", "null", ""):
+        return None
+    # Try plain integer / float year
+    try:
+        y = int(float(s))
+        if 1900 <= y <= 2100:
+            return y
+    except (ValueError, TypeError):
+        pass
+    # Try leading 4-digit year from date string
+    import re
+    m = re.match(r"(\d{4})", s)
+    if m:
+        y = int(m.group(1))
+        if 1900 <= y <= 2100:
+            return y
+    return None
 
 
 def _normalize_material(val):
@@ -198,10 +223,13 @@ def ingest_shapefile(self, upload_id: str):
 
             # --- Pipes (lines) ---
             total_pipes = 0
-            _pipe_known = {f for group in [
+            _pipe_known = {f.lower() for group in [
                 _MATERIAL_FIELDS, _DIAMETER_FIELDS, _STATUS_FIELDS,
-                _EXT_ID_FIELDS, _YEAR_FIELDS,
+                _EXT_ID_FIELDS, _YEAR_FIELDS, _PIPE_ZONE_FIELDS,
             ] for f in group}
+
+            # Zone cache: zone name → Zone instance (created on demand)
+            zone_cache: dict[str, Zone] = {}
 
             for shp_path in line_layers:
                 with fiona.open(shp_path) as src:
@@ -231,11 +259,28 @@ def ingest_shapefile(self, upload_id: str):
                         pipe_status = _normalize_pipe_status(
                             props.get(_find_field(props, _STATUS_FIELDS) or "") or ""
                         )
-                        year = _to_int(props.get(_find_field(props, _YEAR_FIELDS) or ""))
+                        year_raw = props.get(_find_field(props, _YEAR_FIELDS) or "")
+                        year = _extract_year(year_raw)
                         roughness = ROUGHNESS_DEFAULTS.get(material.upper())
+
+                        # Zone assignment from pipe attribute
+                        zone_obj = None
+                        zone_f = _find_field(props, _PIPE_ZONE_FIELDS)
+                        if zone_f:
+                            zone_name = str(props.get(zone_f) or "").strip()
+                            if zone_name:
+                                if zone_name not in zone_cache:
+                                    code = zone_name[:20]
+                                    zone_cache[zone_name], _ = Zone.objects.get_or_create(
+                                        network=network, code=code,
+                                        defaults={"name": zone_name},
+                                    )
+                                zone_obj = zone_cache[zone_name]
+
                         extras = {k: v for k, v in props.items() if k.lower() not in _pipe_known and v is not None}
                         pipes.append(Pipe(
                             network=network,
+                            zone=zone_obj,
                             external_id=ext_id,
                             geometry=geos,
                             material=material,
@@ -269,6 +314,7 @@ def ingest_shapefile(self, upload_id: str):
                     transformer = _make_transformer(src.crs_wkt) if needs_reproject else None
                     if not network.source_crs:
                         network.source_crs = src.crs_wkt[:50]
+                    logger.info("Point layer %s fields: %s", os.path.basename(shp_path), list(src.schema["properties"].keys()))
 
                     nodes = []
                     for feat in src:
