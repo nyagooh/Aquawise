@@ -19,8 +19,8 @@ import {
   zoneLabel
 } from '../data/network';
 import { useNetwork } from '../context/NetworkContext';
-import { usePipes } from '../hooks/useNetworkQueries';
-import type { PipeFeature as ApiPipeFeature, GeoJSONGeometry } from '../types/api';
+import { usePipes, useNodes } from '../hooks/useNetworkQueries';
+import type { PipeFeature as ApiPipeFeature, NodeFeature as ApiNodeFeature, GeoJSONGeometry } from '../types/api';
 
 /* ── API → local pipe adapter ── */
 
@@ -61,6 +61,32 @@ function adaptApiPipes(features: ApiPipeFeature[]): PipeFeature[] {
     } else if (geom.type === 'LineString') {
       result.push({ type: 'Feature', id: props.id, geometry: { type: 'LineString', coordinates: (geom as { type: 'LineString'; coordinates: [number, number][] }).coordinates }, properties: props });
     }
+  }
+  return result;
+}
+
+function adaptApiNodes(features: ApiNodeFeature[]): AssetFeature[] {
+  const result: AssetFeature[] = [];
+  for (const feat of features) {
+    const p = feat.properties;
+    const geom = feat.geometry as GeoJSONGeometry;
+    if (!geom || geom.type !== 'Point') continue;
+    const coords = (geom as { type: 'Point'; coordinates: [number, number] }).coordinates;
+    const id = p.external_id || p.id;
+    if (p.node_type === 'reservoir' || p.node_type === 'tank') {
+      result.push({
+        type: 'Feature', id,
+        geometry: { type: 'Point', coordinates: coords },
+        properties: { asset: 'tank', id, name: id, capacity_m3: 0, level_pct: 0, inflow_lps: 0, outflow_lps: 0, status: 'ok', junction_degree: 0 },
+      });
+    } else if (p.node_type === 'meter') {
+      result.push({
+        type: 'Feature', id,
+        geometry: { type: 'Point', coordinates: coords },
+        properties: { asset: 'meter_valve', id, name: id, size_mm: 0, state: 'open', consumption_m3d: 0, status: 'ok' },
+      });
+    }
+    // junction → not telemetry, skip
   }
   return result;
 }
@@ -141,6 +167,7 @@ export default function GISMap() {
 
   const { activeNetwork, isLoading: networksLoading, hasNetworks } = useNetwork();
   const { data: apiPipesFC, isLoading: apiLoading, error: apiError } = usePipes(activeNetwork?.id ?? null);
+  const { data: apiNodesFC } = useNodes(activeNetwork?.id ?? null);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -177,6 +204,7 @@ export default function GISMap() {
     }
     if (!apiPipesFC) return;
     const pipes = adaptApiPipes(apiPipesFC.features);
+    const assets = apiNodesFC ? adaptApiNodes(apiNodesFC.features) : [];
     const meta = buildMetaFromApi(activeNetwork, pipes);
     // Destroy existing map so it re-initialises with new data
     if (leafletRef.current) {
@@ -185,8 +213,8 @@ export default function GISMap() {
       layerGroupsRef.current = {};
       tileRef.current = null;
     }
-    setNetwork({ pipes, assets: [], meta });
-  }, [activeNetwork, apiPipesFC, apiError]);
+    setNetwork({ pipes, assets, meta });
+  }, [activeNetwork, apiPipesFC, apiNodesFC, apiError]);
 
   /* ── 2. initialise map once we have data ── */
   useEffect(() => {
