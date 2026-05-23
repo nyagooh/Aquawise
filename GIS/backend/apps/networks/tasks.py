@@ -329,7 +329,7 @@ def ingest_shapefile(self, upload_id: str):
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT ST_Extent(geometry::geometry)
+                    SELECT ST_AsText(ST_SetSRID(ST_Extent(geometry::geometry), 4326))
                       FROM (
                         SELECT geometry FROM networks_pipe WHERE network_id = %s
                         UNION ALL
