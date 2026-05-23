@@ -243,10 +243,12 @@ export default function GISMap() {
       preferCanvas: true,
       zoomControl: true,
       attributionControl: true,
-      maxBounds: L.latLngBounds([latMin - 0.1, lonMin - 0.1], [latMax + 0.1, lonMax + 0.1]),
-      minZoom: 10,
+      maxBounds: L.latLngBounds([latMin - 0.5, lonMin - 0.5], [latMax + 0.5, lonMax + 0.5]),
+      minZoom: 8,
       maxZoom: 19
     });
+    // Fit to actual network extent — avoids hardcoded zoom being too close or far
+    map.fitBounds([[latMin, lonMin], [latMax, lonMax]], { padding: [40, 40], animate: false });
     leafletRef.current = map;
     // Larger click tolerance — household lines are hairline, so a 6 px buffer
     // makes them clickable without forcing the operator to pixel-hunt.

@@ -3309,6 +3309,16 @@ button { font-family: inherit; }
   font-size: 0.8125rem;
 }
 
+/* network bar */
+.ops-network-bar {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  padding: 0 2px var(--s4);
+}
+
 /* skeleton */
 .ops-skeleton { display: flex; flex-direction: column; gap: 16px; }
 .ops-skel-band,
@@ -3621,6 +3631,7 @@ button { font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .reports-row.class-row span { color: hsl(var(--foreground)); }
+.reports-empty-note { font-size: 0.82rem; color: hsl(var(--muted-foreground)); padding: 6px 0; }
 .reports-mat-bar {
   height: 5px;
   background: hsl(var(--muted));

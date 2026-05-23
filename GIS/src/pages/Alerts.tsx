@@ -1,13 +1,8 @@
-/**
- * Alerts — incident feed derived directly from the live network state.
- *
- * Every alert is generated from the loaded GeoJSON / asset properties — no
- * hardcoded incidents. PV drift, tank lows, sensor anomalies, service-state
- * problems, and backfeed counts all become first-class operational alerts.
- */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shell } from '../components/Shell';
+import { useNetwork } from '../context/NetworkContext';
+import { useNetworkStats } from '../hooks/useNetworkQueries';
 import {
   loadNetwork,
   type NetworkData,
@@ -31,32 +26,113 @@ interface Alert {
   zone?: string;
   time: string;
   status: Status;
-  /** Where on the map "View on map" should take the user. */
   focusTarget?: { kind: 'asset' | 'pipe'; id: string };
 }
 
 type Filter = 'all' | 'critical' | 'warning' | 'info' | 'resolved';
 
+function buildApiAlerts(stats: {
+  total_pipes: number;
+  status_breakdown: Record<string, number>;
+  age_distribution: Record<string, number>;
+  materials_breakdown: { material: string; length_km: number; count: number }[];
+  zones_breakdown: { name: string; code: string; pipe_count: number; length_km: number }[];
+}): Alert[] {
+  const list: Alert[] = [];
+  const closed = stats.status_breakdown.closed ?? 0;
+  const pre2000 = stats.age_distribution['pre-2000'] ?? 0;
+  const unknown = stats.age_distribution['unknown'] ?? 0;
+  const total = stats.total_pipes || 1;
+  const acMat = stats.materials_breakdown.find((m) => m.material === 'AC');
+  const giMat = stats.materials_breakdown.find((m) => m.material === 'GI');
+
+  if (closed > 0) {
+    list.push({
+      id: 'SEG-CLOSED', severity: 'info', category: 'segment',
+      title: `${closed} backfeed segment${closed > 1 ? 's' : ''} isolated`,
+      detail: `${closed} closed or isolated pipes · not contributing to supply today`,
+      time: 'now', status: 'active',
+    });
+  }
+
+  if (pre2000 > 0) {
+    list.push({
+      id: 'AGE-PRE2000', severity: 'warning', category: 'segment',
+      title: `${pre2000} pipe${pre2000 > 1 ? 's' : ''} older than 25 years`,
+      detail: `${pre2000} segments installed before 2000 — elevated failure risk`,
+      time: 'now', status: 'active',
+    });
+  }
+
+  if (acMat && acMat.length_km > 0) {
+    list.push({
+      id: 'MAT-AC', severity: 'warning', category: 'segment',
+      title: 'Asbestos cement pipes detected',
+      detail: `${acMat.length_km.toFixed(1)} km of AC pipe — schedule rehabilitation`,
+      time: 'now', status: 'active',
+    });
+  }
+
+  if (giMat && giMat.length_km > 5) {
+    list.push({
+      id: 'MAT-GI', severity: 'info', category: 'segment',
+      title: 'Galvanised iron pipes present',
+      detail: `${giMat.length_km.toFixed(1)} km of GI pipe — monitor for corrosion`,
+      time: 'now', status: 'active',
+    });
+  }
+
+  if (unknown / total > 0.4) {
+    list.push({
+      id: 'AGE-UNKNOWN', severity: 'info', category: 'segment',
+      title: 'High proportion of undated segments',
+      detail: `${unknown.toLocaleString()} of ${total.toLocaleString()} pipes (${Math.round(unknown / total * 100)}%) have no install date — field survey needed`,
+      time: 'now', status: 'active',
+    });
+  }
+
+  if (stats.zones_breakdown.length === 0 && total > 0) {
+    list.push({
+      id: 'ZONE-NONE', severity: 'info', category: 'segment',
+      title: 'No service zones mapped',
+      detail: 'Network has no zone boundaries — add a Zone attribute to your shapefile',
+      time: 'now', status: 'active',
+    });
+  }
+
+  list.sort((a, b) => {
+    const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
+    return order[a.severity] - order[b.severity];
+  });
+  return list;
+}
+
 export default function Alerts() {
   const navigate = useNavigate();
-  const [data, setData] = useState<NetworkData | null>(null);
+  const { activeNetwork } = useNetwork();
+  const { data: apiStats } = useNetworkStats(activeNetwork?.id ?? null);
+  const [staticData, setStaticData] = useState<NetworkData | null>(null);
   const [filter, setFilter] = useState<Filter>('all');
 
   useEffect(() => {
+    if (activeNetwork) return;
     let alive = true;
-    loadNetwork().then((d) => { if (alive) setData(d); });
+    loadNetwork().then((d) => { if (alive) setStaticData(d); });
     return () => { alive = false; };
-  }, []);
+  }, [activeNetwork]);
 
-  const alerts = useMemo(() => (data ? buildAlerts(data) : []), [data]);
-  const stats = useMemo(() => {
-    return {
-      crit: alerts.filter((a) => a.status === 'active' && a.severity === 'critical').length,
-      warn: alerts.filter((a) => a.status === 'active' && a.severity === 'warning').length,
-      info: alerts.filter((a) => a.status === 'active' && a.severity === 'info').length,
-      resolved: alerts.filter((a) => a.status === 'resolved').length
-    };
-  }, [alerts]);
+  const alerts = useMemo(() => {
+    if (activeNetwork && apiStats) return buildApiAlerts(apiStats as Parameters<typeof buildApiAlerts>[0]);
+    if (!activeNetwork && staticData) return buildStaticAlerts(staticData);
+    return [];
+  }, [activeNetwork, apiStats, staticData]);
+
+  const counts = useMemo(() => ({
+    crit: alerts.filter((a) => a.status === 'active' && a.severity === 'critical').length,
+    warn: alerts.filter((a) => a.status === 'active' && a.severity === 'warning').length,
+    info: alerts.filter((a) => a.status === 'active' && a.severity === 'info').length,
+    resolved: alerts.filter((a) => a.status === 'resolved').length,
+  }), [alerts]);
 
   const list = alerts.filter((a) => {
     if (filter === 'all') return true;
@@ -64,32 +140,29 @@ export default function Alerts() {
     return a.status === 'active' && a.severity === filter;
   });
 
+  const networkName = activeNetwork?.name ?? 'Kisumu Water Supply Network';
   const sevTone = (s: Severity) => s === 'critical' ? 'danger' : s === 'warning' ? 'warn' : 'info';
 
   return (
-    <Shell active="alerts" title="Alerts & Incidents" sub={data ? `${stats.crit + stats.warn + stats.info} open · ${stats.resolved} resolved · auto-generated from live network state` : 'Loading…'}>
+    <Shell active="alerts" title="Alerts & Incidents"
+      sub={`${counts.crit + counts.warn + counts.info} open · ${counts.resolved} resolved · auto-generated from live network state`}
+    >
+      <div className="ops-network-bar">{networkName}</div>
+
       <section className="ops-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 'var(--s4)' }}>
-        <StatTile tone="crit"  label="Critical"  value={stats.crit}     sub="Immediate action required" />
-        <StatTile tone="warn"  label="Warning"   value={stats.warn}     sub="Monitor closely" />
-        <StatTile tone="info"  label="Info"      value={stats.info}     sub="Awareness only" />
-        <StatTile tone="muted" label="Resolved"  value={stats.resolved} sub="Closed in last 24h" />
+        <StatTile tone="crit"  label="Critical"  value={counts.crit}     sub="Immediate action required" />
+        <StatTile tone="warn"  label="Warning"   value={counts.warn}     sub="Monitor closely" />
+        <StatTile tone="info"  label="Info"      value={counts.info}     sub="Awareness only" />
+        <StatTile tone="muted" label="Resolved"  value={counts.resolved} sub="Closed in last 24h" />
       </section>
 
       <div className="ops-card" style={{ padding: 0 }}>
         <div className="alerts-filter-bar">
           {(['all', 'critical', 'warning', 'info', 'resolved'] as const).map((f) => (
-            <button
-              key={f}
-              className={`alerts-filter${filter === f ? ' active' : ''}`}
-              onClick={() => setFilter(f)}
-            >
+            <button key={f} className={`alerts-filter${filter === f ? ' active' : ''}`} onClick={() => setFilter(f)}>
               <span style={{ textTransform: 'capitalize' }}>{f}</span>
               <span className="alerts-filter-count">
-                {f === 'all' ? alerts.length :
-                 f === 'resolved' ? stats.resolved :
-                 f === 'critical' ? stats.crit :
-                 f === 'warning'  ? stats.warn :
-                 stats.info}
+                {f === 'all' ? alerts.length : f === 'resolved' ? counts.resolved : f === 'critical' ? counts.crit : f === 'warning' ? counts.warn : counts.info}
               </span>
             </button>
           ))}
@@ -99,52 +172,24 @@ export default function Alerts() {
 
         <table className="alerts-table">
           <thead>
-            <tr>
-              <th>Severity</th>
-              <th>Incident</th>
-              <th>Asset</th>
-              <th>Zone</th>
-              <th>Time</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
+            <tr><th>Severity</th><th>Incident</th><th>Asset</th><th>Zone</th><th>Time</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
             {list.length === 0 && (
-              <tr>
-                <td colSpan={7} className="alerts-empty">
-                  <span className="dot-safe" /> No alerts match this filter.
-                </td>
-              </tr>
+              <tr><td colSpan={7} className="alerts-empty"><span className="dot-safe" /> No alerts match this filter.</td></tr>
             )}
             {list.map((a) => {
               const focusHref = a.focusTarget ? `/gis?focus=${a.focusTarget.kind}:${a.focusTarget.id}` : '/gis';
               return (
                 <tr key={a.id} onClick={() => navigate(focusHref)}>
-                  <td>
-                    <span className={`pill ${sevTone(a.severity)}`}>
-                      <span className="dot" />{a.severity}
-                    </span>
-                  </td>
-                  <td>
-                    <strong>{a.title}</strong>
-                    <div className="alerts-detail">{a.detail}</div>
-                  </td>
+                  <td><span className={`pill ${sevTone(a.severity)}`}><span className="dot" />{a.severity}</span></td>
+                  <td><strong>{a.title}</strong><div className="alerts-detail">{a.detail}</div></td>
                   <td className="mono">{a.asset || '—'}</td>
-                  <td>{a.zone ? zoneLabel(a.zone) : '—'}</td>
+                  <td>{a.zone ? (activeNetwork ? a.zone : zoneLabel(a.zone)) : '—'}</td>
                   <td className="mono">{a.time}</td>
-                  <td>
-                    <span className={`pill ${a.status === 'active' ? 'danger' : 'safe'}`}>
-                      <span className="dot" />{a.status}
-                    </span>
-                  </td>
+                  <td><span className={`pill ${a.status === 'active' ? 'danger' : 'safe'}`}><span className="dot" />{a.status}</span></td>
                   <td style={{ textAlign: 'right' }}>
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      onClick={(e) => { e.stopPropagation(); navigate(focusHref); }}
-                    >
-                      View on map
-                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); navigate(focusHref); }}>View on map</button>
                   </td>
                 </tr>
               );
@@ -156,65 +201,32 @@ export default function Alerts() {
   );
 }
 
-function buildAlerts(d: NetworkData): Alert[] {
+// ── Static demo alert builder (Kisumu data) ──────────────────────────────────
+function buildStaticAlerts(d: NetworkData): Alert[] {
   const list: Alert[] = [];
   const closedPipes = d.pipes.filter((p) => p.properties.status === 'closed').slice(0, 3);
   const ooSPipes = d.pipes.filter((p) => p.properties.service === 'out-of-service').slice(0, 3);
-
   for (const a of d.assets) {
-    if (a.properties.asset === 'pressure_valve' && a.properties.status !== 'ok') {
-      list.push(prvAlert(a));
-    }
-    if (a.properties.asset === 'tank' && (a.properties.level_pct < 35 || a.properties.level_pct > 92)) {
-      list.push(tankAlert(a));
-    }
-    if (a.properties.asset === 'sensor' && a.properties.status !== 'ok') {
-      list.push(sensorAlert(a));
-    }
+    if (a.properties.asset === 'pressure_valve' && a.properties.status !== 'ok') list.push(prvAlert(a));
+    if (a.properties.asset === 'tank' && (a.properties.level_pct < 35 || a.properties.level_pct > 92)) list.push(tankAlert(a));
+    if (a.properties.asset === 'sensor' && a.properties.status !== 'ok') list.push(sensorAlert(a));
   }
-  closedPipes.forEach((p, i) => {
-    list.push({
-      id: `SEG-${p.properties.id}`,
-      severity: 'info',
-      category: 'segment',
-      title: 'Backfeed segment isolated',
-      detail: `${p.properties.id} closed · ${p.properties.material || 'unknown'} ${p.properties.diameter_mm || '?'} mm`,
-      asset: p.properties.id,
-      zone: p.properties.zone || undefined,
-      time: `${(i + 1) * 7}m ago`,
-      status: 'active',
-      focusTarget: { kind: 'pipe', id: p.properties.id }
-    });
-  });
-  ooSPipes.forEach((p, i) => {
-    list.push({
-      id: `SRV-${p.properties.id}`,
-      severity: 'warning',
-      category: 'service',
-      title: 'Service pipe out of service',
-      detail: `${p.properties.id} flagged out of service · ${p.properties.length_m?.toFixed(0) || '?'} m of ${p.properties.material || 'pipe'}`,
-      asset: p.properties.id,
-      zone: p.properties.zone || undefined,
-      time: `${(i + 1) * 24}m ago`,
-      status: 'active',
-      focusTarget: { kind: 'pipe', id: p.properties.id }
-    });
-  });
-
-  // A few resolved sample entries to populate the resolved tab.
-  list.push({
-    id: 'RES-PV-04', severity: 'warning', category: 'pressure', title: 'Pressure drift restored',
-    detail: 'PV-04 returned to set-point after operator adjustment',
-    asset: 'PV-04', zone: 'MIL', time: '2h ago', status: 'resolved',
-    focusTarget: { kind: 'asset', id: 'PV-04' }
-  });
-  list.push({
-    id: 'RES-T-02', severity: 'critical', category: 'reservoir', title: 'Reservoir refill complete',
-    detail: 'Reservoir 2 refilled from 28% → 84%',
-    asset: 'TANK-02', zone: 'MYT', time: '4h ago', status: 'resolved',
-    focusTarget: { kind: 'asset', id: 'TANK-02' }
-  });
-
+  closedPipes.forEach((p, i) => list.push({
+    id: `SEG-${p.properties.id}`, severity: 'info', category: 'segment',
+    title: 'Backfeed segment isolated',
+    detail: `${p.properties.id} closed · ${p.properties.material || 'unknown'} ${p.properties.diameter_mm || '?'} mm`,
+    asset: p.properties.id, zone: p.properties.zone || undefined, time: `${(i + 1) * 7}m ago`, status: 'active',
+    focusTarget: { kind: 'pipe', id: p.properties.id }
+  }));
+  ooSPipes.forEach((p, i) => list.push({
+    id: `SRV-${p.properties.id}`, severity: 'warning', category: 'service',
+    title: 'Service pipe out of service',
+    detail: `${p.properties.id} flagged out of service · ${p.properties.length_m?.toFixed(0) || '?'} m of ${p.properties.material || 'pipe'}`,
+    asset: p.properties.id, zone: p.properties.zone || undefined, time: `${(i + 1) * 24}m ago`, status: 'active',
+    focusTarget: { kind: 'pipe', id: p.properties.id }
+  }));
+  list.push({ id: 'RES-PV-04', severity: 'warning', category: 'pressure', title: 'Pressure drift restored', detail: 'PV-04 returned to set-point after operator adjustment', asset: 'PV-04', zone: 'MIL', time: '2h ago', status: 'resolved', focusTarget: { kind: 'asset', id: 'PV-04' } });
+  list.push({ id: 'RES-T-02', severity: 'critical', category: 'reservoir', title: 'Reservoir refill complete', detail: 'Reservoir 2 refilled from 28% → 84%', asset: 'TANK-02', zone: 'MYT', time: '4h ago', status: 'resolved', focusTarget: { kind: 'asset', id: 'TANK-02' } });
   list.sort((a, b) => {
     if (a.status !== b.status) return a.status === 'active' ? -1 : 1;
     const order: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
@@ -226,63 +238,21 @@ function buildAlerts(d: NetworkData): Alert[] {
 function prvAlert(a: AssetFeature): Alert {
   const p = a.properties as PressureValveProps;
   const drift = (p.live_bar - p.set_bar).toFixed(2);
-  return {
-    id: `ALERT-${p.id}`,
-    severity: p.status === 'alert' ? 'critical' : 'warning',
-    category: 'pressure',
-    title: `Pressure ${p.status === 'alert' ? 'alarm' : 'drift'} · ${p.id}`,
-    detail: `Live ${p.live_bar} bar (set ${p.set_bar}) · drift ${drift} bar · range ${p.min_bar}–${p.max_bar}`,
-    asset: p.id,
-    time: `${(p.id.charCodeAt(p.id.length - 1) % 9) + 1}m ago`,
-    status: 'active',
-    focusTarget: { kind: 'asset', id: p.id }
-  };
+  return { id: `ALERT-${p.id}`, severity: p.status === 'alert' ? 'critical' : 'warning', category: 'pressure', title: `Pressure ${p.status === 'alert' ? 'alarm' : 'drift'} · ${p.id}`, detail: `Live ${p.live_bar} bar (set ${p.set_bar}) · drift ${drift} bar · range ${p.min_bar}–${p.max_bar}`, asset: p.id, time: `${(p.id.charCodeAt(p.id.length - 1) % 9) + 1}m ago`, status: 'active', focusTarget: { kind: 'asset', id: p.id } };
 }
-
 function tankAlert(a: AssetFeature): Alert {
   const p = a.properties as TankProps;
   const sev: Severity = p.level_pct < 25 ? 'critical' : 'warning';
   const direction = p.level_pct < 35 ? 'low' : 'high';
-  return {
-    id: `ALERT-${p.id}`,
-    severity: sev,
-    category: 'reservoir',
-    title: `Reservoir level ${direction} · ${p.id}`,
-    detail: `${p.name} at ${p.level_pct}% · ${(p.capacity_m3 * p.level_pct / 100).toFixed(0)} m³ of ${p.capacity_m3.toLocaleString()} m³`,
-    asset: p.id,
-    time: `${(p.id.charCodeAt(p.id.length - 1) % 14) + 4}m ago`,
-    status: 'active',
-    focusTarget: { kind: 'asset', id: p.id }
-  };
+  return { id: `ALERT-${p.id}`, severity: sev, category: 'reservoir', title: `Reservoir level ${direction} · ${p.id}`, detail: `${p.name} at ${p.level_pct}% · ${(p.capacity_m3 * p.level_pct / 100).toFixed(0)} m³ of ${p.capacity_m3.toLocaleString()} m³`, asset: p.id, time: `${(p.id.charCodeAt(p.id.length - 1) % 14) + 4}m ago`, status: 'active', focusTarget: { kind: 'asset', id: p.id } };
 }
-
 function sensorAlert(a: AssetFeature): Alert {
   const p = a.properties as SensorProps;
-  return {
-    id: `ALERT-${p.id}`,
-    severity: 'warning',
-    category: 'sensor',
-    title: `Sensor anomaly · ${p.id}`,
-    detail: `${p.name} · ${p.flow_lps} L/s · ${p.pressure_bar} bar · last seen ${p.last_seen}`,
-    asset: p.id,
-    time: `${(p.id.charCodeAt(p.id.length - 1) % 8) + 1}m ago`,
-    status: 'active',
-    focusTarget: { kind: 'asset', id: p.id }
-  };
+  return { id: `ALERT-${p.id}`, severity: 'warning', category: 'sensor', title: `Sensor anomaly · ${p.id}`, detail: `${p.name} · ${p.flow_lps} L/s · ${p.pressure_bar} bar · last seen ${p.last_seen}`, asset: p.id, time: `${(p.id.charCodeAt(p.id.length - 1) % 8) + 1}m ago`, status: 'active', focusTarget: { kind: 'asset', id: p.id } };
 }
 
-function StatTile({ tone, label, value, sub }: {
-  tone: 'crit' | 'warn' | 'info' | 'muted';
-  label: string;
-  value: number;
-  sub: string;
-}) {
-  const colors = {
-    crit:  { color: 'hsl(var(--danger))',  bg: 'hsl(var(--danger-bg))' },
-    warn:  { color: 'hsl(var(--warning))', bg: 'hsl(var(--warning-bg))' },
-    info:  { color: 'hsl(var(--primary))', bg: 'hsl(var(--info-bg))' },
-    muted: { color: 'hsl(var(--foreground))', bg: 'hsl(var(--muted))' }
-  }[tone];
+function StatTile({ tone, label, value, sub }: { tone: 'crit' | 'warn' | 'info' | 'muted'; label: string; value: number; sub: string }) {
+  const colors = { crit: { color: 'hsl(var(--danger))', bg: 'hsl(var(--danger-bg))' }, warn: { color: 'hsl(var(--warning))', bg: 'hsl(var(--warning-bg))' }, info: { color: 'hsl(var(--primary))', bg: 'hsl(var(--info-bg))' }, muted: { color: 'hsl(var(--foreground))', bg: 'hsl(var(--muted))' } }[tone];
   return (
     <div className="ops-card alerts-stat">
       <div className="alerts-stat-label">{label}</div>

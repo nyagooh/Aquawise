@@ -1,9 +1,7 @@
-/**
- * Reports & Analytics — utility-grade summary reports built from the live
- * Kisumu network. Every figure is computed, not mocked.
- */
 import { useEffect, useMemo, useState } from 'react';
 import { Shell } from '../components/Shell';
+import { useNetwork } from '../context/NetworkContext';
+import { useNetworkStats } from '../hooks/useNetworkQueries';
 import {
   loadNetwork,
   zoneLabel,
@@ -21,18 +19,159 @@ const SUBS: Record<ReportType, string> = {
   monthly: 'Monthly report · last 30 days'
 };
 
+// Normalised shape used by ReportPreview — populated from either source
+interface ReportData {
+  networkName: string;
+  totalPipes: number;
+  totalLengthKm: number;
+  avgSegmentLengthM: number;
+  statusOpen: number;
+  statusClosed: number;
+  statusUnknown: number;
+  nrw: number;
+  health: number;
+  ageDistribution: Record<string, number>;
+  materials: { label: string; count: number; km: number; pct: number }[];
+  zones: { code: string; label: string; km: number; pipes: number }[];
+  nodes: { reservoirs: number; prvs: number; meters: number; sensors: number };
+}
+
+const MATERIAL_LOSS: Record<string, number> = {
+  AC: 0.22, CI: 0.18, GI: 0.15, Steel: 0.14, PVC: 0.09, PPR: 0.08, HDPE: 0.07
+};
+
+function deriveFromStats(
+  stats: {
+    total_pipes: number;
+    total_length_km: number;
+    status_breakdown: Record<string, number>;
+    age_distribution: Record<string, number>;
+    materials_breakdown: { material: string; length_km: number; count: number }[];
+    zones_breakdown: { name: string; code: string; pipe_count: number; length_km: number }[];
+  },
+  networkName: string,
+): ReportData {
+  const totalKm = stats.total_length_km || 1;
+
+  let matLoss = 0;
+  for (const m of stats.materials_breakdown) {
+    matLoss += (m.length_km / totalKm) * (MATERIAL_LOSS[m.material] ?? 0.12);
+  }
+  if (stats.materials_breakdown.length === 0) matLoss = 0.12;
+
+  const totalPipesForAge = Object.values(stats.age_distribution).reduce((s, n) => s + n, 0) || 1;
+  const oldPct = ((stats.age_distribution['pre-2000'] ?? 0) + (stats.age_distribution['2000-2009'] ?? 0)) / totalPipesForAge;
+  const nrw = Math.max(5, Math.min(35, (matLoss + oldPct * 0.06) * 100));
+
+  const knownMat = stats.materials_breakdown.reduce((s, m) => s + m.count, 0) || 1;
+  const materials = stats.materials_breakdown
+    .slice()
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
+    .map((m) => ({
+      label: m.material,
+      count: m.count,
+      km: m.length_km,
+      pct: Math.round((m.count / knownMat) * 100),
+    }));
+
+  const zones = stats.zones_breakdown
+    .filter((z) => z.length_km > 0)
+    .sort((a, b) => b.length_km - a.length_km)
+    .map((z) => ({ code: z.code, label: z.name || z.code, km: z.length_km, pipes: z.pipe_count }));
+
+  const open = stats.status_breakdown.open ?? 0;
+  const closed = stats.status_breakdown.closed ?? 0;
+  const total = stats.total_pipes || 1;
+  const healthScore = Math.max(0, Math.min(100, Math.round(
+    100 - (closed / total) * 30 - nrw * 0.5
+  )));
+
+  return {
+    networkName,
+    totalPipes: stats.total_pipes,
+    totalLengthKm: stats.total_length_km,
+    avgSegmentLengthM: stats.total_pipes > 0 ? (stats.total_length_km * 1000) / stats.total_pipes : 0,
+    statusOpen: open,
+    statusClosed: closed,
+    statusUnknown: Math.max(0, total - open - closed - (stats.status_breakdown.out_of_service ?? 0)),
+    nrw,
+    health: healthScore,
+    ageDistribution: stats.age_distribution,
+    materials,
+    zones,
+    nodes: { reservoirs: 0, prvs: 0, meters: 0, sensors: 0 },
+  };
+}
+
+function deriveFromStatic(d: NetworkData): ReportData {
+  const m = d.meta;
+  const nrw = deriveNRW(m);
+  const health = deriveHealthScore(m);
+  const totalMat = m.materials.reduce((s, [, n]) => s + n, 0) || 1;
+  const materials = m.materials.slice(0, 6).map(([mat, count]) => ({
+    label: mat, count,
+    km: m.length_km_by_material[mat] ?? 0,
+    pct: Math.round((count / totalMat) * 100),
+  }));
+  const zones = Object.entries(m.length_km_by_zone)
+    .filter(([z]) => isRealZone(z))
+    .sort((a, b) => b[1] - a[1])
+    .map(([code, km]) => ({ code, label: zoneLabel(code), km, pipes: 0 }));
+
+  return {
+    networkName: 'Kisumu Water Supply Network',
+    totalPipes: m.feature_count,
+    totalLengthKm: m.total_length_km,
+    avgSegmentLengthM: m.feature_count > 0 ? m.total_length_m / m.feature_count : 0,
+    statusOpen: m.status_counts.open ?? 0,
+    statusClosed: m.status_counts.closed ?? 0,
+    statusUnknown: m.status_counts.unknown ?? 0,
+    nrw,
+    health,
+    ageDistribution: m.age_distribution,
+    materials,
+    zones,
+    nodes: {
+      reservoirs: m.asset_counts.tank ?? 0,
+      prvs: m.asset_counts.pressure_valve ?? 0,
+      meters: m.asset_counts.meter_valve ?? 0,
+      sensors: m.asset_counts.sensor ?? 0,
+    },
+  };
+}
+
 export default function Reports() {
+  const { activeNetwork } = useNetwork();
+  const { data: apiStats } = useNetworkStats(activeNetwork?.id ?? null);
+  const [staticData, setStaticData] = useState<NetworkData | null>(null);
   const [type, setType] = useState<ReportType>('weekly');
-  const [data, setData] = useState<NetworkData | null>(null);
 
   useEffect(() => {
+    if (activeNetwork) return;
     let alive = true;
-    loadNetwork().then((d) => { if (alive) setData(d); });
+    loadNetwork().then((d) => { if (alive) setStaticData(d); });
     return () => { alive = false; };
-  }, []);
+  }, [activeNetwork]);
+
+  const report = useMemo<ReportData | null>(() => {
+    if (activeNetwork && apiStats)
+      return deriveFromStats(apiStats as Parameters<typeof deriveFromStats>[0], activeNetwork.name);
+    if (!activeNetwork && staticData)
+      return deriveFromStatic(staticData);
+    return null;
+  }, [activeNetwork, apiStats, staticData]);
+
+  const networkName = report?.networkName ?? activeNetwork?.name ?? 'Kisumu Water Supply Network';
 
   return (
-    <Shell active="reports" title="Reports & Analytics" sub={data ? `Last refresh · ${new Date().toLocaleString()} · ${data.meta.feature_count.toLocaleString()} segments analysed` : 'Loading…'}>
+    <Shell active="reports" title="Reports & Analytics"
+      sub={report
+        ? `Last refresh · ${new Date().toLocaleString()} · ${report.totalPipes.toLocaleString()} segments analysed`
+        : 'Loading…'}
+    >
+      <div className="ops-network-bar">{networkName}</div>
+
       <section>
         <div className="reports-eyebrow">Choose report type</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
@@ -60,29 +199,19 @@ export default function Reports() {
         </div>
       </section>
 
-      {!data ? (
+      {!report ? (
         <div className="ops-skeleton">
           <div className="ops-skel-row" />
         </div>
       ) : (
-        <ReportPreview type={type} data={data} />
+        <ReportPreview type={type} report={report} />
       )}
     </Shell>
   );
 }
 
-function ReportPreview({ type, data }: { type: ReportType; data: NetworkData }) {
-  const m = data.meta;
-  const nrw = useMemo(() => deriveNRW(m), [m]);
-  const health = useMemo(() => deriveHealthScore(m), [m]);
-
-  const topMaterials = m.materials.slice(0, 4);
-  const totalMat = topMaterials.reduce((s, [, n]) => s + n, 0);
-
-  const topZones = Object.entries(m.length_km_by_zone)
-    .filter(([z]) => isRealZone(z))
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+function ReportPreview({ type, report }: { type: ReportType; report: ReportData }) {
+  const topZones = report.zones.slice(0, 5);
 
   return (
     <>
@@ -111,7 +240,7 @@ function ReportPreview({ type, data }: { type: ReportType; data: NetworkData }) 
             <span>Zones</span>
             <select>
               <option>All zones</option>
-              {topZones.map(([z]) => <option key={z}>{zoneLabel(z)}</option>)}
+              {topZones.map((z) => <option key={z.code}>{z.label}</option>)}
             </select>
           </div>
         </div>
@@ -125,32 +254,31 @@ function ReportPreview({ type, data }: { type: ReportType; data: NetworkData }) 
           </div></div>
 
           <ReportSection title="Network health">
-            <ReportRow label="Health score" value={`${health}%`} color={health >= 95 ? 'hsl(var(--safe))' : 'hsl(var(--warning))'} />
-            <ReportRow label="Total length" value={`${m.total_length_km.toFixed(1)} km`} />
-            <ReportRow label="Active segments" value={(m.status_counts.open || 0).toLocaleString()} color="hsl(var(--safe))" />
-            <ReportRow label="Closed (backfeed)" value={(m.status_counts.closed || 0).toLocaleString()} color="hsl(var(--warning))" />
-            <ReportRow label="Status unknown" value={(m.status_counts.unknown || 0).toLocaleString()} />
+            <ReportRow label="Health score" value={`${report.health}%`} color={report.health >= 95 ? 'hsl(var(--safe))' : 'hsl(var(--warning))'} />
+            <ReportRow label="Total length" value={`${report.totalLengthKm.toFixed(1)} km`} />
+            <ReportRow label="Active segments" value={report.statusOpen.toLocaleString()} color="hsl(var(--safe))" />
+            <ReportRow label="Closed (backfeed)" value={report.statusClosed.toLocaleString()} color="hsl(var(--warning))" />
+            <ReportRow label="Status unknown" value={report.statusUnknown.toLocaleString()} />
           </ReportSection>
 
           <ReportSection title="Non-revenue water">
-            <ReportRow label="Estimated NRW ratio" value={`${nrw.toFixed(1)}%`} color={nrw >= 18 ? 'hsl(var(--danger))' : nrw >= 12 ? 'hsl(var(--warning))' : 'hsl(var(--safe))'} />
-            <ReportRow label="Daily input estimate" value={`${(m.total_length_km * 25).toFixed(0)} m³`} />
-            <ReportRow label="Estimated daily loss" value={`${(m.total_length_km * 25 * nrw / 100).toFixed(0)} m³`} color="hsl(var(--warning))" />
+            <ReportRow label="Estimated NRW ratio" value={`${report.nrw.toFixed(1)}%`}
+              color={report.nrw >= 18 ? 'hsl(var(--danger))' : report.nrw >= 12 ? 'hsl(var(--warning))' : 'hsl(var(--safe))'} />
+            <ReportRow label="Daily input estimate" value={`${(report.totalLengthKm * 25).toFixed(0)} m³`} />
+            <ReportRow label="Estimated daily loss" value={`${(report.totalLengthKm * 25 * report.nrw / 100).toFixed(0)} m³`} color="hsl(var(--warning))" />
             <ReportRow label="Driver" value="Age + material weighted" />
           </ReportSection>
 
           <ReportSection title="Service coverage">
             <ReportRow label="Service zones" value={topZones.length.toString()} />
-            <ReportRow label="Largest zone" value={`${zoneLabel(topZones[0][0])} · ${topZones[0][1].toFixed(1)} km`} />
-            <ReportRow label="Household connections" value={(m.by_class.household || 0).toLocaleString()} />
-            <ReportRow label="Household length" value={`${(m.length_km_by_class.household || 0).toFixed(1)} km`} />
+            {topZones[0] && <ReportRow label="Largest zone" value={`${topZones[0].label} · ${topZones[0].km.toFixed(1)} km`} />}
           </ReportSection>
 
-          <ReportSection title="Telemetry uptime">
-            <ReportRow label="Reservoirs" value={`${m.asset_counts.tank || 0}`} />
-            <ReportRow label="Pressure valves" value={`${m.asset_counts.pressure_valve || 0}`} />
-            <ReportRow label="Meter valves" value={`${m.asset_counts.meter_valve || 0}`} />
-            <ReportRow label="Flow/pressure sensors" value={`${m.asset_counts.sensor || 0}`} />
+          <ReportSection title="Telemetry assets">
+            <ReportRow label="Reservoirs / tanks" value={report.nodes.reservoirs.toString()} />
+            <ReportRow label="Pressure valves" value={report.nodes.prvs.toString()} />
+            <ReportRow label="Meter valves" value={report.nodes.meters.toString()} />
+            <ReportRow label="Flow/pressure sensors" value={report.nodes.sensors.toString()} />
           </ReportSection>
         </div>
 
@@ -161,28 +289,36 @@ function ReportPreview({ type, data }: { type: ReportType; data: NetworkData }) 
           </div></div>
 
           <ReportSection title="Pipe inventory">
-            <ReportRow label="Total segments" value={m.feature_count.toLocaleString()} />
-            <ReportRow label="Total length" value={`${m.total_length_km.toFixed(1)} km`} />
-            <ReportRow label="Avg segment length" value={`${(m.total_length_m / m.feature_count).toFixed(1)} m`} />
-          </ReportSection>
-
-          <ReportSection title="Pipe classes">
-            <ClassRow label="Transmission mains" count={m.by_class.main || 0} km={m.length_km_by_class.main || 0} color="#1D4ED8" />
-            <ClassRow label="Distribution mains" count={m.by_class.distribution || 0} km={m.length_km_by_class.distribution || 0} color="#0EA5E9" />
-            <ClassRow label="Household lines"   count={m.by_class.household || 0} km={m.length_km_by_class.household || 0} color="#94A3B8" />
-            <ClassRow label="Backfeed (closed)" count={m.by_class.backfeed || 0} km={m.length_km_by_class.backfeed || 0} color="#F59E0B" />
+            <ReportRow label="Total segments" value={report.totalPipes.toLocaleString()} />
+            <ReportRow label="Total length" value={`${report.totalLengthKm.toFixed(1)} km`} />
+            <ReportRow label="Avg segment length" value={`${report.avgSegmentLengthM.toFixed(1)} m`} />
           </ReportSection>
 
           <ReportSection title="Materials">
-            {topMaterials.map(([mat, count]) => (
-              <MaterialRow key={mat} label={mat} count={count} pct={Math.round((count / Math.max(1, totalMat)) * 100)} />
-            ))}
+            {report.materials.length > 0
+              ? report.materials.map((m) => (
+                  <MaterialRow key={m.label} label={m.label} count={m.count} km={m.km} pct={m.pct} />
+                ))
+              : <div className="reports-empty-note">No material data — shapefile had no material attribute</div>
+            }
           </ReportSection>
 
           <ReportSection title="Age profile">
-            {Object.entries(m.age_distribution).map(([bucket, count]) => (
-              <ReportRow key={bucket} label={bucket} value={count.toLocaleString()} />
-            ))}
+            {Object.keys(report.ageDistribution).length > 0
+              ? Object.entries(report.ageDistribution).map(([bucket, count]) => (
+                  <ReportRow key={bucket} label={bucket} value={count.toLocaleString()} />
+                ))
+              : <div className="reports-empty-note">No age data — shapefile had no installation year attribute</div>
+            }
+          </ReportSection>
+
+          <ReportSection title="Zones">
+            {topZones.length > 0
+              ? topZones.map((z) => (
+                  <ReportRow key={z.code} label={z.label} value={`${z.km.toFixed(1)} km${z.pipes > 0 ? ` · ${z.pipes.toLocaleString()} pipes` : ''}`} />
+                ))
+              : <div className="reports-empty-note">No zone data — shapefile had no zone attribute</div>
+            }
           </ReportSection>
         </div>
       </section>
@@ -232,26 +368,14 @@ function ReportRow({ label, value, color }: { label: string; value: string; colo
   );
 }
 
-function ClassRow({ label, count, km, color }: { label: string; count: number; km: number; color: string }) {
-  return (
-    <div className="reports-row class-row">
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 8, height: 8, borderRadius: 2, background: color }} />
-        {label}
-      </span>
-      <strong>{count.toLocaleString()} · {km.toFixed(1)} km</strong>
-    </div>
-  );
-}
-
-function MaterialRow({ label, count, pct }: { label: string; count: number; pct: number }) {
+function MaterialRow({ label, count, km, pct }: { label: string; count: number; km: number; pct: number }) {
   return (
     <div className="reports-row">
       <span style={{ flex: 1, marginRight: 12 }}>
         <span style={{ fontWeight: 600 }}>{label}</span>
         <div className="reports-mat-bar"><div style={{ width: `${pct}%` }} /></div>
       </span>
-      <strong>{count.toLocaleString()} · {pct}%</strong>
+      <strong>{count.toLocaleString()} · {km.toFixed(1)} km · {pct}%</strong>
     </div>
   );
 }
