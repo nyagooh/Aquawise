@@ -3319,6 +3319,33 @@ button { font-family: inherit; }
   padding: 0 2px var(--s4);
 }
 
+/* data sources card */
+.ops-sources-list { display: flex; flex-direction: column; gap: 0; }
+.ops-source-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+.ops-source-row:last-child { border-bottom: none; }
+.ops-source-check {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.ops-source-check.ok  { background: hsl(var(--safe) / 0.15); color: hsl(var(--safe)); }
+.ops-source-check.miss{ background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+.ops-source-info { flex: 1; min-width: 0; }
+.ops-source-name { font-size: 0.88rem; font-weight: 600; }
+.ops-source-meta { font-size: 0.78rem; color: hsl(var(--muted-foreground)); margin-top: 2px; }
+
 /* skeleton */
 .ops-skeleton { display: flex; flex-direction: column; gap: 16px; }
 .ops-skel-band,

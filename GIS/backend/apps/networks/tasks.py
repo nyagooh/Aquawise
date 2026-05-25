@@ -489,3 +489,245 @@ def ingest_shapefile(self, upload_id: str):
         upload.validation_report = {"error": str(exc), "warnings": warnings}
         upload.completed_at = timezone.now()
         upload.save()
+
+
+# ── EPANET ingestion ──────────────────────────────────────────────────────────
+
+def _parse_inp_sections(path):
+    """Read an EPANET .inp text file into {SECTION: [[token,...], ...]}."""
+    sections = {}
+    current = None
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("["):
+                end = stripped.index("]")
+                current = stripped[1:end].upper()
+                sections[current] = []
+            elif current and not stripped.startswith(";"):
+                parts = stripped.split(";")[0].split()
+                if parts:
+                    sections[current].append(parts)
+    return sections
+
+
+def _extract_net_node_types(path):
+    """
+    Scan an EPANET .net binary for node-type prefixes.
+    Returns {node_id: node_type_string} for tanks, reservoirs, and valves only
+    (junctions are already derived from pipe endpoints).
+    """
+    import re as _re
+    with open(path, "rb") as f:
+        data = f.read()
+    result = {}
+    for m in _re.finditer(rb"[A-Z][A-Z0-9_\-]{1,29}", data):
+        nid = m.group(0).decode("ascii", errors="replace")
+        if _re.match(r"^(TCV|FCV|PRV|GPV|PSV)-", nid):
+            result[nid] = "valve"
+        elif nid.startswith("T-"):
+            result[nid] = "tank"
+        elif nid.startswith("R-") and len(nid) > 2:
+            result[nid] = "reservoir"
+    # Deduplicate (same ID may appear many times in binary)
+    return dict(result)
+
+
+def _apply_epanet_inp(network, sections, warnings):
+    """
+    Parse INP sections and replace all existing nodes with properly typed,
+    geographically positioned nodes from the EPANET model.
+    """
+    # Coordinates
+    coords = {}
+    for row in sections.get("COORDINATES", []):
+        if len(row) >= 3:
+            x, y = _to_float(row[1]), _to_float(row[2])
+            if x is not None and y is not None:
+                coords[row[0]] = (x, y)
+
+    if not coords:
+        warnings.append("[COORDINATES] section missing — nodes cannot be positioned")
+        return
+
+    # Detect CRS: if values are in degree range → WGS84; else use network.source_crs
+    xs = [x for x, _ in coords.values()]
+    in_degrees = -180 < min(xs) < 180 and -180 < max(xs) < 180
+    transformer = None
+    if not in_degrees:
+        crs_wkt = network.source_crs or "EPSG:32736"
+        if not _is_wgs84(crs_wkt):
+            try:
+                transformer = _make_transformer(crs_wkt)
+            except Exception as exc:
+                warnings.append(f"CRS transform failed ({exc}); coordinates may be inaccurate")
+
+    # Collect node attributes from all sections
+    nodes_data = {}
+    for row in sections.get("JUNCTIONS", []):
+        if row:
+            nodes_data[row[0]] = {
+                "node_type": Node.NodeType.JUNCTION,
+                "elevation_m": _to_float(row[1]) if len(row) > 1 else None,
+                "demand_lps": _to_float(row[2]) if len(row) > 2 else None,
+            }
+    for row in sections.get("RESERVOIRS", []):
+        if row:
+            nodes_data[row[0]] = {
+                "node_type": Node.NodeType.RESERVOIR,
+                "elevation_m": _to_float(row[1]) if len(row) > 1 else None,
+            }
+    for row in sections.get("TANKS", []):
+        if row:
+            nodes_data[row[0]] = {
+                "node_type": Node.NodeType.TANK,
+                "elevation_m": _to_float(row[1]) if len(row) > 1 else None,
+            }
+
+    if not nodes_data:
+        warnings.append("No node sections ([JUNCTIONS]/[RESERVOIRS]/[TANKS]) found")
+        return
+
+    # Replace all existing nodes with EPANET model nodes
+    Node.objects.filter(network=network).delete()
+
+    node_objs = []
+    skipped = 0
+    for node_id, data in nodes_data.items():
+        if node_id not in coords:
+            skipped += 1
+            continue
+        x, y = coords[node_id]
+        geom_dict = {"type": "Point", "coordinates": [x, y]}
+        if transformer:
+            geom_dict = _reproject(geom_dict, transformer)
+        try:
+            geos = GEOSGeometry(json.dumps(geom_dict))
+        except Exception:
+            skipped += 1
+            continue
+        node_objs.append(Node(
+            network=network,
+            external_id=node_id,
+            node_type=data["node_type"],
+            geometry=geos,
+            elevation_m=data.get("elevation_m"),
+            demand_lps=data.get("demand_lps"),
+        ))
+
+    if skipped:
+        warnings.append(f"{skipped} nodes skipped (no coordinates or invalid geometry)")
+
+    Node.objects.bulk_create(node_objs, batch_size=500)
+    network.total_nodes = len(node_objs)
+    network.save(update_fields=["total_nodes"])
+
+    # Zone assignment
+    if Zone.objects.filter(network=network).exists():
+        with connection.cursor() as cur:
+            cur.execute(
+                """UPDATE networks_node n SET zone_id = z.id
+                   FROM networks_zone z
+                   WHERE n.network_id = %s AND z.network_id = %s
+                   AND ST_Within(n.geometry, z.geometry) AND n.zone_id IS NULL""",
+                [str(network.id), str(network.id)],
+            )
+
+    logger.info(
+        "INP: created %d nodes (%d skipped) for network %s",
+        len(node_objs), skipped, network.id,
+    )
+
+
+def _apply_epanet_net_types(network, node_types, warnings):
+    """
+    .net binary: we have node IDs and types but no geographic coords.
+    Creates special nodes (tank/reservoir/valve) at the network centroid
+    so they appear in Sensors. Upload an .inp for accurate positions.
+    """
+    if not node_types:
+        warnings.append("No special nodes (T-, R-, TCV-, FCV-, PRV-) found in .net binary")
+        return
+
+    with connection.cursor() as cur:
+        cur.execute(
+            "SELECT ST_AsText(ST_Centroid(ST_Collect(geometry::geometry))) "
+            "FROM networks_pipe WHERE network_id = %s",
+            [str(network.id)],
+        )
+        row = cur.fetchone()
+        centroid_wkt = row[0] if row and row[0] else "POINT(0 0)"
+
+    centroid = GEOSGeometry(centroid_wkt)
+    valid_types = {c[0] for c in Node.NodeType.choices}
+
+    new_nodes = []
+    for node_id, ntype in node_types.items():
+        if ntype not in valid_types:
+            continue
+        new_nodes.append(Node(
+            network=network,
+            external_id=node_id,
+            node_type=ntype,
+            geometry=centroid,
+            attributes={"unlocated": True, "source": "epanet_net"},
+        ))
+
+    Node.objects.bulk_create(new_nodes, batch_size=200, ignore_conflicts=True)
+    network.total_nodes = Node.objects.filter(network=network).count()
+    network.save(update_fields=["total_nodes"])
+    warnings.append(
+        f".net binary: {len(new_nodes)} special nodes placed at network centroid. "
+        "Upload an .inp file for accurate geographic positions."
+    )
+    logger.info(".net: created %d special nodes for network %s", len(new_nodes), network.id)
+
+
+@shared_task(bind=True, ignore_result=True)
+def ingest_epanet(self, upload_id: str):
+    try:
+        upload = NetworkUpload.objects.get(id=upload_id)
+    except NetworkUpload.DoesNotExist:
+        logger.error("NetworkUpload %s not found", upload_id)
+        return
+
+    if not upload.network_id:
+        upload.status = NetworkUpload.Status.FAILED
+        upload.validation_report = {"error": "No network associated with this upload"}
+        upload.save(update_fields=["status", "validation_report"])
+        return
+
+    upload.status = NetworkUpload.Status.PROCESSING
+    upload.save(update_fields=["status"])
+
+    network = upload.network
+    warnings = []
+
+    try:
+        ext = upload.file_path.rsplit(".", 1)[-1].lower()
+        if ext == "inp":
+            sections = _parse_inp_sections(upload.file_path)
+            _apply_epanet_inp(network, sections, warnings)
+        elif ext == "net":
+            node_types = _extract_net_node_types(upload.file_path)
+            _apply_epanet_net_types(network, node_types, warnings)
+        else:
+            raise ValueError(f"Unsupported EPANET extension: .{ext}")
+
+        upload.status = (
+            NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings
+            else NetworkUpload.Status.COMPLETE
+        )
+        upload.validation_report = {"warnings": warnings}
+        upload.completed_at = timezone.now()
+        upload.save()
+        logger.info("EPANET ingestion complete for upload %s", upload_id)
+
+    except Exception as exc:
+        logger.exception("EPANET ingestion failed for upload %s", upload_id)
+        upload.status = NetworkUpload.Status.FAILED
+        upload.validation_report = {"error": str(exc), "warnings": warnings}
+        upload.completed_at = timezone.now()
+        upload.save()

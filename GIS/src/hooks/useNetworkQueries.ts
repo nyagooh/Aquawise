@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type {
   WaterNetwork,
@@ -99,6 +99,38 @@ export function useUploadStatus(uploadId: string | null) {
       const s = query.state.data?.status;
       if (!s || s === 'complete' || s === 'complete_warnings' || s === 'failed') return false;
       return 3_000;
+    },
+  });
+}
+
+export function useNetworkUploads(networkId: string | null) {
+  return useQuery({
+    queryKey: ['network-uploads', networkId],
+    queryFn: () =>
+      api.get<NetworkUpload[]>(`/networks/${networkId}/uploads/`).then((r) => r.data),
+    enabled: !!networkId,
+    staleTime: 30_000,
+  });
+}
+
+export function useEpanetUpload(networkId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return api
+        .post<{ upload_id: string; status: string }>(
+          `/networks/${networkId}/epanet/`,
+          form,
+          { headers: { 'Content-Type': 'multipart/form-data' } },
+        )
+        .then((r) => r.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['network-uploads', networkId] });
+      queryClient.invalidateQueries({ queryKey: ['nodes', networkId] });
+      queryClient.invalidateQueries({ queryKey: ['network-stats', networkId] });
     },
   });
 }

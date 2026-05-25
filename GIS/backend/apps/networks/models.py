@@ -16,7 +16,13 @@ class NetworkUpload(models.Model):
     project = models.ForeignKey("core.Project", on_delete=models.CASCADE, null=True, blank=True)
     file_name = models.CharField(max_length=255)
     file_path = models.CharField(max_length=500)
-    file_type = models.CharField(max_length=20, choices=[("shapefile", "Shapefile"), ("epanet", "EPANET .inp")])
+    network = models.ForeignKey("WaterNetwork", on_delete=models.CASCADE, null=True, blank=True, related_name="uploads")
+    file_type = models.CharField(max_length=20, choices=[
+        ("shapefile", "Shapefile"),
+        ("epanet", "EPANET .inp"),
+        ("epanet_inp", "EPANET .inp"),
+        ("epanet_net", "EPANET .net"),
+    ])
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING)
     validation_report = models.JSONField(default=dict, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)

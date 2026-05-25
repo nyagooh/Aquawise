@@ -41,17 +41,18 @@ class NetworkUploadView(APIView):
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("zip", "inp"):
+        if ext not in ("zip", "inp", "net"):
             return Response(
-                {"error": "Only .zip (shapefile) or .inp (EPANET) files accepted"},
+                {"error": "Only .zip (shapefile), .inp, or .net (EPANET) files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        file_type = "shapefile" if ext == "zip" else f"epanet_{ext}"
         upload = NetworkUpload.objects.create(
             organisation=request.user.organisation,
             file_name=file.name,
             file_path="",
-            file_type="shapefile" if ext == "zip" else "epanet",
+            file_type=file_type,
         )
 
         # Save file to media/uploads/<org_id>/<upload_id>.<ext>
@@ -68,11 +69,9 @@ class NetworkUploadView(APIView):
             try:
                 ingest_shapefile.delay(str(upload.id))
             except Exception:
-                # Broker unavailable — run synchronously in-process as fallback.
                 ingest_shapefile.apply(args=[str(upload.id)])
-        # EPANET (.inp) ingestion task — TODO
 
-        return Response({"upload_id": upload.id, "status": upload.status}, status=status.HTTP_202_ACCEPTED)
+        return Response({"upload_id": str(upload.id), "status": upload.status}, status=status.HTTP_202_ACCEPTED)
 
 
 class WaterNetworkDetailView(APIView):
@@ -109,6 +108,7 @@ class NetworkValidationReportView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         return Response({
             "id": str(upload.id),
+            "network_id": str(upload.network_id) if upload.network_id else None,
             "status": upload.status,
             "file_name": upload.file_name,
             "file_type": upload.file_type,
@@ -336,3 +336,88 @@ class NetworkStatsView(APIView):
             "zones_breakdown": zones_breakdown,
             "nodes_breakdown": nodes_breakdown,
         })
+
+
+class EpanetUploadView(APIView):
+    """Attach an EPANET .inp or .net file to an existing network."""
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = file.name.rsplit(".", 1)[-1].lower()
+        if ext not in ("inp", "net"):
+            return Response(
+                {"error": "Only .inp or .net EPANET files accepted"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        upload = NetworkUpload.objects.create(
+            organisation=request.user.organisation,
+            network=network,
+            file_name=file.name,
+            file_path="",
+            file_type=f"epanet_{ext}",
+        )
+
+        upload_dir = f"uploads/{request.user.organisation_id}"
+        saved_path = default_storage.save(
+            os.path.join(upload_dir, f"{upload.id}.{ext}"),
+            ContentFile(file.read()),
+        )
+        upload.file_path = default_storage.path(saved_path)
+        upload.save(update_fields=["file_path"])
+
+        from .tasks import ingest_epanet
+        try:
+            ingest_epanet.delay(str(upload.id))
+        except Exception:
+            ingest_epanet.apply(args=[str(upload.id)])
+
+        return Response(
+            {"upload_id": str(upload.id), "status": upload.status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class NetworkUploadsListView(APIView):
+    """List all uploads (shapefile + EPANET) attached to a network."""
+    def get(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        uploads = NetworkUpload.objects.filter(network=network).order_by("-uploaded_at")
+        # Also include the original shapefile upload (linked via WaterNetwork.upload)
+        if network.upload_id:
+            shp = network.upload
+            data = [{
+                "id": str(shp.id),
+                "file_name": shp.file_name,
+                "file_type": shp.file_type,
+                "status": shp.status,
+                "uploaded_at": shp.uploaded_at,
+                "validation_report": shp.validation_report or {},
+            }]
+        else:
+            data = []
+
+        for u in uploads:
+            data.append({
+                "id": str(u.id),
+                "file_name": u.file_name,
+                "file_type": u.file_type,
+                "status": u.status,
+                "uploaded_at": u.uploaded_at,
+                "validation_report": u.validation_report or {},
+            })
+
+        return Response(data)

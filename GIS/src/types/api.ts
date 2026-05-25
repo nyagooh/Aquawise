@@ -71,7 +71,7 @@ export type UploadStatus =
   | 'complete_warnings'
   | 'failed';
 
-export type FileType = 'shapefile' | 'epanet';
+export type FileType = 'shapefile' | 'epanet' | 'epanet_inp' | 'epanet_net';
 
 export interface ValidationReport {
   pipes?: number;
@@ -83,6 +83,7 @@ export interface ValidationReport {
 export interface NetworkUpload {
   id: string;
   organisation: string;           // UUID
+  network: string | null;         // UUID — set after ingestion completes
   project: string | null;         // UUID
   file_name: string;
   file_type: FileType;

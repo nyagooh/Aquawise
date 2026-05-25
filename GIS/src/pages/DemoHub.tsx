@@ -180,7 +180,7 @@ function ChooserView() {
    Upload workflow
    ════════════════════════════════════════════════════════════ */
 
-type UploadPhase = 'idle' | 'uploading' | 'processing' | 'done' | 'failed';
+type UploadPhase = 'idle' | 'uploading' | 'processing' | 'epanet' | 'done' | 'failed';
 
 function UploadView() {
   const navigate = useNavigate();
@@ -194,42 +194,63 @@ function UploadView() {
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const [networkId, setNetworkId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const { data: uploadStatus } = useUploadStatus(uploadId);
+
+  const stagedZip = staged.find((f) => /\.zip$/i.test(f.name));
+  const stagedEpanet = staged.find((f) => /\.(inp|net)$/i.test(f.name));
 
   // React to polling results
   useEffect(() => {
     if (!uploadStatus) return;
     const s = uploadStatus.status;
     if (s === 'complete' || s === 'complete_warnings') {
-      setPhase('done');
+      const netId = (uploadStatus as { network_id?: string | null }).network_id ?? null;
+      setNetworkId(netId);
+      if (stagedEpanet && netId) {
+        // Upload EPANET file now that we have a network
+        setPhase('epanet');
+        const form = new FormData();
+        form.append('file', stagedEpanet);
+        api.post(`/networks/${netId}/epanet/`, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+          .then(() => setPhase('done'))
+          .catch(() => setPhase('done')); // EPANET failure is non-fatal
+      } else {
+        setPhase('done');
+      }
     } else if (s === 'failed') {
       setPhase('failed');
       setErrorMsg(
-        (uploadStatus.validation_report as { error?: string })?.error
+        uploadStatus.validation_report?.error
         || 'Ingestion failed. Check that the zip contains a valid shapefile.'
       );
       setUploadId(null);
     } else {
       setPhase('processing');
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadStatus]);
 
   const onFiles = (files: FileList | null) => {
     if (!files) return;
     setStaged((s) => {
-      const next = [...s];
-      Array.from(files).forEach((f) => {
-        if (!next.find((x) => x.name === f.name && x.size === f.size)) next.push(f);
-      });
+      let next = [...s];
+      for (const f of Array.from(files)) {
+        if (/\.(inp|net)$/i.test(f.name)) {
+          next = next.filter((x) => !/\.(inp|net)$/i.test(x.name));
+          next.push(f);
+        } else if (!next.find((x) => x.name === f.name && x.size === f.size)) {
+          next.push(f);
+        }
+      }
       return next;
     });
   };
 
   const submit = async () => {
-    const zipFile = staged.find((f) => f.name.toLowerCase().endsWith('.zip'));
-    if (!zipFile) {
+    if (!stagedZip) {
       setErrorMsg('Please add a .zip file containing your shapefile components (.shp, .dbf, .shx, .prj).');
       return;
     }
@@ -238,7 +259,7 @@ function UploadView() {
     setUploadProgress(0);
 
     const formData = new FormData();
-    formData.append('file', zipFile);
+    formData.append('file', stagedZip);
 
     try {
       const { data } = await api.post<{ upload_id: string; status: string }>(
@@ -274,13 +295,14 @@ function UploadView() {
   };
 
   // ── Processing / done / failed overlays ──
-  if (phase === 'uploading' || phase === 'processing' || phase === 'done' || phase === 'failed') {
-    const report = uploadStatus?.validation_report as { pipes?: number; nodes?: number; warnings?: string[] } | undefined;
+  if (phase === 'uploading' || phase === 'processing' || phase === 'epanet' || phase === 'done' || phase === 'failed') {
+    const report = uploadStatus?.validation_report;
+    const isActive = phase !== 'done' && phase !== 'failed';
     return (
       <DemoFrame>
         <header className="demo-hub-head">
           <div className="demo-hub-eyebrow">
-            {phase !== 'done' && phase !== 'failed' && (
+            {isActive && (
               <span style={{ color: 'hsl(var(--muted-foreground))' }}>Processing your network…</span>
             )}
           </div>
@@ -292,21 +314,29 @@ function UploadView() {
                 ? errorMsg
                 : phase === 'uploading'
                   ? `Sending file… ${uploadProgress}%`
-                  : 'Classifying geometry · reprojecting CRS · building spatial index…'}
+                  : phase === 'epanet'
+                    ? 'Attaching EPANET hydraulic model…'
+                    : 'Classifying geometry · reprojecting CRS · building spatial index…'}
           </p>
         </header>
 
         <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 var(--s6)' }}>
-          {(phase === 'uploading' || phase === 'processing') && (
+          {(phase === 'uploading' || phase === 'processing' || phase === 'epanet') && (
             <div className="upload-progress-track">
               <div className="upload-progress-step" data-active={phase === 'uploading' ? 'true' : 'false'}>
                 <span className={phase === 'uploading' ? 'upload-step-spinner' : 'upload-step-done'} />
                 Uploading
               </div>
               <div className="upload-progress-step" data-active={phase === 'processing' ? 'true' : 'false'}>
-                <span className={phase === 'processing' ? 'upload-step-spinner' : 'upload-step-pending'} />
-                Ingesting
+                <span className={phase === 'processing' ? 'upload-step-spinner' : phase === 'epanet' ? 'upload-step-done' : 'upload-step-pending'} />
+                Ingesting shapefile
               </div>
+              {stagedEpanet && (
+                <div className="upload-progress-step" data-active={phase === 'epanet' ? 'true' : 'false'}>
+                  <span className={phase === 'epanet' ? 'upload-step-spinner' : 'upload-step-pending'} />
+                  Attaching EPANET
+                </div>
+              )}
               <div className="upload-progress-step" data-active="false">
                 <span className="upload-step-pending" />
                 Ready
@@ -372,7 +402,7 @@ function UploadView() {
           </Link>
         </div>
         <h1>Upload your GIS data.</h1>
-        <p>Drop a <strong>.zip</strong> containing your shapefile components — we&apos;ll reproject, classify, and render it on the map.</p>
+        <p>Drop a <strong>.zip</strong> shapefile — we&apos;ll reproject, classify, and render it. Optionally add an <strong>.inp</strong> or <strong>.net</strong> EPANET model to import node types and elevations.</p>
       </header>
 
       <section className="demo-upload-grid">
@@ -386,7 +416,8 @@ function UploadView() {
             <input
               ref={inputRef}
               type="file"
-              accept=".zip"
+              accept=".zip,.inp,.net"
+              multiple
               onChange={(e) => onFiles(e.target.files)}
               style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
             />
@@ -398,10 +429,10 @@ function UploadView() {
                   <line x1={12} y1={3} x2={12} y2={15} />
                 </svg>
               </div>
-              <div className="demo-upload-headline">Drop your .zip shapefile here</div>
+              <div className="demo-upload-headline">Drop your GIS files here</div>
               <div className="demo-upload-sub">or <span className="link">browse from your computer</span></div>
               <div className="demo-upload-formats">
-                <span>.zip (contains .shp + .dbf + .shx + .prj)</span>
+                <span>.zip shapefile &nbsp;·&nbsp; .inp / .net EPANET (optional)</span>
               </div>
             </div>
           </label>
@@ -417,21 +448,30 @@ function UploadView() {
                 <button type="button" className="link" onClick={() => setStaged([])}>Clear all</button>
               </div>
               <ul>
-                {staged.map((f) => (
-                  <li key={f.name}>
-                    <FileTypeBadge name={f.name} />
-                    <span className="demo-upload-file-name">{f.name}</span>
-                    <span className="demo-upload-file-size">{formatBytes(f.size)}</span>
-                    <button
-                      className="demo-upload-file-remove"
-                      onClick={() => setStaged((s) => s.filter((x) => x !== f))}
-                      aria-label={`Remove ${f.name}`}
-                    >×</button>
-                  </li>
-                ))}
+                {staged.map((f) => {
+                  const isEpanet = /\.(inp|net)$/i.test(f.name);
+                  return (
+                    <li key={f.name}>
+                      <FileTypeBadge name={f.name} />
+                      <span className="demo-upload-file-name">{f.name}</span>
+                      {isEpanet && <span style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', marginLeft: 6 }}>EPANET model</span>}
+                      <span className="demo-upload-file-size">{formatBytes(f.size)}</span>
+                      <button
+                        className="demo-upload-file-remove"
+                        onClick={() => setStaged((s) => s.filter((x) => x !== f))}
+                        aria-label={`Remove ${f.name}`}
+                      >×</button>
+                    </li>
+                  );
+                })}
               </ul>
+              {!stagedZip && (
+                <div className="login-error" style={{ marginTop: 0, marginBottom: 12 }}>
+                  A .zip shapefile is required. Add one to continue.
+                </div>
+              )}
               <div className="demo-upload-staged-foot">
-                <button className="btn btn-primary btn-lg" onClick={submit}>
+                <button className="btn btn-primary btn-lg" onClick={submit} disabled={!stagedZip}>
                   Ingest &amp; render on live map →
                 </button>
                 <button className="btn btn-ghost btn-lg" onClick={() => navigate('/gis')}>

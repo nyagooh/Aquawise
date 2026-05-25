@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shell } from '../components/Shell';
 import {
@@ -13,7 +13,7 @@ import {
   type AssetKind
 } from '../data/network';
 import { useNetwork } from '../context/NetworkContext';
-import { useNetworkStats } from '../hooks/useNetworkQueries';
+import { useNetworkStats, useNetworkUploads, useEpanetUpload, useUploadStatus } from '../hooks/useNetworkQueries';
 import type { WaterNetwork, EnhancedNetworkStats } from '../types/api';
 
 type DerivedAlert = {
@@ -287,6 +287,8 @@ function DashboardApiBody({ network, stats, derived, navigate }: {
           </div>
         </div>
       </section>
+
+      <DataSourcesCard networkId={network.id} />
     </>
   );
 }
@@ -708,6 +710,96 @@ function DashboardBody({ data, derived, navigate }: {
         </div>
       </section>
     </>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   Data sources card
+   ════════════════════════════════════════════════════════════ */
+
+function DataSourcesCard({ networkId }: { networkId: string }) {
+  const { data: uploads, refetch } = useNetworkUploads(networkId);
+  const epanetMutation = useEpanetUpload(networkId);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [epanetUploadId, setEpanetUploadId] = useState<string | null>(null);
+  const [epanetError, setEpanetError] = useState<string | null>(null);
+  const { data: pollData } = useUploadStatus(epanetUploadId);
+
+  useEffect(() => {
+    if (!pollData) return;
+    const s = pollData.status;
+    if (s === 'complete' || s === 'complete_warnings' || s === 'failed') {
+      setEpanetUploadId(null);
+      refetch();
+    }
+  }, [pollData, refetch]);
+
+  const handleFile = async (file: File) => {
+    setEpanetError(null);
+    try {
+      const result = await epanetMutation.mutateAsync(file);
+      setEpanetUploadId(result.upload_id);
+    } catch {
+      setEpanetError('Upload failed. Check the file is a valid .inp or .net EPANET file.');
+    }
+  };
+
+  const epanetUpload = uploads?.find(
+    (u) => u.file_type === 'epanet_inp' || u.file_type === 'epanet_net'
+  );
+  const epanetDone = epanetUpload?.status === 'complete' || epanetUpload?.status === 'complete_warnings';
+  const epanetPending = epanetMutation.isPending || !!epanetUploadId || epanetUpload?.status === 'processing' || epanetUpload?.status === 'pending';
+
+  return (
+    <div className="ops-card">
+      <div className="ops-card-head">
+        <div>
+          <div className="ops-card-title">Data sources</div>
+          <div className="ops-card-sub">Files attached to this network</div>
+        </div>
+      </div>
+      <div className="ops-sources-list">
+        <div className="ops-source-row">
+          <span className="ops-source-check ok">✓</span>
+          <div className="ops-source-info">
+            <div className="ops-source-name">Shapefile (GIS geometry)</div>
+            <div className="ops-source-meta">Pipes · nodes · zones · spatial index</div>
+          </div>
+          <span className="pill safe"><span className="dot" />Attached</span>
+        </div>
+        <div className="ops-source-row">
+          <span className={`ops-source-check ${epanetDone ? 'ok' : 'miss'}`}>{epanetDone ? '✓' : '○'}</span>
+          <div className="ops-source-info">
+            <div className="ops-source-name">EPANET model <span style={{ fontWeight: 400, color: 'hsl(var(--muted-foreground))' }}>.inp / .net</span></div>
+            <div className="ops-source-meta">Node types · elevations · demands · hydraulic topology</div>
+          </div>
+          {epanetUpload ? (
+            <span className={`pill ${epanetDone ? 'safe' : epanetUpload.status === 'failed' ? 'danger' : 'warn'}`}>
+              <span className="dot" />
+              {epanetDone ? epanetUpload.file_name : epanetUpload.status === 'failed' ? 'Failed' : 'Processing…'}
+            </span>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".inp,.net"
+                style={{ display: 'none' }}
+                onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
+              />
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => inputRef.current?.click()}
+                disabled={epanetPending}
+              >
+                {epanetPending ? 'Uploading…' : 'Attach EPANET →'}
+              </button>
+              {epanetError && <div style={{ fontSize: '0.75rem', color: 'hsl(var(--danger))' }}>{epanetError}</div>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
