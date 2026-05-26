@@ -1,6 +1,6 @@
 /**
  * inspiration-note: Structure and alternating section rhythm inspired by
- * https://plane.so/ — adapted into an original experience for AquaWatch.
+ * https://plane.so/ — adapted into an original experience for Aquawise.
  * Primary colour: TechBlue #2563EB. Alternating neutral / deep-navy-blue sections.
  * Layout: copy text centred at top, full-width product mockup below.
  */
@@ -33,7 +33,7 @@ export default function Landing() {
       <nav className="landing-nav">
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, letterSpacing: '-0.015em', fontSize: '0.9375rem' }}>
           <LogoMark size={22} />
-          Aqua<span style={{ color: 'hsl(var(--primary))' }}>Watch</span>
+          Aqua<span style={{ color: 'hsl(var(--primary))' }}>wise</span>
         </Link>
         <div className="landing-nav-links">
           <a href="#network">Network</a>
@@ -90,7 +90,7 @@ export default function Landing() {
             <span className="d" style={{ background: '#FEBC2E' }} />
             <span className="d" style={{ background: '#28C840' }} />
             <span style={{ flex: 1, marginLeft: 12, fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono)' }}>
-              app.aquawatch.io / gis — Kisumu Water Supply Network
+              app.aquawise.io / gis — Kisumu Water Supply Network
             </span>
             <span style={{ fontSize: 10, color: 'hsl(var(--primary))', fontFamily: 'var(--font-mono)', fontWeight: 600, marginRight: 4 }}>● LIVE</span>
           </div>
@@ -124,7 +124,7 @@ export default function Landing() {
             <h2>Your entire utility, on one live map.</h2>
             <p>
               Stop juggling paper drawings, scattered spreadsheets, and field photos.
-              AquaWatch puts every pipe, sensor, tank, and DMA boundary on a single
+              Aquawise puts every pipe, sensor, tank, and DMA boundary on a single
               aerial map — updated in real time, panned and zoomed by every team
               member that needs it.
             </p>
@@ -182,7 +182,7 @@ export default function Landing() {
             <h2>Know about problems before your customers do.</h2>
             <p>
               Pressure drops, low tanks, flow anomalies, water quality breaches —
-              AquaWatch monitors every signal 24/7 and pings the right team the
+              Aquawise monitors every signal 24/7 and pings the right team the
               moment something goes wrong. Each alert ties straight to the pipe,
               sensor, or asset on the map — so action is one click away.
             </p>
@@ -211,7 +211,7 @@ export default function Landing() {
             <h2>Know every pipe by name, age, and condition.</h2>
             <p>
               Deferred maintenance becomes a crisis when you don't know what you have.
-              AquaWatch gives every pipe, valve, and meter a permanent profile —
+              Aquawise gives every pipe, valve, and meter a permanent profile —
               tied directly to its location on the map — so you can prioritise
               rehabilitation before the failures start.
             </p>
@@ -240,7 +240,7 @@ export default function Landing() {
             <h2>See exactly where you're losing water. Act this week.</h2>
             <p>
               NRW reports that take two days to compile and arrive already stale
-              aren't analytics — they're history. AquaWatch calculates your water
+              aren't analytics — they're history. Aquawise calculates your water
               balance continuously, ranks every DMA by loss, and tells you where
               to send your team — updated every hour.
             </p>
@@ -327,7 +327,7 @@ export default function Landing() {
           <div className="section-header reveal">
             <div className="section-tag">Platform</div>
             <h2>Every tool your utility needs. One platform.</h2>
-            <p>From the control room to the field — AquaWatch gives every person on your team the same live picture of the network.</p>
+            <p>From the control room to the field — Aquawise gives every person on your team the same live picture of the network.</p>
           </div>
           <div className="feat-deep-grid">
             {FEATURES.map((f, i) => (
@@ -374,7 +374,7 @@ export default function Landing() {
       <footer className="landing-footer">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
           <LogoMark size={18} />
-          <span style={{ fontWeight: 600 }}>AquaWatch</span>
+          <span style={{ fontWeight: 600 }}>Aquawise</span>
           <span style={{ color: 'hsl(var(--border-strong))' }}>·</span>
           <span>GIS-Powered Water Utility Platform</span>
         </div>
@@ -827,11 +827,17 @@ const FEATURES = [
 ];
 
 /* ─── Icon helpers ─── */
+/**
+ * Aperture A — Aquawise primary mark.
+ * Three nested chevrons sharing an apex at (32, 14), baseline y=50,
+ * stroke 3.5u, round caps, layer opacities 1.0 / 0.50 / 0.22.
+ */
 function LogoMark({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
-      <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
-      <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-label="Aquawise">
+      <path d="M12 50 L32 14 L52 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 50 L32 14 L43 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+      <path d="M29 50 L32 14 L35 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
     </svg>
   );
 }

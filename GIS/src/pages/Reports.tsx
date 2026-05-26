@@ -35,7 +35,7 @@ export default function Reports() {
     <Shell active="reports" title="Reports & Analytics" sub={data ? `Last refresh · ${new Date().toLocaleString()} · ${data.meta.feature_count.toLocaleString()} segments analysed` : 'Loading…'}>
       <section>
         <div className="reports-eyebrow">Choose report type</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 'var(--s4)', marginBottom: 'var(--s4)' }}>
+        <div className="reports-type-grid">
           <ReportTypeCard
             selected={type === 'daily'}
             onClick={() => setType('daily')}
@@ -255,3 +255,4 @@ function MaterialRow({ label, count, pct }: { label: string; count: number; pct:
     </div>
   );
 }
+

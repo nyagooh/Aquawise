@@ -2,6 +2,8 @@ export type ZoneStatus = 'safe' | 'warn' | 'danger';
 export type SensorStatus = ZoneStatus | 'offline';
 export type Severity = 'critical' | 'warning' | 'info';
 export type AlertStatus = 'active' | 'resolved';
+export type LeakStatus = 'reported' | 'dispatched' | 'in_progress' | 'fixed';
+export type LeakSeverity = 'minor' | 'major' | 'critical';
 
 export interface Zone {
   id: string;
@@ -16,7 +18,7 @@ export interface Zone {
 
 export interface Sensor {
   id: string;
-  type: 'Pressure' | 'Level' | 'pH';
+  type: 'Pressure' | 'Level' | 'pH' | 'Turbidity';
   zone: string;
   reading: string;
   status: SensorStatus;
@@ -42,41 +44,80 @@ export interface Alert {
 }
 
 export const zones: Zone[] = [
-  { id: 'ZA', name: 'Zone A — Westlands',  people: 24500, alerts: 1, pressure: 3.4, status: 'safe',   loss: 8,  color: '#22C55E' },
-  { id: 'ZB', name: 'Zone B — Kileleshwa', people: 18200, alerts: 2, pressure: 2.1, status: 'warn',   loss: 18, color: '#F59E0B' },
-  { id: 'ZC', name: 'Zone C — Lavington',  people: 21300, alerts: 0, pressure: 3.2, status: 'safe',   loss: 9,  color: '#22C55E' },
-  { id: 'ZD', name: 'Zone D — Karen',      people: 12800, alerts: 1, pressure: 1.4, status: 'danger', loss: 27, color: '#EF4444' },
-  { id: 'ZE', name: 'Zone E — Industrial', people: 9400,  alerts: 0, pressure: 3.6, status: 'safe',   loss: 6,  color: '#22C55E' }
+  { id: 'MIL', name: 'Milimani',                  people: 14500, alerts: 1, pressure: 3.4, status: 'safe',   loss: 8,  color: '#22C55E' },
+  { id: 'CBD', name: 'Central Business District', people: 21000, alerts: 2, pressure: 2.1, status: 'warn',   loss: 18, color: '#F59E0B' },
+  { id: 'KRE', name: 'Kibos',                     people: 19800, alerts: 0, pressure: 3.2, status: 'safe',   loss: 9,  color: '#22C55E' },
+  { id: 'MYT', name: 'Mamboleo · Tom Mboya',      people: 24600, alerts: 1, pressure: 1.4, status: 'danger', loss: 27, color: '#EF4444' },
+  { id: 'OBA', name: 'Obunga',                    people: 11200, alerts: 0, pressure: 3.6, status: 'safe',   loss: 6,  color: '#22C55E' }
 ];
 
 export const sensors: Sensor[] = [
-  { id: 'PR-01', type: 'Pressure', zone: 'ZA', reading: '3.4 bar', status: 'safe',    updated: '12s ago' },
-  { id: 'PR-02', type: 'Pressure', zone: 'ZB', reading: '2.1 bar', status: 'warn',    updated: '8s ago' },
-  { id: 'PR-03', type: 'Pressure', zone: 'ZD', reading: '1.4 bar', status: 'danger',  updated: '4s ago' },
-  { id: 'PR-04', type: 'Pressure', zone: 'ZC', reading: '3.2 bar', status: 'safe',    updated: '11s ago' },
-  { id: 'LV-01', type: 'Level',    zone: 'ZA', reading: '87%',     status: 'safe',    updated: '20s ago' },
-  { id: 'LV-02', type: 'Level',    zone: 'ZD', reading: '34%',     status: 'warn',    updated: '15s ago' },
-  { id: 'LV-03', type: 'Level',    zone: 'ZE', reading: '92%',     status: 'safe',    updated: '9s ago' },
-  { id: 'PH-01', type: 'pH',       zone: 'ZA', reading: '7.2',     status: 'safe',    updated: '1m ago' },
-  { id: 'PH-02', type: 'pH',       zone: 'ZB', reading: '6.9',     status: 'safe',    updated: '1m ago' },
-  { id: 'PH-03', type: 'pH',       zone: 'ZC', reading: '—',       status: 'offline', updated: '2h ago' }
+  { id: 'PR-01', type: 'Pressure',  zone: 'MIL', reading: '3.4 bar', status: 'safe',    updated: '12s ago' },
+  { id: 'PR-02', type: 'Pressure',  zone: 'CBD', reading: '2.1 bar', status: 'warn',    updated: '8s ago' },
+  { id: 'PR-03', type: 'Pressure',  zone: 'MYT', reading: '1.4 bar', status: 'danger',  updated: '4s ago' },
+  { id: 'PR-04', type: 'Pressure',  zone: 'KRE', reading: '3.2 bar', status: 'safe',    updated: '11s ago' },
+  { id: 'LV-01', type: 'Level',     zone: 'MIL', reading: '87%',     status: 'safe',    updated: '20s ago' },
+  { id: 'LV-02', type: 'Level',     zone: 'MYT', reading: '34%',     status: 'warn',    updated: '15s ago' },
+  { id: 'LV-03', type: 'Level',     zone: 'OBA', reading: '92%',     status: 'safe',    updated: '9s ago' },
+  { id: 'PH-01', type: 'pH',        zone: 'MIL', reading: '7.2',     status: 'safe',    updated: '1m ago' },
+  { id: 'PH-02', type: 'pH',        zone: 'CBD', reading: '6.9',     status: 'safe',    updated: '1m ago' },
+  { id: 'PH-03', type: 'pH',        zone: 'KRE', reading: '—',       status: 'offline', updated: '2h ago' },
+  { id: 'TB-01', type: 'Turbidity', zone: 'MIL', reading: '0.8 NTU', status: 'safe',    updated: '45s ago' },
+  { id: 'TB-02', type: 'Turbidity', zone: 'CBD', reading: '1.2 NTU', status: 'safe',    updated: '40s ago' },
+  { id: 'TB-03', type: 'Turbidity', zone: 'MYT', reading: '4.6 NTU', status: 'warn',    updated: '30s ago' },
+  { id: 'TB-04', type: 'Turbidity', zone: 'OBA', reading: '6.1 NTU', status: 'danger',  updated: '25s ago' }
 ];
 
 export const pipes: Pipe[] = [
-  { id: 'P-101', type: 'PVC',  diameter: '150mm', zone: 'ZA', pressure: '3.4 bar' },
-  { id: 'P-102', type: 'HDPE', diameter: '200mm', zone: 'ZB', pressure: '2.1 bar' },
-  { id: 'P-103', type: 'HDPE', diameter: '250mm', zone: 'ZC', pressure: '3.2 bar' },
-  { id: 'P-104', type: 'PVC',  diameter: '100mm', zone: 'ZD', pressure: '1.4 bar' },
-  { id: 'P-105', type: 'DI',   diameter: '300mm', zone: 'ZE', pressure: '3.6 bar' }
+  { id: 'P-101', type: 'PVC',  diameter: '150mm', zone: 'MIL', pressure: '3.4 bar' },
+  { id: 'P-102', type: 'HDPE', diameter: '200mm', zone: 'CBD', pressure: '2.1 bar' },
+  { id: 'P-103', type: 'HDPE', diameter: '250mm', zone: 'KRE', pressure: '3.2 bar' },
+  { id: 'P-104', type: 'PVC',  diameter: '100mm', zone: 'MYT', pressure: '1.4 bar' },
+  { id: 'P-105', type: 'DI',   diameter: '300mm', zone: 'OBA', pressure: '3.6 bar' }
+];
+
+export interface Leak {
+  id: string;
+  caller: string;
+  phone: string;
+  zone: string;
+  address: string;
+  reported: string;
+  source: 'CSR call' | 'CSR chat' | 'CSR email';
+  status: LeakStatus;
+  severity: LeakSeverity;
+  pipe?: string;
+  notes: string;
+  /* Plumber resolution — populated when status === 'fixed' or 'in_progress' */
+  crew?: string;
+  timeStarted?: string;
+  timeFixed?: string;
+  materials?: string;
+  cost?: string;
+  cause?: string;
+  fixDescription?: string;
+  leakType?: 'Burst' | 'Joint failure' | 'Hairline crack' | 'Meter leak' | 'Valve leak';
+}
+
+/* Leak tickets ingested from the customer-support system.
+   Tickets are created in the CSR app when a caller reports a leak — the
+   utility just pulls them in and lets a plumber log the fix here. */
+export const leaks: Leak[] = [
+  { id: 'LK-2041', caller: 'Mary Auma',      phone: '+254 722 814 902', zone: 'MYT', address: 'Mamboleo Rd, near Tom Mboya Estate', reported: '2026-05-25 08:14', source: 'CSR call',  status: 'reported',    severity: 'critical', pipe: 'P-104', notes: 'Water gushing from road surface, traffic affected.' },
+  { id: 'LK-2040', caller: 'Joseph Otieno',  phone: '+254 711 442 118', zone: 'CBD', address: 'Oginga Odinga St, opp. Mega Plaza',  reported: '2026-05-25 07:32', source: 'CSR call',  status: 'dispatched',  severity: 'major',    pipe: 'P-102', notes: 'Wet patch on pavement, slow seepage for 2 days.' },
+  { id: 'LK-2039', caller: 'Faith Nyambura', phone: '+254 733 590 230', zone: 'MIL', address: 'Milimani, Achieng Oneko Rd',         reported: '2026-05-25 06:58', source: 'CSR chat',  status: 'in_progress', severity: 'minor',    pipe: 'P-101', notes: 'Visible joint leak on shared connection.', crew: 'Crew C · Achieng', timeStarted: '07:30' },
+  { id: 'LK-2038', caller: 'Brian Kiptoo',   phone: '+254 720 119 660', zone: 'MYT', address: 'Mamboleo, Kondele junction',         reported: '2026-05-24 21:11', source: 'CSR call',  status: 'fixed',       severity: 'major',    pipe: 'P-104', notes: 'Burst on 100mm line, isolated and patched.', crew: 'Crew A · Otieno',  timeStarted: '21:55', timeFixed: '23:40', materials: 'PVC sleeve, clamp, 0.8m pipe', cost: 'KES 4,200', cause: 'Old joint failure', fixDescription: 'Replaced 0.8m segment, re-pressurised.', leakType: 'Burst' },
+  { id: 'LK-2037', caller: 'Aisha Hassan',   phone: '+254 715 008 442', zone: 'KRE', address: 'Kibos Rd, near sugar factory',       reported: '2026-05-24 18:42', source: 'CSR call',  status: 'fixed',       severity: 'minor',    pipe: 'P-103', notes: 'Meter-box leak, slow drip.',                  crew: 'Crew B · Wanjiru', timeStarted: '19:30', timeFixed: '20:10', materials: 'Washers, thread tape',         cost: 'KES 600',   cause: 'Worn washer',       fixDescription: 'Replaced inlet washer.',                  leakType: 'Meter leak' },
+  { id: 'LK-2036', caller: 'Peter Mwangi',   phone: '+254 729 776 514', zone: 'OBA', address: 'Obunga, Got Nyabondo lane',          reported: '2026-05-24 14:20', source: 'CSR email', status: 'reported',    severity: 'major',    pipe: 'P-105', notes: 'Reported on email; large pool by community tap.' }
 ];
 
 export const alerts: Alert[] = [
-  { id: 'A-1023', type: 'Low pressure',      zone: 'ZD', sensor: 'PR-03', severity: 'critical', time: '3 min ago',  status: 'active' },
-  { id: 'A-1022', type: 'Tank level low',    zone: 'ZD', sensor: 'LV-02', severity: 'warning',  time: '14 min ago', status: 'active' },
-  { id: 'A-1021', type: 'Pressure anomaly',  zone: 'ZB', sensor: 'PR-02', severity: 'warning',  time: '38 min ago', status: 'active' },
-  { id: 'A-1020', type: 'Sensor offline',    zone: 'ZC', sensor: 'PH-03', severity: 'info',     time: '2h ago',     status: 'active' },
-  { id: 'A-1019', type: 'NRW spike',         zone: 'ZB', sensor: '—',     severity: 'warning',  time: '4h ago',     status: 'resolved' },
-  { id: 'A-1018', type: 'Pressure recovery', zone: 'ZA', sensor: 'PR-01', severity: 'info',     time: '6h ago',     status: 'resolved' }
+  { id: 'A-1023', type: 'Low pressure',      zone: 'MYT', sensor: 'PR-03', severity: 'critical', time: '3 min ago',  status: 'active' },
+  { id: 'A-1022', type: 'Tank level low',    zone: 'MYT', sensor: 'LV-02', severity: 'warning',  time: '14 min ago', status: 'active' },
+  { id: 'A-1021', type: 'Pressure anomaly',  zone: 'CBD', sensor: 'PR-02', severity: 'warning',  time: '38 min ago', status: 'active' },
+  { id: 'A-1020', type: 'Sensor offline',    zone: 'KRE', sensor: 'PH-03', severity: 'info',     time: '2h ago',     status: 'active' },
+  { id: 'A-1019', type: 'NRW spike',         zone: 'CBD', sensor: '—',     severity: 'warning',  time: '4h ago',     status: 'resolved' },
+  { id: 'A-1018', type: 'Pressure recovery', zone: 'MIL', sensor: 'PR-01', severity: 'info',     time: '6h ago',     status: 'resolved' }
 ];
 
 /* ── Real Nairobi coordinates for the aerial map ── */

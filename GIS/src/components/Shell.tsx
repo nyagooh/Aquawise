@@ -3,7 +3,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 
 type Props = {
-  active: 'dashboard' | 'gis' | 'alerts' | 'nrw' | 'sensors' | 'reports';
+  active: 'dashboard' | 'gis' | 'alerts' | 'leaks' | 'nrw' | 'sensors' | 'reports';
   title: string;
   sub?: string;
   children: ReactNode;

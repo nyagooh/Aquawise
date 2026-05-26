@@ -3,7 +3,8 @@ Convert the Kisumu water supply shapefile (UTM Zone 36S, EPSG:32736) into a
 WGS84 GeoJSON the browser map can consume directly. Pure stdlib — no external
 deps required.
 
-The shapefile contains 4,947 polylines (pipes). We:
+The shapefile (`Updated pipelines/Updated pipelines.shp`) contains 3,267
+records (3,264 polylines + 3 null shapes). We:
   - read the .shp polylines + .dbf attributes
   - reproject UTM zone 36S -> WGS84 (lon, lat) via inverse Transverse Mercator
   - classify each pipe by Network field (transmission/distribution/service/backfeed)
@@ -24,9 +25,9 @@ import sys
 from collections import Counter, defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SHP_DIR = os.path.join(ROOT, "Kisumu water supply network (1)")
-SHP = os.path.join(SHP_DIR, "Kisumu water supply network.shp")
-DBF = os.path.join(SHP_DIR, "Kisumu water supply network.dbf")
+SHP_DIR = os.path.join(os.path.dirname(ROOT), "Updated pipelines")
+SHP = os.path.join(SHP_DIR, "Updated pipelines.shp")
+DBF = os.path.join(SHP_DIR, "Updated pipelines.dbf")
 OUT_DIR = os.path.join(ROOT, "public", "data")
 OUT_PIPES = os.path.join(OUT_DIR, "kisumu-pipes.geojson")
 OUT_ASSETS = os.path.join(OUT_DIR, "kisumu-assets.geojson")
