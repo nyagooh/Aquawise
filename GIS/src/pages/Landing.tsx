@@ -1,6 +1,6 @@
 /**
  * inspiration-note: Structure and alternating section rhythm inspired by
- * https://plane.so/ — adapted into an original experience for AquaWatch.
+ * https://plane.so/ — adapted into an original experience for AquaWise.
  * Primary colour: TechBlue #2563EB. Alternating neutral / deep-navy-blue sections.
  * Layout: copy text centred at top, full-width product mockup below.
  */
@@ -33,7 +33,7 @@ export default function Landing() {
       <nav className="landing-nav">
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, letterSpacing: '-0.015em', fontSize: '0.9375rem' }}>
           <LogoMark size={22} />
-          Aqua<span style={{ color: 'hsl(var(--primary))' }}>Watch</span>
+          Aqua<span style={{ color: 'hsl(var(--primary))' }}>Wise</span>
         </Link>
         <div className="landing-nav-links">
           <a href="#network">Network</a>
@@ -123,7 +123,7 @@ export default function Landing() {
             <h2>Your entire utility, on one live map.</h2>
             <p>
               Stop juggling paper drawings, scattered spreadsheets, and field photos.
-              AquaWatch puts every pipe, sensor, tank, and DMA boundary on a single
+              AquaWise puts every pipe, sensor, tank, and DMA boundary on a single
               aerial map — updated in real time, panned and zoomed by every team
               member that needs it.
             </p>
@@ -181,7 +181,7 @@ export default function Landing() {
             <h2>Know about problems before your customers do.</h2>
             <p>
               Pressure drops, low tanks, flow anomalies, water quality breaches —
-              AquaWatch monitors every signal 24/7 and pings the right team the
+              AquaWise monitors every signal 24/7 and pings the right team the
               moment something goes wrong. Each alert ties straight to the pipe,
               sensor, or asset on the map — so action is one click away.
             </p>
@@ -210,7 +210,7 @@ export default function Landing() {
             <h2>Know every pipe by name, age, and condition.</h2>
             <p>
               Deferred maintenance becomes a crisis when you don't know what you have.
-              AquaWatch gives every pipe, valve, and meter a permanent profile —
+              AquaWise gives every pipe, valve, and meter a permanent profile —
               tied directly to its location on the map — so you can prioritise
               rehabilitation before the failures start.
             </p>
@@ -239,7 +239,7 @@ export default function Landing() {
             <h2>See exactly where you're losing water. Act this week.</h2>
             <p>
               NRW reports that take two days to compile and arrive already stale
-              aren't analytics — they're history. AquaWatch calculates your water
+              aren't analytics — they're history. AquaWise calculates your water
               balance continuously, ranks every DMA by loss, and tells you where
               to send your team — updated every hour.
             </p>
@@ -326,7 +326,7 @@ export default function Landing() {
           <div className="section-header reveal">
             <div className="section-tag">Platform</div>
             <h2>Every tool your utility needs. One platform.</h2>
-            <p>From the control room to the field — AquaWatch gives every person on your team the same live picture of the network.</p>
+            <p>From the control room to the field — AquaWise gives every person on your team the same live picture of the network.</p>
           </div>
           <div className="feat-deep-grid">
             {FEATURES.map((f, i) => (
@@ -373,7 +373,7 @@ export default function Landing() {
       <footer className="landing-footer">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 12 }}>
           <LogoMark size={18} />
-          <span style={{ fontWeight: 600 }}>AquaWatch</span>
+          <span style={{ fontWeight: 600 }}>AquaWise</span>
           <span style={{ color: 'hsl(var(--border-strong))' }}>·</span>
           <span>GIS-Powered Water Utility Platform</span>
         </div>

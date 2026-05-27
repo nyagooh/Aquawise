@@ -68,7 +68,7 @@ export default function Signup() {
             <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
             <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
           </svg>
-          <span>Aqua<span className="accent">Watch</span></span>
+          <span>Aqua<span className="accent">Wise</span></span>
         </div>
 
         <h1 className="login-title">Create your account</h1>

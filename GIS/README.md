@@ -1,4 +1,4 @@
-# AquaWatch — GIS-First Smart Water Dashboard
+# AquaWise — GIS-First Smart Water Dashboard
 
 React + TypeScript + Vite implementation of the GIS-first demo flow.
 Mirrors the static HTML demo in [`design/`](../design) with the same data, styling, and interactions.

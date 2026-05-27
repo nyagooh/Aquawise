@@ -31,7 +31,7 @@ function DemoFrame({ children }: { children: React.ReactNode }) {
       <nav className="demo-hub-nav">
         <Link to="/" className="demo-hub-brand">
           <BrandMark />
-          <span>Aqua<b>Watch</b></span>
+          <span>Aqua<b>Wise</b></span>
         </Link>
         <div className="demo-hub-nav-meta">
           <span className="demo-hub-pill"><span className="live-dot" />Live · Kisumu Water Network</span>
