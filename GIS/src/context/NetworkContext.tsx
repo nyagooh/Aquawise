@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { useNetworks } from '../hooks/useNetworkQueries';
+import { useAuth } from './AuthContext';
 import type { WaterNetwork } from '../types/api';
 
 const STORAGE_KEY = 'aw-active-network';
@@ -16,7 +17,8 @@ interface NetworkContextValue {
 const NetworkContext = createContext<NetworkContextValue | null>(null);
 
 export function NetworkProvider({ children }: { children: ReactNode }) {
-  const { data: networks = [], isLoading, isFetched } = useNetworks();
+  const { user } = useAuth();
+  const { data: networks = [], isLoading, isFetched } = useNetworks(!!user);
   const [activeNetwork, setActiveNetworkState] = useState<WaterNetwork | null>(null);
 
   // Rehydrate from localStorage, then confirm it's in the fetched list

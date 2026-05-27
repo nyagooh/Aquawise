@@ -10,10 +10,11 @@ import type {
   NetworkUpload,
 } from '../types/api';
 
-export function useNetworks() {
+export function useNetworks(enabled = true) {
   return useQuery({
     queryKey: ['networks'],
     queryFn: () => api.get<WaterNetwork[]>('/networks/').then((r) => r.data),
+    enabled,
     staleTime: 60_000,
   });
 }
