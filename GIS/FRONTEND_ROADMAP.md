@@ -15,10 +15,11 @@
 |------|-------------|-------------|-----|
 | Auth | ✅ JWT login, protected routes, AuthContext | JWT (`/api/v1/auth/token/`) | — done |
 | Network data | ✅ API when active network; static GeoJSON fallback | `GET /api/v1/networks/{id}/pipes/` etc. | bbox tile loading, zone overlays |
-| Upload | UI exists, no actual POST | `POST /api/v1/networks/upload/` + Celery | Wire upload form to real endpoint |
-| Sensors | Synthesized mock telemetry | `Sensor`, `SensorReading` models + WebSocket | Real sensor API + live WebSocket |
-| Alerts | Auto-generated from static data | `AlertRule`, `AlertEvent` models | Real alert feed from API |
-| Analytics / NRW | Age-weighted NRW estimate (hardcoded) | `LeakRiskScore`, `AnomalyEvent` models | Replace with real ML scores |
+| Upload | ✅ Real POST with progress, status polling, EPANET support | `POST /api/v1/networks/upload/` + Celery | — done |
+| Sensors | ✅ Real nodes from API; junction nodes from pipe endpoints | `Sensor`, `SensorReading` models + WebSocket | Real sensor API + live WebSocket |
+| Alerts | ✅ Wired to real API (AlertEvent) | `AlertRule`, `AlertEvent` models | Real alert feed from API |
+| NRW | ✅ Wired to real stats API (deriveNRWFromStats) | `LeakRiskScore`, `AnomalyEvent` models | Replace with real ML scores |
+| Reports | ✅ Wired to real stats API (deriveFromStats) | — | — |
 | Multi-tenancy | ✅ Org name shown in sidebar via AuthContext | `Organisation` + `Project` per user | Project switcher |
 | API client | ✅ Axios + React Query + JWT interceptor | DRF at `/api/v1/` | — done |
 | Environment | ✅ `.env` + proxy config | DRF at `http://localhost:8000` | — done |
@@ -31,7 +32,7 @@
 ```
 Phase 1 ──► Phase 2 ──► Phase 3 ──► Phase 4 ──► Phase 5 ──► Phase 6
 API Client   Network      Upload      Sensors     Alerts      Analytics
-& Auth  ✅   Map from ✅  Pipeline    Live Data   & Rules     & NRW
+& Auth  ✅   Map from ✅  Pipeline ✅ Live Data   & Rules     & NRW
              Backend
 ```
 
@@ -71,8 +72,10 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 ### 1.4 Type definitions ✅
 - [x] Create `src/types/api.ts` — shared TypeScript interfaces matching all backend models:
   - `Organisation`, `AuthUser`, `UserRole`, `Project`
-  - `WaterNetwork`, `NetworkUpload`, `ValidationReport`, `UploadStatus`
+  - `WaterNetwork`, `NetworkUpload` (with `network: string | null` FK), `ValidationReport`, `UploadStatus`
+  - `FileType` — `'shapefile' | 'epanet' | 'epanet_inp' | 'epanet_net'`
   - `NetworkStats`, `EnhancedNetworkStats`, `MaterialBreakdown`, `ZoneBreakdown` *(extended — added rich stats types)*
+  - `NetworkNodeType` — `'junction' | 'reservoir' | 'tank' | 'meter'`; `nodes_breakdown` in `EnhancedNetworkStats`
   - `PipeProperties`, `NodeProperties`, `ZoneProperties`, `AssetProperties` + GeoJSON Feature/FeatureCollection wrappers
   - `Sensor`, `SensorReading`, `AnomalyEvent`, `LeakRiskScore`, `LeakRiskFeatureCollection` *(added — not in original plan)*
   - `AlertRule`, `AlertEvent`, `Notification`
@@ -102,7 +105,9 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
   - `useNodes(networkId, bbox?)` → `GET /api/v1/networks/{id}/nodes/`
   - `useZones(networkId)` → `GET /api/v1/networks/{id}/zones/`
   - `useAssets(networkId, bbox?)` → `GET /api/v1/networks/{id}/assets/`
-  - `useUploadStatus(uploadId)` → polls `GET /api/v1/networks/{id}/validate/` every 3s until terminal status *(added ahead of Phase 3)*
+  - `useUploadStatus(uploadId)` → polls `GET /api/v1/networks/{id}/validate/` every 3s until terminal status
+  - `useNetworkUploads(networkId)` → `GET /api/v1/networks/{id}/uploads/` *(added in Phase 3)*
+  - `useEpanetUpload(networkId)` → mutation `POST /api/v1/networks/{id}/epanet/` *(added in Phase 3)*
 - [x] Keep static `/public/data/kisumu-*.geojson` as fallback for demo/offline mode
 
 ### 2.3 GISMap dynamic loading ✅ (partial)
@@ -125,42 +130,63 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - [x] Pipe status breakdown (open/closed/out_of_service) from `stats.status_breakdown`
 - [x] Service zones table from `stats.zones_breakdown`
 - [x] Loading skeleton shown while stats fetch is in flight
+- [x] Data sources card: shapefile ✓ always; EPANET status from `useNetworkUploads`; inline "Attach EPANET →" file button *(added in Phase 3)*
 
 ---
 
-## Phase 3 — Upload Pipeline ⬜
+## Phase 3 — Upload Pipeline ✅
 **Goal:** DemoHub upload actually calls the backend, shows real validation results, and polls for completion.
 
-### 3.1 Wire upload form ⬜
-- [ ] DemoHub `UploadView`: replace no-op with real `POST /api/v1/networks/upload/` (multipart)
-  - Only `.zip` (shapefile) accepted at this stage; `.inp` shows "coming soon"
-  - Show upload progress (Axios `onUploadProgress`)
-- [ ] On success (202): receive `{ upload_id, status }` → enter polling state
+### 3.1 Wire upload form ✅
+- [x] DemoHub `UploadView`: real `POST /api/v1/networks/upload/` (multipart)
+  - `.zip` (shapefile) required; `.inp` / `.net` (EPANET) optional alongside
+  - Shows upload progress (Axios `onUploadProgress`)
+  - Staged file list shows file type badge + EPANET label
+  - Submit disabled until a `.zip` is staged
+- [x] On success (202): receive `{ upload_id, status }` → enter polling state
+- [x] Unauthenticated wall: shows sign-in prompt instead of upload form when not logged in
 
-### 3.2 Status polling ⬜
-- [ ] Use `useUploadStatus(uploadId)` hook (already built in Phase 2) to poll every 3s
-- [ ] Show animated progress steps: Uploading → Processing → Validating → Done
-- [ ] On `complete` / `complete_warnings`: show `ValidationReport` card
-  - Pipe count, node count, warnings list, roughness gaps
-- [ ] On `failed`: show error from `validation_report.error`
-- [ ] On success: add new network to `NetworkContext`, prompt user to switch to it
+### 3.2 Status polling ✅
+- [x] `useUploadStatus(uploadId)` polls every 3s until terminal status
+- [x] Animated progress steps: Uploading → Ingesting shapefile → (Attaching EPANET) → Ready
+- [x] On `complete` / `complete_warnings`: show `ValidationReport` inline
+  - Pipe count, node count, warnings accordion
+- [x] On `failed`: show error from `validation_report.error`
+- [x] On success: refetch `networks` query → new network visible in `NetworkSelector` immediately
 
-### 3.3 Validation report UI ⬜
-- [ ] `src/components/ValidationReport.tsx` — renders `validation_report` JSON:
-  - Summary row: pipes ingested, nodes ingested, zones, total length
-  - Warnings accordion (expandable list)
-  - "Open in Map" button → switches active network + navigates to `/gis`
+### 3.3 Validation report UI ✅ (inline in DemoHub)
+- [x] Summary row: pipes ingested, nodes ingested, warnings count
+- [x] Warnings `<details>` accordion (expandable list)
+- [x] "Open in map →" button + "Upload another" button
+- [ ] Separate `src/components/ValidationReport.tsx` component *(deferred — inline implementation sufficient)*
+
+### 3.4 EPANET upload support ✅ *(added — not in original plan)*
+- [x] DemoHub drop zone accepts `.zip` + optional `.inp` / `.net` in one session
+- [x] After shapefile ingestion completes, EPANET file is auto-POSTed to `POST /api/v1/networks/{id}/epanet/`
+  — the `network_id` is read from the validated upload response
+- [x] Extra "Attaching EPANET" progress step shown when EPANET file is staged
+- [x] EPANET upload failure is non-fatal (shapefile network still usable)
+- [x] Dashboard "Data sources" card: shapefile ✓; EPANET status (attached / processing / missing); inline attach button for existing networks
+- [x] `useEpanetUpload(networkId)` mutation — `POST /api/v1/networks/{id}/epanet/`
+- [x] `useNetworkUploads(networkId)` query — `GET /api/v1/networks/{id}/uploads/`
 
 ---
 
 ## Phase 4 — Sensors: Live Data + WebSocket ⬜
 **Goal:** Sensors page and map asset panels show real readings; map updates in real-time via WebSocket.
 
-### 4.1 Sensor list & readings ⬜
-- [ ] Sensors page: replace mock telemetry table with `GET /api/v1/sensors/`
-  - Filter by `network_id`, `sensor_type`, `status`
-- [ ] Sensor detail panel: `GET /api/v1/sensors/{id}/readings/?start=&end=&resample=1h`
-  - Sparkline chart updated with real 24h data
+### 4.1 Sensor list from network nodes ✅ (partial — nodes only, no sensor readings)
+- [x] Sensors page: two-mode — uses `useNodes()` + `useNetworkStats()` from API when active network set; static demo data otherwise
+- [x] `adaptNodes()` maps API nodes → `AssetFeature | JunctionNode` for display
+  - `reservoir`/`tank` → "Reservoir · level sensor" row
+  - `meter` → "Meter / bulk valve" row
+  - `junction` → "Network junction" topology row (5th filter category)
+- [x] KPI tiles use `apiStats.nodes_breakdown` for accurate counts per node type
+- [x] Table capped at 500 rows with overflow notice
+- [x] Filter tabs: All · Reservoir · Pressure valve · Meter/bulk valve · Flow sensor · Network junction
+- [x] "View on map" navigation per row
+- [ ] Real sensor readings replacing zero/mock values *(deferred — needs Phase 4 sensor registry)*
+- [ ] Sensor detail panel with 24h sparkline *(deferred)*
 
 ### 4.2 WebSocket hook ⬜
 - [ ] Create `src/hooks/useNetworkSocket.ts`:
@@ -180,7 +206,22 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 
 ### 4.4 MQTT mock for development ⬜
 - [ ] Add `scripts/mock_mqtt.py` — publishes random readings to `aquawise/{org_id}/sensors/{sensor_id}/reading` every 5s
-  - Used in dev to test the full WebSocket pipeline without real hardware
+
+---
+
+## Phase 4 — NRW & Reports from API ✅ *(completed ahead of schedule)*
+
+### NRW page ✅
+- [x] `NRW.tsx` dual-mode: uses `deriveNRWFromStats(stats, networkName)` when API data available; static demo data otherwise
+- [x] `EnhancedNetworkStats.total_length_km: number | null` handled correctly
+- [x] Zone breakdown, material loss rates, age-weighted NRW estimate all from real API data
+
+### Reports page ✅
+- [x] `Reports.tsx` full rewrite: dual-mode with `deriveFromStats(stats, networkName)` for API; `deriveFromStatic(d)` for demo
+- [x] `ops-network-bar` shows active network name
+- [x] All chart data (materials, age, zones) sourced from `EnhancedNetworkStats`
+- [x] Graceful empty states for missing breakdown data
+- [x] `reports-empty-note` CSS class added
 
 ---
 
@@ -221,11 +262,11 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 - [ ] Alerts page: add anomaly events tab (alongside rule-based alerts)
 - [ ] Map: anomaly events shown as pulsing markers at the affected sensor location
 
-### 6.3 NRW page ⬜
-- [ ] NRW page: derive real NRW per zone from:
+### 6.3 NRW page — real ML scores ⬜
+- [ ] Replace age-weighted NRW estimate with real leak risk scores per zone:
   - `GET /api/v1/networks/{id}/stats/` (zone breakdown)
-  - Leak risk scores per zone
-  - Replace hardcoded `age_distribution` NRW formula
+  - Leak risk scores per zone from ML model
+- [ ] Demand-adjusted NRW (billed vs. input)
 
 ### 6.4 Demand forecast ⬜
 - [ ] New chart on Dashboard: `GET /api/v1/analytics/demand-forecast/?zone=X&horizon=7d`
@@ -259,8 +300,8 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 |-----------|--------|-------------|
 | F-M1 | ✅ Done | Login works; JWT stored; all routes protected; API client configured |
 | F-M2 | ✅ Done | GISMap loads pipes from backend API; Dashboard KPIs live from stats endpoint |
-| F-M3 | ⬜ Not started | Shapefile upload → real validation report → network appears on map |
-| F-M4 | ⬜ Not started | Sensor readings are real; map updates live via WebSocket |
+| F-M3 | ✅ Done | Shapefile upload → real validation + polling → network on map; EPANET optional attach; Data sources card |
+| F-M4 | 🔧 Partial | Sensors/NRW/Reports wired to real API nodes & stats; live WebSocket readings still pending |
 | F-M5 | ⬜ Not started | Alerts feed from backend; rule CRUD; real-time alert toast |
 | F-M6 | ⬜ Not started | Leak risk layer on map; anomaly events on dashboard; real NRW per zone |
 
@@ -271,8 +312,8 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 | Phase | Endpoints |
 |-------|-----------|
 | 1 ✅ | `POST /api/v1/auth/token/`, `POST /api/v1/auth/token/refresh/`, `GET /api/v1/auth/me/` |
-| 2 ✅ | `GET /api/v1/networks/`, `GET /api/v1/networks/{id}/`, `GET /api/v1/networks/{id}/pipes/`, `/nodes/`, `/zones/`, `/assets/`, `/stats/` |
-| 3 | `POST /api/v1/networks/upload/`, `GET /api/v1/networks/{upload_id}/validate/` |
+| 2 ✅ | `GET /api/v1/networks/`, `GET /api/v1/networks/{id}/`, `/pipes/`, `/nodes/`, `/zones/`, `/assets/`, `/stats/` |
+| 3 ✅ | `POST /api/v1/networks/upload/`, `GET /api/v1/networks/{upload_id}/validate/`, `POST /api/v1/networks/{id}/epanet/`, `GET /api/v1/networks/{id}/uploads/` |
 | 4 | `GET /api/v1/sensors/`, `GET /api/v1/sensors/{id}/readings/`, `WS /ws/sensors/{network_id}/` |
 | 5 | `GET /api/v1/alerts/events/`, `GET/POST/PUT/DELETE /api/v1/alerts/rules/` |
 | 6 | `GET /api/v1/analytics/anomalies/`, `GET /api/v1/analytics/leak-risk/`, `GET /api/v1/analytics/demand-forecast/` |
@@ -281,7 +322,7 @@ API Client   Network      Upload      Sensors     Alerts      Analytics
 
 ## Notes
 
-- **Static GeoJSON files** (`/public/data/kisumu-*.geojson`) remain usable as demo/offline fallback until Phase 3 is done — don't delete them early.
+- **Static GeoJSON files** (`/public/data/kisumu-*.geojson`) remain usable as demo/offline fallback — do not delete until Phase 4+ is complete.
 - **Backend Phase alignment:** Frontend Phases 1–3 align with Backend Phase 1 (Foundation). Frontend Phase 4 aligns with Backend Phase 4 (Real-Time). Frontend Phase 6 aligns with Backend Phase 5 (ML).
-- **EPANET ingestion** (Backend Phase 1.3) will extend Phase 3 of this roadmap once the backend task is implemented.
+- **EPANET .net files:** The binary `.net` format has no geographic coordinates (canvas pixels only). Only `.inp` text files with a `[COORDINATES]` section can provide real node positions. Users should export `.inp` from EPANET/WaterGEMS for meaningful node data.
 - **Deferred from Phase 2:** bbox viewport-based pipe loading and zone polygon overlays — deferred to avoid complexity; `staleTime: Infinity` on pipe queries means no excess requests for now.

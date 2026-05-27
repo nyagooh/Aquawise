@@ -35,13 +35,13 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [x] JWT authentication wired (`/api/v1/auth/token/`, `/api/v1/auth/token/refresh/`)
 - [x] `GET /api/v1/auth/me/` — returns authenticated user profile (id, username, email, role, organisation) *(added — was not in original plan)*
 - [x] Multi-tenant `Organisation` + `Project` + `CustomUser` (role-based) models
-- [x] All migrations applied — 26 migrations across 6 apps
+- [x] All migrations applied — 26+ migrations across 6 apps
 - [x] Dev data seeded (KIWASCO org, admin user, Kisumu project)
 - [x] DRF router wired with versioned URL includes at `/api/v1/` *(added — was not in original plan)*
 - [ ] `ruff` linting configured
 
 #### 1.2 Shapefile Ingestion Pipeline ✅
-- [x] `POST /api/v1/networks/upload/` endpoint — accepts `.zip` shapefile, saves to `media/uploads/<org_id>/<upload_id>.zip`
+- [x] `POST /api/v1/networks/upload/` endpoint — accepts `.zip` shapefile (also `.inp` / `.net` EPANET — see 1.3), saves to `media/uploads/<org_id>/<upload_id>.<ext>`
 - [x] Celery task `ingest_shapefile`: unzip → classify `.shp` by geometry type (line→Pipe, point→Node, polygon→Zone) → validate schema
 - [x] Auto-detect and reproject any CRS → EPSG:4326 using `pyproj` + `shapely.ops.transform`
 - [x] Roughness fill: populate zero-roughness values from material lookup table (Hazen-Williams defaults: PVC=150, GI=100, Steel=95, HDPE=140, PPR=140, CI=130, AC=120)
@@ -51,28 +51,42 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [x] `ST_Length(geography)` for accurate total network length
 - [x] `ST_Extent` for bounding box computation
 - [x] Upload status lifecycle: `pending → processing → complete / complete_warnings / failed` with `validation_report` JSON
+- [x] Junction node auto-derivation from pipe endpoints using `ST_Dump` + `ST_StartPoint`/`ST_EndPoint` when no point layer is present *(added — not in original plan)*
 - [ ] Topology repair: flag disconnected segments, duplicate geometries
 
-#### 1.3 EPANET Ingestion ⬜
-- [ ] `POST /api/v1/networks/upload/` — also accepts `.inp` files
-- [ ] Parse with `wntr`: extract pipe graph, node coordinates, demands
-- [ ] Map EPANET network onto same `Pipe`/`Node` schema as shapefile path
-- [ ] Link EPANET nodes to spatial positions (geocode if coordinates present)
+#### 1.3 EPANET Ingestion ✅ *(substantially complete — using custom parser instead of wntr)*
+- [x] `POST /api/v1/networks/upload/` — also accepts `.inp` and `.net` files (routes via `file_type = "epanet_inp"` / `"epanet_net"`)
+- [x] `POST /api/v1/networks/{id}/epanet/` — attach EPANET model to an **existing** network *(added — not in original plan)*
+- [x] Celery task `ingest_epanet(upload_id)` — dispatches to the appropriate parser based on file extension
+- [x] `_parse_inp_sections(path)` — parses EPANET `.inp` text format into `{SECTION: [[token,...], ...]}` dict
+- [x] `_apply_epanet_inp(network, sections, warnings)` — extracts `[JUNCTIONS]`, `[RESERVOIRS]`, `[TANKS]`, `[COORDINATES]`; detects CRS (degrees → WGS84, else uses `network.source_crs`); reprojects projected coords to EPSG:4326; bulk-creates `Node` records; handles missing coordinates gracefully
+- [x] `_extract_net_node_types(path)` — scans binary `.net` for node type prefixes (TCV-, FCV-, PRV-, GPV-, PSV-, PMP-)
+- [x] `_apply_epanet_net_types(network, node_types, warnings)` — creates special nodes at network centroid when geographic coordinates unavailable from binary `.net`
+- [x] `network` FK added to `NetworkUpload` model (nullable) — set after ingestion links upload to its created/updated network
+- [x] `network_id` included in `GET /api/v1/networks/{upload_id}/validate/` response — needed for chained EPANET upload after shapefile
+- [x] Migration `0002_networkupload_network_alter_networkupload_file_type` applied
+- [ ] wntr-based simulation integration *(deferred to Phase 3)*
+- [ ] Demand data extraction from `[DEMANDS]` section *(deferred)*
+
+**Known limitation:** Binary `.net` files (WaterGEMS/EPANET GUI project format) contain only canvas pixel coordinates, not geographic coordinates. Only `.inp` text files with a `[COORDINATES]` section provide real node positions. Users should export `.inp` from EPANET/WaterGEMS.
 
 #### 1.4 Network API ✅
-- [x] `GET /api/v1/networks/` — lists all networks for the authenticated organisation (`NetworkListView`) *(added — was listed as "URL route wired" only)*
+- [x] `GET /api/v1/networks/` — lists all networks for the authenticated organisation
 - [x] `GET /api/v1/networks/{id}/` — network detail with `source_crs` and `bbox` GeoJSON
-- [x] `GET /api/v1/networks/{id}/pipes/` — GeoJSON `FeatureCollection` with `?bbox=minx,miny,maxx,maxy` and `?zone=<uuid>` params; uses `.iterator(chunk_size=500)`
+- [x] `DELETE /api/v1/networks/{id}/` — delete network and all associated data
+- [x] `GET /api/v1/networks/{id}/pipes/` — GeoJSON `FeatureCollection` with `?bbox=minx,miny,maxx,maxy` and `?zone=<uuid>` params; `.iterator(chunk_size=500)`
 - [x] `GET /api/v1/networks/{id}/nodes/` — GeoJSON `FeatureCollection` with same bbox/zone filters
 - [x] `GET /api/v1/networks/{id}/zones/` — GeoJSON `FeatureCollection` of zone polygons
 - [x] `GET /api/v1/networks/{id}/assets/` — GeoJSON `FeatureCollection` with bbox filter
-- [x] `GET /api/v1/networks/{id}/validate/` — structured validation report JSON (upload status polling)
+- [x] `GET /api/v1/networks/{id}/validate/` — upload status + `network_id` (set after ingestion)
+- [x] `GET /api/v1/networks/{id}/uploads/` — lists all uploads (shapefile + EPANET) attached to a network *(added — not in original plan)*
 - [x] `GET /api/v1/networks/{id}/stats/` — enhanced stats with full breakdown *(extended beyond original plan)*:
   - `total_pipes`, `total_nodes`, `total_length_km`
   - `materials_breakdown` — per-material pipe count and length km
   - `status_breakdown` — per-status pipe count (open/closed/out_of_service/pending)
-  - `age_distribution` — pipe count bucketed by install decade (pre-2000, 2000-2009, 2010-2019, 2020+, unknown) via Django ORM `Case/When`
+  - `age_distribution` — pipe count bucketed by install decade via Django ORM `Case/When`
   - `zones_breakdown` — per-zone pipe count and length km
+  - `nodes_breakdown` — per node_type count (`junction`, `reservoir`, `tank`, `meter`) *(added — not in original plan)*
 - [x] Trained ML model artifacts committed: Random Forest water quality predictors + Isolation Forest anomaly detector *(added — not in original plan)*
 
 #### 1.5 Tests & Docs ⬜
@@ -127,7 +141,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 #### 3.1 Simulation Engine ⬜
 - [x] `SimulationRun`, `PressureResult`, `FlowResult`, `HydraulicScenario` models defined + migrated
 - [x] URL routes wired (`/api/v1/hydraulics/runs/`, `/results/pressure/`, `/results/flow/`)
-- [ ] `POST /api/v1/hydraulics/runs/` — accepts `.inp` file + run parameters (real implementation)
+- [ ] `POST /api/v1/hydraulics/runs/` — accepts `.inp` file + run parameters (real implementation using `wntr`)
 - [ ] Celery heavy queue: `wntr.sim.EpanetSimulator` execution
 - [ ] Run status polling: `GET /api/v1/hydraulics/runs/{id}/`
 
@@ -228,9 +242,9 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 | Milestone | Status | Target | Deliverable |
 |-----------|--------|--------|-------------|
-| M1 | ✅ Done | Week 2 | Upload Kisumu shapefile → GeoJSON pipes API + enhanced stats |
+| M1 | ✅ Done | Week 2 | Upload Kisumu shapefile → GeoJSON pipes API + enhanced stats + EPANET ingestion |
 | M2 | ⬜ Not started | Week 4 | Full spatial query API + asset management |
-| M3 | ⬜ Not started | Week 6 | EPANET simulation → pressure choropleth |
+| M3 | ⬜ Not started | Week 6 | EPANET simulation via wntr → pressure choropleth |
 | M4 | ⬜ Not started | Week 8 | Live WebSocket sensor dashboard |
 | M5 | ⬜ Not started | Week 11 | ML anomaly detection + SMS alerts |
 
@@ -245,6 +259,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 | MQTT broker not available (no real sensors yet) | High (early) | Low | Mock MQTT publisher for dev; REST fallback endpoint |
 | PostGIS topology queries slow on 4,947-pipe network | Low | High | GIST spatial indexes created on migration |
 | Africa's Talking SMS delivery in non-EA regions | Medium | Low | Pluggable notification backend; Twilio alternative |
+| `.net` binary has no geographic coordinates | Confirmed | Medium | Document clearly; require `.inp` for node mapping; strip centroid placeholder nodes |
 
 ---
 
@@ -252,5 +267,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 - [x] **PostGIS** — installed (PostgreSQL 16 + PostGIS on port 5433)
 - [x] **GDAL system libraries** — installed (`libgdal-dev 3.8.4`, `libgeos-dev`, `libproj-dev`)
+- [ ] **celery** — not installed in venv (`pip install celery redis`); `ingest_shapefile` falls back to `.apply()` synchronously without it
 - [ ] **Real sensor data** needed for Phase 4 production use; Phase 4 dev can proceed with mock MQTT publisher
 - [ ] **Hydraulic engineering review** of simulation defaults before Phase 3 goes to production (wrong roughness → wrong pressure predictions)
+- [ ] **`.inp` export from EPANET** — needed to get real node geographic coordinates; binary `.net` format is not usable for spatial mapping
