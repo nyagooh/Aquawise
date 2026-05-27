@@ -61,17 +61,17 @@ api.interceptors.response.use(
 
       localStorage.setItem(ACCESS_KEY, data.access);
       api.defaults.headers.common.Authorization = `Bearer ${data.access}`;
+      isRefreshing = false;
       processQueue(null, data.access);
       original.headers.Authorization = `Bearer ${data.access}`;
       return api(original);
     } catch (refreshError) {
+      isRefreshing = false;
       processQueue(refreshError, null);
       localStorage.removeItem(ACCESS_KEY);
       localStorage.removeItem(REFRESH_KEY);
       window.location.href = '/login';
       return Promise.reject(refreshError);
-    } finally {
-      isRefreshing = false;
     }
   },
 );
