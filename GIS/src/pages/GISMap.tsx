@@ -281,7 +281,12 @@ export default function GISMap() {
     popupRef.current = popup;
 
     /* sync popup close (X button or click-away) with React focus state */
-    map.on('popupclose', () => setFocus(null));
+    map.on('popupclose', () => {
+      setFocus(null);
+      // Ensure canvas coordinates are current after any pan/zoom that may
+      // have occurred while the popup was open.
+      map.invalidateSize();
+    });
 
     /* pipes — paint household first (under), then distribution, backfeed,
        boundary, mains last so trunk lines render on top of branches. */
@@ -365,8 +370,7 @@ export default function GISMap() {
       if (grp) marker.addTo(grp);
     });
 
-    /* dismiss focus on empty map click (popup already handles X + click-away via popupclose) */
-    map.on('click', () => { map.closePopup(); });
+    /* Leaflet's closePopupOnClick:true (default) already handles empty-map click dismiss */
 
     return () => {
       map.remove();
@@ -409,6 +413,7 @@ export default function GISMap() {
   /* ── 5. focus outline (selected pipe highlight) ── */
   useEffect(() => {
     const map = leafletRef.current;
+    const renderer = rendererRef.current;
     if (!map) return;
     if (focusOutlineRef.current) {
       map.removeLayer(focusOutlineRef.current);
@@ -418,19 +423,22 @@ export default function GISMap() {
       const coords: [number, number][] = focus.feature.geometry.coordinates.map(
         ([lon, lat]) => [lat, lon]
       );
+      // interactive:false → ring never intercepts mouse events on canvas pipes below it
+      // renderer → drawn on same canvas so it can't end up in a stacking-context above canvas paths
       const ring = L.polyline(coords, {
         color: '#facc15',
-        weight: 6,
+        weight: 7,
         opacity: 0.55,
         lineCap: 'round',
-        lineJoin: 'round'
+        lineJoin: 'round',
+        interactive: false,
+        renderer: renderer ?? undefined,
       });
       ring.addTo(map);
       focusOutlineRef.current = ring;
-      map.flyToBounds(ring.getBounds(), { duration: 0.5, padding: [40, 40], maxZoom: 17 });
-    } else if (focus?.kind === 'asset') {
-      const [lon, lat] = focus.feature.geometry.coordinates;
-      map.flyTo([lat, lon], Math.max(map.getZoom(), 16), { duration: 0.5 });
+      // No flyToBounds — zoom animations set _animatingZoom=true on the canvas renderer,
+      // blocking mousemove hit-detection. If the animation is interrupted (ring removed
+      // before completion), _points may be stale and hover never recovers.
     }
   }, [focus]);
 
