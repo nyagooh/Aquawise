@@ -191,6 +191,7 @@ export default function GISMap() {
   const rendererRef = useRef<L.Canvas | null>(null);
   const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
   const focusOutlineRef = useRef<L.Layer | null>(null);
+  const popupRef = useRef<L.Popup | null>(null);
 
   /* ── 1. fetch network — API when activeNetwork set, static when demo mode ── */
   useEffect(() => {
@@ -269,6 +270,19 @@ export default function GISMap() {
     });
     layerGroupsRef.current = groups;
 
+    /* single shared popup — avoids bindPopup reopen bug */
+    const popup = L.popup({
+      className: 'aw-popup',
+      closeButton: true,
+      offset: [0, -4],
+      maxWidth: 280,
+      autoPan: true,
+    });
+    popupRef.current = popup;
+
+    /* sync popup close (X button or click-away) with React focus state */
+    map.on('popupclose', () => setFocus(null));
+
     /* pipes — paint household first (under), then distribution, backfeed,
        boundary, mains last so trunk lines render on top of branches. */
     const renderer = rendererRef.current;
@@ -295,14 +309,12 @@ export default function GISMap() {
         lineJoin: 'round',
         renderer
       });
-      line.bindPopup(() => pipePopupHtml(feat), {
-        className: 'aw-popup aw-popup-pipe',
-        closeButton: false,
-        offset: [0, -2],
-        maxWidth: 280
-      });
       line.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
+        popup
+          .setLatLng(e.latlng)
+          .setContent(pipePopupHtml(feat))
+          .openOn(map);
         setFocus({ kind: 'pipe', feature: feat });
       });
       line.on('mouseover', () => line.setStyle({
@@ -339,14 +351,13 @@ export default function GISMap() {
       const marker = L.marker([lat, lon], {
         icon: assetIcon(feat)
       });
-      marker.bindPopup(() => assetPopupHtml(feat), {
-        className: `aw-popup aw-popup-${props.asset}`,
-        closeButton: false,
-        offset: [0, -14],
-        maxWidth: 280
-      });
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
+        const [lon, lat] = feat.geometry.coordinates;
+        popup
+          .setLatLng([lat, lon])
+          .setContent(assetPopupHtml(feat))
+          .openOn(map);
         setFocus({ kind: 'asset', feature: feat });
       });
       marker.bindTooltip(assetTooltip(feat), { direction: 'top', offset: [0, -10], opacity: 1 });
@@ -354,14 +365,15 @@ export default function GISMap() {
       if (grp) marker.addTo(grp);
     });
 
-    /* dismiss focus on empty click */
-    map.on('click', () => setFocus(null));
+    /* dismiss focus on empty map click (popup already handles X + click-away via popupclose) */
+    map.on('click', () => { map.closePopup(); });
 
     return () => {
       map.remove();
       leafletRef.current = null;
       layerGroupsRef.current = {};
       tileRef.current = null;
+      popupRef.current = null;
     };
     // mode is read at init; subsequent changes handled by the tile-swap effect below
     // eslint-disable-next-line react-hooks/exhaustive-deps
