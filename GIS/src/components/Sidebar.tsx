@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom';
-import { alerts as allAlerts } from '../data';
+import { alerts as allAlerts, leaks as allLeaks } from '../data';
 import { useTheme } from '../theme';
 
-type Active = 'dashboard' | 'gis' | 'alerts' | 'nrw' | 'sensors' | 'reports';
+export type Active = 'dashboard' | 'gis' | 'alerts' | 'leaks' | 'nrw' | 'sensors' | 'reports';
 
 const ICONS: Record<Active, JSX.Element> = {
   dashboard: <><rect x={3} y={3} width={7} height={9} /><rect x={14} y={3} width={7} height={5} /><rect x={14} y={12} width={7} height={9} /><rect x={3} y={16} width={7} height={5} /></>,
   gis:       <><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" /><circle cx={12} cy={10} r={3} /></>,
   alerts:    <><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /><line x1={12} y1={9} x2={12} y2={13} /><line x1={12} y1={17} x2={12.01} y2={17} /></>,
+  leaks:     <><path d="M12 2.5C12 2.5 5 10 5 15a7 7 0 0014 0c0-5-7-12.5-7-12.5z" /><path d="M9 15a3 3 0 003 3" /></>,
   nrw:       <><line x1={18} y1={20} x2={18} y2={10} /><line x1={12} y1={20} x2={12} y2={4} /><line x1={6} y1={20} x2={6} y2={14} /></>,
   sensors:   <><circle cx={12} cy={12} r={3} /><circle cx={12} cy={12} r={9} /></>,
   reports:   <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1={16} y1={13} x2={8} y2={13} /><line x1={16} y1={17} x2={8} y2={17} /></>
@@ -17,6 +18,7 @@ const ITEMS: Array<{ key: Active; label: string; href: string }> = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
   { key: 'gis',       label: 'GIS Map',   href: '/gis' },
   { key: 'alerts',    label: 'Alerts',    href: '/alerts' },
+  { key: 'leaks',     label: 'Leaks',     href: '/leaks' },
   { key: 'nrw',       label: 'NRW',       href: '/nrw' },
   { key: 'sensors',   label: 'Sensors',   href: '/sensors' },
   { key: 'reports',   label: 'Reports',   href: '/reports' }
@@ -25,14 +27,16 @@ const ITEMS: Array<{ key: Active; label: string; href: string }> = [
 export function Sidebar({ active, collapsed, onToggle }: { active: Active; collapsed?: boolean; onToggle?: () => void }) {
   const { mode, toggle } = useTheme();
   const activeAlertCount = allAlerts.filter(a => a.status === 'active').length;
+  const openLeakCount = allLeaks.filter(l => l.status === 'reported' || l.status === 'dispatched').length;
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <Link to="/" className="sb-brand" style={{ color: 'inherit' }}>
-        <svg width={20} height={20} viewBox="0 0 28 28" fill="none">
-          <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
-          <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
+        <svg width={22} height={22} viewBox="0 0 64 64" fill="none" aria-label="Aquawise" style={{ color: 'hsl(var(--primary))' }}>
+          <path d="M12 50 L32 14 L52 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M21 50 L32 14 L43 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+          <path d="M29 50 L32 14 L35 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
         </svg>
-        <span className="sb-text">Aqua<span className="accent">Watch</span></span>
+        <span className="sb-text">Aqua<span className="accent">wise</span></span>
       </Link>
       <div className="sb-section sb-text">Platform</div>
       {onToggle && (
@@ -49,6 +53,7 @@ export function Sidebar({ active, collapsed, onToggle }: { active: Active; colla
           </svg>
           <span className="sb-text">{item.label}</span>
           {item.key === 'alerts' && activeAlertCount > 0 && <span className="badge">{activeAlertCount}</span>}
+          {item.key === 'leaks' && openLeakCount > 0 && <span className="badge">{openLeakCount}</span>}
         </Link>
       ))}
       <div className="sb-foot">

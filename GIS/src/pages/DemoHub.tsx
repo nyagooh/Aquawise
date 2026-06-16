@@ -27,7 +27,7 @@ function DemoFrame({ children }: { children: React.ReactNode }) {
       <nav className="demo-hub-nav">
         <Link to="/" className="demo-hub-brand">
           <BrandMark />
-          <span>Aqua<b>Watch</b></span>
+          <span>Aqua<b>wise</b></span>
         </Link>
         <div className="demo-hub-nav-meta">
           <span className="demo-hub-pill"><span className="live-dot" />Live · Kisumu Water Network</span>
@@ -336,9 +336,10 @@ function formatBytes(n: number): string {
 
 function BrandMark() {
   return (
-    <svg width={22} height={22} viewBox="0 0 28 28" fill="none">
-      <circle cx={14} cy={14} r={14} fill="hsl(var(--primary) / 0.14)" />
-      <path d="M14 4C14 4 6 12 6 18a8 8 0 0016 0c0-6-8-14-8-14z" fill="hsl(var(--primary))" />
+    <svg width={22} height={22} viewBox="0 0 64 64" fill="none" aria-label="Aquawise" style={{ color: 'hsl(var(--primary))' }}>
+      <path d="M12 50 L32 14 L52 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 50 L32 14 L43 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+      <path d="M29 50 L32 14 L35 50" stroke="currentColor" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.22} />
     </svg>
   );
 }

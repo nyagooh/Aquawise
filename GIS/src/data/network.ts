@@ -3,7 +3,7 @@
  * GeoJSON by scripts/shapefile_to_geojson.py) and exposes typed accessors.
  *
  * Files served as static assets from /public/data/:
- *   - kisumu-pipes.geojson    (4,951 polylines, classified with ui_class)
+ *   - kisumu-pipes.geojson    (3,233 polylines, classified with ui_class)
  *   - kisumu-assets.geojson   (synthesized point telemetry overlay)
  *   - kisumu-meta.json        (rich aggregates: km by class/zone/material,
  *                              status counts, age/diameter distribution, bbox)
@@ -74,13 +74,19 @@ export interface MeterValveProps {
   status: AssetStatus;
 }
 
+export type SensorSubtype = 'flow_pressure' | 'ph' | 'turbidity';
+
 export interface SensorProps {
   asset: 'sensor';
   id: string;
   name: string;
   type: string;
+  subtype?: SensorSubtype;
   flow_lps: number;
   pressure_bar: number;
+  /** Quality reading — populated for pH and turbidity sensors. */
+  ph?: number;
+  turbidity_ntu?: number;
   last_seen: string;
   status: AssetStatus;
   pipe_id: string;
@@ -141,14 +147,96 @@ export function loadNetwork(): Promise<NetworkData> {
     }
     const pipesFc = await pipesRes.json();
     const assetsFc = await assetsRes.json();
-    const meta: NetworkMeta = await metaRes.json();
-    return {
-      pipes: pipesFc.features as PipeFeature[],
-      assets: assetsFc.features as AssetFeature[],
-      meta
-    };
+    const rawMeta: NetworkMeta = await metaRes.json();
+
+    const pipes = pipesFc.features as PipeFeature[];
+    const assets = assetsFc.features as AssetFeature[];
+    const synthetic = synthesizeQualitySensors(pipes);
+    // Reflect synthetic sensors in the meta counts so KPIs match the rendered list.
+    const meta: NetworkMeta = synthetic.length
+      ? {
+          ...rawMeta,
+          asset_count: rawMeta.asset_count + synthetic.length,
+          asset_counts: {
+            ...rawMeta.asset_counts,
+            sensor: (rawMeta.asset_counts.sensor || 0) + synthetic.length
+          }
+        }
+      : rawMeta;
+
+    return { pipes, assets: [...assets, ...synthetic], meta };
   })();
   return cache;
+}
+
+/**
+ * Real Kisumu telemetry covers flow + pressure only. Water utilities also
+ * monitor water-quality sensors (pH, turbidity) at reservoirs and key
+ * distribution points — we synthesize a representative set here so the
+ * Sensors page can demo them alongside the real flow/pressure nodes.
+ */
+function synthesizeQualitySensors(pipes: PipeFeature[]): AssetFeature[] {
+  const zones = Array.from(new Set(
+    pipes.map((p) => p.properties.zone).filter((z): z is string => !!z && isRealZone(z))
+  )).slice(0, 5);
+
+  // Pick a representative coordinate per zone from any pipe segment in that zone.
+  const zonePoint: Record<string, [number, number]> = {};
+  for (const z of zones) {
+    const sample = pipes.find((p) => p.properties.zone === z);
+    if (sample) {
+      const coords = sample.geometry.coordinates;
+      zonePoint[z] = coords[Math.floor(coords.length / 2)] as [number, number];
+    }
+  }
+
+  const phReadings: Array<{ ph: number; status: AssetStatus }> = [
+    { ph: 7.2, status: 'ok' },
+    { ph: 6.9, status: 'ok' },
+    { ph: 7.6, status: 'warn' },
+    { ph: 6.4, status: 'alert' },
+    { ph: 7.1, status: 'ok' }
+  ];
+  const turbidityReadings: Array<{ ntu: number; status: AssetStatus }> = [
+    { ntu: 0.8, status: 'ok' },
+    { ntu: 1.2, status: 'ok' },
+    { ntu: 4.6, status: 'warn' },
+    { ntu: 6.1, status: 'alert' },
+    { ntu: 0.6, status: 'ok' }
+  ];
+
+  const out: AssetFeature[] = [];
+  zones.forEach((z, i) => {
+    const pt = zonePoint[z];
+    if (!pt) return;
+    const phr = phReadings[i % phReadings.length];
+    const tbr = turbidityReadings[i % turbidityReadings.length];
+    const phId = `PH-${String(i + 1).padStart(2, '0')}`;
+    const tbId = `TB-${String(i + 1).padStart(2, '0')}`;
+    out.push({
+      type: 'Feature',
+      id: phId,
+      geometry: { type: 'Point', coordinates: [pt[0] + 0.0006, pt[1] + 0.0006] },
+      properties: {
+        asset: 'sensor', id: phId, name: `pH probe · ${zoneLabel(z)}`,
+        type: 'pH', subtype: 'ph', ph: phr.ph,
+        flow_lps: 0, pressure_bar: 0,
+        last_seen: '1m ago', status: phr.status, pipe_id: ''
+      }
+    });
+    out.push({
+      type: 'Feature',
+      id: tbId,
+      geometry: { type: 'Point', coordinates: [pt[0] - 0.0006, pt[1] + 0.0006] },
+      properties: {
+        asset: 'sensor', id: tbId, name: `Turbidity probe · ${zoneLabel(z)}`,
+        type: 'Turbidity', subtype: 'turbidity', turbidity_ntu: tbr.ntu,
+        flow_lps: 0, pressure_bar: 0,
+        last_seen: '30s ago', status: tbr.status, pipe_id: ''
+      }
+    });
+  });
+  return out;
 }
 
 /* ============================================================

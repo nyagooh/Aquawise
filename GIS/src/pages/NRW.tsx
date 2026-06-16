@@ -13,6 +13,9 @@ import {
   type NetworkData
 } from '../data/network';
 
+const DEFAULT_PRODUCED_M3 = 1184;
+const DEFAULT_BILLED_M3   = 1042;
+
 interface ZoneNRW {
   code: string;
   label: string;
@@ -87,25 +90,49 @@ function NRWBody({ data, derived, navigate }: {
   const worst = derived.zones[0];
   const best = derived.zones[derived.zones.length - 1];
 
+  const [producedM3, setProducedM3] = useState(DEFAULT_PRODUCED_M3);
+  const [billedM3,   setBilledM3]   = useState(DEFAULT_BILLED_M3);
+  const lossM3 = Math.max(0, producedM3 - billedM3);
+  const orgNrw = producedM3 > 0 ? (lossM3 / producedM3) * 100 : 0;
+  const billedShare = producedM3 > 0 ? (Math.min(billedM3, producedM3) / producedM3) * 100 : 0;
+  const ratioTone: 'safe' | 'warn' | 'danger' = orgNrw >= 20 ? 'danger' : orgNrw >= 15 ? 'warn' : 'safe';
+  const ratioColor = ratioTone === 'danger' ? 'hsl(var(--danger))' : ratioTone === 'warn' ? 'hsl(var(--warning))' : 'hsl(var(--safe))';
+
   return (
     <>
-      <section className="ops-kpi-band" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <NRWStat tone={derived.totalNrw >= 18 ? 'danger' : derived.totalNrw >= 12 ? 'warn' : 'safe'}
-          label="Network NRW estimate"
-          value={`${derived.totalNrw.toFixed(1)}%`}
-          sub={`${derived.totalLossM3.toLocaleString()} m³/day estimated loss`} />
-        <NRWStat tone="warn"
-          label="Worst zone"
-          value={`${worst?.lossPct.toFixed(1)}%`}
-          sub={`${worst?.label} · ${worst?.km.toFixed(1)} km`} />
-        <NRWStat tone="safe"
-          label="Best zone"
-          value={`${best?.lossPct.toFixed(1)}%`}
-          sub={`${best?.label} · ${best?.km.toFixed(1)} km`} />
-        <NRWStat tone="primary"
-          label="Network input"
-          value={`${(derived.totalInputM3 / 1000).toFixed(1)}k m³`}
-          sub="Daily estimate from length × consumption factor" />
+      <section className="ops-card nrw-hero">
+        <div className="nrw-hero-inputs">
+          <div className="nrw-hero-header">
+            <div>
+              <div className="ops-card-title">Utility inputs</div>
+              <div className="ops-card-sub">NRW = (produced − billed) / produced. Edit either field to recompute live.</div>
+            </div>
+            <span className="pill info"><span className="dot" /> Period · today</span>
+          </div>
+          <div className="nrw-hero-fields">
+            <NRWInput label="Total produced (m³)" value={producedM3} onChange={setProducedM3} />
+            <NRWInput label="Total billed (m³)"   value={billedM3}   onChange={setBilledM3} />
+          </div>
+          <div className="nrw-hero-zones">
+            <div>
+              <span className="nrw-hero-zones-label">Worst zone</span>
+              <strong style={{ color: 'hsl(var(--danger))' }}>{worst?.label} · {worst?.lossPct.toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span className="nrw-hero-zones-label">Best zone</span>
+              <strong style={{ color: 'hsl(var(--safe))' }}>{best?.label} · {best?.lossPct.toFixed(1)}%</strong>
+            </div>
+            <div>
+              <span className="nrw-hero-zones-label">Network estimate</span>
+              <strong>{derived.totalNrw.toFixed(1)}% <span style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 500, fontSize: '0.75rem' }}>(benchmark)</span></strong>
+            </div>
+          </div>
+        </div>
+        <div className={`nrw-hero-result tone-${ratioTone}`}>
+          <div className="nrw-hero-result-label">NRW ratio</div>
+          <div className="nrw-hero-result-value" style={{ color: ratioColor }}>{orgNrw.toFixed(1)}%</div>
+          <div className="nrw-hero-result-sub">{lossM3.toLocaleString()} m³ non-revenue · {billedShare.toFixed(1)}% billed share</div>
+        </div>
       </section>
 
       <section className="ops-row ops-row-2">
@@ -165,33 +192,6 @@ function NRWBody({ data, derived, navigate }: {
             <Insight tone="info">
               <strong>Modern HDPE:</strong> {(data.meta.length_km_by_material.HDPE || 0).toFixed(1)} km of HDPE installed — these zones should benchmark below {Math.max(4, Math.round(derived.nrw - 6))}%.
             </Insight>
-            <Insight tone="info">
-              <strong>Backfeed isolated:</strong> {data.meta.status_counts.closed || 0} closed segments not contributing to consumption today.
-            </Insight>
-          </div>
-        </div>
-      </section>
-
-      <section className="ops-card">
-        <div className="ops-card-head">
-          <div>
-            <div className="ops-card-title">Network water balance · today</div>
-            <div className="ops-card-sub">Estimated from length × consumption factor</div>
-          </div>
-        </div>
-        <div className="nrw-balance">
-          <div className="nrw-balance-bar">
-            <div className="nrw-balance-billed" style={{ width: `${(1 - derived.totalNrw / 100) * 100}%` }}>
-              <span>Billed · {((1 - derived.totalNrw / 100) * derived.totalInputM3).toFixed(0)} m³</span>
-            </div>
-            <div className="nrw-balance-loss" style={{ width: `${derived.totalNrw}%` }}>
-              <span>Loss · {derived.totalLossM3.toLocaleString()} m³</span>
-            </div>
-          </div>
-          <div className="nrw-balance-foot">
-            <div><span>Network input</span><strong>{derived.totalInputM3.toFixed(0)} m³</strong></div>
-            <div><span>Billed volume</span><strong>{((1 - derived.totalNrw / 100) * derived.totalInputM3).toFixed(0)} m³</strong></div>
-            <div><span>Estimated loss</span><strong style={{ color: 'hsl(var(--warning))' }}>{derived.totalLossM3.toLocaleString()} m³ · {derived.totalNrw.toFixed(1)}%</strong></div>
           </div>
         </div>
       </section>
@@ -199,18 +199,36 @@ function NRWBody({ data, derived, navigate }: {
   );
 }
 
-function NRWStat({ tone, label, value, sub }: {
-  tone: 'primary' | 'safe' | 'warn' | 'danger';
+function NRWInput({ label, value, onChange }: {
   label: string;
-  value: string;
-  sub: string;
+  value: number;
+  onChange: (n: number) => void;
 }) {
   return (
-    <div className={`ops-kpi tone-${tone}`}>
-      <div className="ops-kpi-label">{label}</div>
-      <div className="ops-kpi-value">{value}</div>
-      <div className="ops-kpi-sub">{sub}</div>
-    </div>
+    <label style={{ display: 'grid', gap: 6 }}>
+      <span style={{
+        fontSize: '0.6875rem', fontWeight: 700,
+        letterSpacing: '0.1em', textTransform: 'uppercase',
+        color: 'hsl(var(--muted-foreground))'
+      }}>{label}</span>
+      <input
+        type="number"
+        min={0}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        style={{
+          padding: '10px 14px',
+          background: 'hsl(var(--background))',
+          border: '1px solid hsl(var(--border))',
+          borderRadius: 8,
+          color: 'hsl(var(--foreground))',
+          fontFamily: 'var(--font-mono)',
+          fontSize: '1rem',
+          fontWeight: 600
+        }}
+      />
+    </label>
   );
 }
 

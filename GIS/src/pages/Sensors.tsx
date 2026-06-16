@@ -1,23 +1,61 @@
 /**
- * Sensors — telemetry inventory across the whole network.
+ * Sensors — every measuring device deployed across the Kisumu network.
  *
- * Lists every live node (flow + pressure sensors, pressure valves, meter
- * valves, reservoirs) from the loaded GeoJSON. Filter by type, click to view
- * on the map.
+ * One filter bar, one table. Filter chips let the operator focus on a
+ * specific sensor family (pressure, pH, turbidity, tank level, or valves).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shell } from '../components/Shell';
 import {
   loadNetwork,
-  ASSET_STYLE,
-  ASSET_ORDER,
   type NetworkData,
-  type AssetFeature,
-  type AssetKind
+  type AssetFeature
 } from '../data/network';
 
-type Filter = 'all' | AssetKind;
+type Filter = 'all' | 'pressure' | 'ph' | 'turbidity' | 'level' | 'valve';
+
+const FILTER_LABEL: Record<Filter, string> = {
+  all:       'All sensors',
+  pressure:  'Pressure (bar)',
+  ph:        'pH probes',
+  turbidity: 'Turbidity (NTU)',
+  level:     'Tank level (%)',
+  valve:     'Valves'
+};
+
+/** Map an asset to one of our filter families (or null to skip). */
+function familyOf(a: AssetFeature): Exclude<Filter, 'all'> | null {
+  const p = a.properties;
+  if (p.asset === 'tank') return 'level';
+  if (p.asset === 'pressure_valve' || p.asset === 'meter_valve') return 'valve';
+  if (p.asset === 'sensor') {
+    if (p.subtype === 'ph') return 'ph';
+    if (p.subtype === 'turbidity') return 'turbidity';
+    return 'pressure'; // flow + pressure node
+  }
+  return null;
+}
+
+function familyLabel(a: AssetFeature): string {
+  const fam = familyOf(a);
+  if (fam === 'pressure')  return 'Pressure sensor';
+  if (fam === 'ph')        return 'pH probe';
+  if (fam === 'turbidity') return 'Turbidity probe';
+  if (fam === 'level')     return 'Tank level sensor';
+  if (fam === 'valve')     return a.properties.asset === 'pressure_valve' ? 'Pressure valve' : 'Meter valve';
+  return '—';
+}
+
+function familyDot(a: AssetFeature): string {
+  const fam = familyOf(a);
+  if (fam === 'pressure')  return '#EF4444';
+  if (fam === 'ph')        return '#9333EA';
+  if (fam === 'turbidity') return '#06B6D4';
+  if (fam === 'level')     return '#1D4ED8';
+  if (fam === 'valve')     return a.properties.asset === 'pressure_valve' ? '#10B981' : '#F97316';
+  return '#94A3B8';
+}
 
 export default function Sensors() {
   const navigate = useNavigate();
@@ -31,75 +69,70 @@ export default function Sensors() {
   }, []);
 
   const counts = useMemo(() => {
-    if (!data) return null;
-    const c: Record<AssetKind, number> = { tank: 0, pressure_valve: 0, meter_valve: 0, sensor: 0 };
-    for (const a of data.assets) c[a.properties.asset]++;
-    return {
-      total: data.assets.length,
-      online: data.assets.filter((a) => a.properties.status === 'ok').length,
-      anomaly: data.assets.filter((a) => a.properties.status === 'warn').length,
-      alert: data.assets.filter((a) => a.properties.status === 'alert').length,
-      ...c
-    };
+    const c: Record<Filter, number> = { all: 0, pressure: 0, ph: 0, turbidity: 0, level: 0, valve: 0 };
+    if (!data) return c;
+    for (const a of data.assets) {
+      const fam = familyOf(a);
+      if (fam) { c[fam]++; c.all++; }
+    }
+    return c;
   }, [data]);
 
-  const list = useMemo(() => {
-    if (!data) return [] as AssetFeature[];
-    return filter === 'all' ? data.assets : data.assets.filter((a) => a.properties.asset === filter);
+  const list = useMemo<AssetFeature[]>(() => {
+    if (!data) return [];
+    return data.assets.filter((a) => {
+      const fam = familyOf(a);
+      if (!fam) return false;
+      return filter === 'all' || fam === filter;
+    });
   }, [data, filter]);
 
-  return (
-    <Shell active="sensors" title="Sensors & Telemetry" sub={counts ? `${counts.total} live nodes · ${counts.online} online · ${counts.alert + counts.anomaly} in alarm` : 'Loading…'}>
-      {counts && (
-        <section className="ops-kpi-band" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-          <SensorStat tone="primary" label="Total telemetry" value={counts.total} sub={`${counts.sensor} sensors · ${counts.pressure_valve} PRVs · ${counts.meter_valve} meters · ${counts.tank} tanks`} />
-          <SensorStat tone="safe"    label="Online"           value={counts.online}  sub={`${Math.round((counts.online / counts.total) * 100)}% uptime`} />
-          <SensorStat tone="warn"    label="Anomaly"          value={counts.anomaly} sub="Within tolerance · monitor" />
-          <SensorStat tone="danger"  label="Alarm"            value={counts.alert}   sub="Investigate immediately" />
-        </section>
-      )}
+  const sub = data
+    ? `${counts.all} sensors · ${counts.pressure} pressure · ${counts.ph} pH · ${counts.turbidity} turbidity · ${counts.level} tank · ${counts.valve} valves`
+    : 'Loading…';
 
+  return (
+    <Shell active="sensors" title="Sensors" sub={sub}>
       <div className="ops-card" style={{ padding: 0 }}>
         <div className="alerts-filter-bar">
-          {(['all', ...ASSET_ORDER] as Filter[]).map((f) => (
+          {(['all', 'pressure', 'ph', 'turbidity', 'level', 'valve'] as Filter[]).map((f) => (
             <button
               key={f}
               className={`alerts-filter${filter === f ? ' active' : ''}`}
               onClick={() => setFilter(f)}
             >
-              {f === 'all' ? 'All' : ASSET_STYLE[f].shortLabel}
-              <span className="alerts-filter-count">
-                {f === 'all' ? counts?.total : counts?.[f]}
-              </span>
+              <span>{FILTER_LABEL[f]}</span>
+              <span className="alerts-filter-count">{counts[f]}</span>
             </button>
           ))}
           <div style={{ flex: 1 }} />
-          <button className="btn btn-ghost btn-sm">Export CSV</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => exportSensorsCsv(list)}>Export CSV</button>
         </div>
 
         <table className="alerts-table">
           <thead>
             <tr>
               <th>ID</th>
-              <th>Kind</th>
-              <th>Name</th>
-              <th>Live reading</th>
+              <th>Sensor type</th>
+              <th>Name / location</th>
+              <th>Latest reading</th>
               <th>Status</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
+            {list.length === 0 && (
+              <tr><td colSpan={6} className="alerts-empty">No sensors match this filter.</td></tr>
+            )}
             {list.map((a) => {
               const p = a.properties;
-              const kind = ASSET_STYLE[p.asset];
-              const focusHref = `/gis?focus=asset:${p.id}`;
               return (
-                <tr key={p.id} onClick={() => navigate(focusHref)}>
+                <tr key={p.id} onClick={() => navigate(`/gis?focus=asset:${p.id}`)}>
                   <td className="mono"><strong>{p.id}</strong></td>
                   <td>
                     <span className="sensors-kind">
-                      <span className="sensors-kind-dot" style={{ background: kind.color }} />
-                      {kind.shortLabel}
+                      <span className="sensors-kind-dot" style={{ background: familyDot(a) }} />
+                      {familyLabel(a)}
                     </span>
                   </td>
                   <td>{p.name}</td>
@@ -113,7 +146,7 @@ export default function Sensors() {
                   <td style={{ textAlign: 'right' }}>
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={(e) => { e.stopPropagation(); navigate(focusHref); }}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/gis?focus=asset:${p.id}`); }}
                     >View on map</button>
                   </td>
                 </tr>
@@ -128,23 +161,50 @@ export default function Sensors() {
 
 function renderReading(a: AssetFeature) {
   const p = a.properties;
-  if (p.asset === 'sensor') return <span className="mono">{p.flow_lps} L/s · {p.pressure_bar} bar</span>;
-  if (p.asset === 'tank')   return <span className="mono">{p.level_pct}% · {p.inflow_lps}/{p.outflow_lps} L/s</span>;
+  if (p.asset === 'sensor') {
+    if (p.subtype === 'ph' && p.ph != null)              return <span className="mono">pH {p.ph}</span>;
+    if (p.subtype === 'turbidity' && p.turbidity_ntu != null) return <span className="mono">{p.turbidity_ntu} NTU</span>;
+    return <span className="mono">{p.flow_lps} L/s · {p.pressure_bar} bar</span>;
+  }
+  if (p.asset === 'tank')           return <span className="mono">{p.level_pct}% · {p.inflow_lps}/{p.outflow_lps} L/s</span>;
   if (p.asset === 'pressure_valve') return <span className="mono">{p.live_bar} bar (set {p.set_bar})</span>;
   return <span className="mono">⌀{p.size_mm} mm · {p.state} · {p.consumption_m3d} m³/d</span>;
 }
 
-function SensorStat({ tone, label, value, sub }: {
-  tone: 'primary' | 'safe' | 'warn' | 'danger';
-  label: string;
-  value: number;
-  sub: string;
-}) {
-  return (
-    <div className={`ops-kpi tone-${tone}`}>
-      <div className="ops-kpi-label">{label}</div>
-      <div className="ops-kpi-value">{value}</div>
-      <div className="ops-kpi-sub">{sub}</div>
-    </div>
-  );
+function readingText(a: AssetFeature): string {
+  const p = a.properties;
+  if (p.asset === 'sensor') {
+    if (p.subtype === 'ph' && p.ph != null)              return `pH ${p.ph}`;
+    if (p.subtype === 'turbidity' && p.turbidity_ntu != null) return `${p.turbidity_ntu} NTU`;
+    return `${p.flow_lps} L/s · ${p.pressure_bar} bar`;
+  }
+  if (p.asset === 'tank')           return `${p.level_pct}% · ${p.inflow_lps}/${p.outflow_lps} L/s`;
+  if (p.asset === 'pressure_valve') return `${p.live_bar} bar (set ${p.set_bar})`;
+  return `${p.size_mm}mm · ${p.state} · ${p.consumption_m3d} m³/d`;
+}
+
+function exportSensorsCsv(rows: AssetFeature[]) {
+  const headers = ['ID', 'Sensor type', 'Name', 'Latest reading', 'Status', 'Last seen'];
+  const esc = (v: unknown) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [
+    headers.join(','),
+    ...rows.map(a => [
+      a.properties.id,
+      familyLabel(a),
+      a.properties.name,
+      readingText(a),
+      a.properties.status === 'ok' ? 'Online' : a.properties.status === 'warn' ? 'Anomaly' : 'Alarm',
+      a.properties.asset === 'sensor' ? a.properties.last_seen : ''
+    ].map(esc).join(','))
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `aquawise-sensors-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

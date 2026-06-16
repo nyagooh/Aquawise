@@ -68,13 +68,6 @@ export default function Alerts() {
 
   return (
     <Shell active="alerts" title="Alerts & Incidents" sub={data ? `${stats.crit + stats.warn + stats.info} open · ${stats.resolved} resolved · auto-generated from live network state` : 'Loading…'}>
-      <section className="ops-row" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 'var(--s4)' }}>
-        <StatTile tone="crit"  label="Critical"  value={stats.crit}     sub="Immediate action required" />
-        <StatTile tone="warn"  label="Warning"   value={stats.warn}     sub="Monitor closely" />
-        <StatTile tone="info"  label="Info"      value={stats.info}     sub="Awareness only" />
-        <StatTile tone="muted" label="Resolved"  value={stats.resolved} sub="Closed in last 24h" />
-      </section>
-
       <div className="ops-card" style={{ padding: 0 }}>
         <div className="alerts-filter-bar">
           {(['all', 'critical', 'warning', 'info', 'resolved'] as const).map((f) => (
@@ -271,24 +264,3 @@ function sensorAlert(a: AssetFeature): Alert {
   };
 }
 
-function StatTile({ tone, label, value, sub }: {
-  tone: 'crit' | 'warn' | 'info' | 'muted';
-  label: string;
-  value: number;
-  sub: string;
-}) {
-  const colors = {
-    crit:  { color: 'hsl(var(--danger))',  bg: 'hsl(var(--danger-bg))' },
-    warn:  { color: 'hsl(var(--warning))', bg: 'hsl(var(--warning-bg))' },
-    info:  { color: 'hsl(var(--primary))', bg: 'hsl(var(--info-bg))' },
-    muted: { color: 'hsl(var(--foreground))', bg: 'hsl(var(--muted))' }
-  }[tone];
-  return (
-    <div className="ops-card alerts-stat">
-      <div className="alerts-stat-label">{label}</div>
-      <div className="alerts-stat-value" style={{ color: colors.color }}>{value}</div>
-      <div className="alerts-stat-sub">{sub}</div>
-      <div className="alerts-stat-stripe" style={{ background: colors.bg }} />
-    </div>
-  );
-}
