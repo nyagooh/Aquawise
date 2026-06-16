@@ -2481,6 +2481,25 @@ button { font-family: inherit; }
   100% { transform: scale(1.6); opacity: 0; }
 }
 
+/* leak incident markers */
+.aw-leak-marker {
+  position: relative;
+  display: flex; align-items: flex-end; justify-content: center;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+}
+.aw-leak-marker.fixed { opacity: 0.55; }
+.aw-leak-marker .aw-leak-pulse {
+  position: absolute;
+  bottom: 2px; left: 50%;
+  width: 16px; height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--lk);
+  opacity: 0.4;
+  animation: sensorPulse 1.8s ease-out infinite;
+}
+.aw-leak-marker svg { position: relative; z-index: 2; }
+
 /* tooltips */
 .leaflet-tooltip {
   background: hsl(var(--popover)) !important;
