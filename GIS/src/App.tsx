@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing';
 import DemoHub from './pages/DemoHub';
 import Dashboard from './pages/Dashboard';
@@ -13,7 +13,8 @@ import Attribute from './pages/Attribute';
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Landing />} />
+      <Route path="/" element={<Navigate to="/demo" replace />} />
+      <Route path="/landing" element={<Landing />} />
       <Route path="/demo" element={<DemoHub />} />
       <Route path="/demo/upload" element={<DemoHub />} />
       <Route path="/dashboard" element={<Dashboard />} />

@@ -1,0 +1,13 @@
+services:
+  # Aquawise GIS dashboard — static React/Vite site
+  - type: web
+    name: aquawise-gis
+    runtime: static
+    rootDir: GIS
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    # SPA: serve index.html for client-side routes (/gis, /demo/upload, ...)
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
