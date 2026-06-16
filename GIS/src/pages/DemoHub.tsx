@@ -157,7 +157,7 @@ function ChooserView() {
       <footer className="demo-hub-foot">
         <div className="demo-hub-foot-cell">
           <span>Source dataset</span>
-          <strong>Kisumu Water &amp; Sanitation Co. · 2024 export</strong>
+          <strong>Kisumu water demo data · 2024 export</strong>
         </div>
         <div className="demo-hub-foot-cell">
           <span>Projection</span>
