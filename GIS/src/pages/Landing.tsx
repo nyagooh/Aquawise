@@ -73,7 +73,7 @@ export default function Landing() {
         </p>
         <div className="hero-ctas reveal reveal-delay-3">
           <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-          <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
+          <a href="mailto:annmaina.info@gmail.com?subject=Aquawise%20Walkthrough%20Request" className="btn btn-ghost btn-lg">Book a Walkthrough</a>
         </div>
         <div className="hero-meta reveal reveal-delay-3">
           <span><span className="dot" />Free 30-minute demo</span>
@@ -360,7 +360,7 @@ export default function Landing() {
           </p>
           <div className="final-cta-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-            <Link to="/dashboard" className="btn btn-ghost btn-lg">Book a Walkthrough</Link>
+            <a href="mailto:annmaina.info@gmail.com?subject=Aquawise%20Walkthrough%20Request" className="btn btn-ghost btn-lg">Book a Walkthrough</a>
           </div>
           <div className="final-trust">
             <span><span className="dot-safe" />Free 30-minute demo</span>
