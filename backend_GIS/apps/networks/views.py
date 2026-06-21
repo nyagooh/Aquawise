@@ -257,8 +257,9 @@ class AssetListView(APIView):
                 "name": asset.name,
                 "asset_type": asset.asset_type,
                 "status": asset.status,
+                **(asset.attributes or {}),
             })
-            for asset in qs.only("id", "geometry", "name", "asset_type", "status").iterator(chunk_size=500)
+            for asset in qs.iterator(chunk_size=500)
         ]
         return Response({"type": "FeatureCollection", "features": features})
 
