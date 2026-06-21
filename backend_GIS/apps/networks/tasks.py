@@ -640,6 +640,113 @@ def _apply_epanet_inp(network, sections, warnings):
         len(node_objs), skipped, network.id,
     )
 
+    # Now extract Pipes
+    # 1. Collect Vertices for curved pipes
+    vertices = {}
+    for row in sections.get("VERTICES", []):
+        if len(row) >= 3:
+            pipe_id = row[0]
+            x, y = _to_float(row[1]), _to_float(row[2])
+            if x is not None and y is not None:
+                vertices.setdefault(pipe_id, []).append((x, y))
+
+    # 2. Extract Pipes
+    pipes_data = sections.get("PIPES", [])
+    if not pipes_data:
+        warnings.append("[PIPES] section missing — no pipes imported")
+        return
+
+    Pipe.objects.filter(network=network).delete()
+
+    pipe_objs = []
+    skipped_pipes = 0
+    for row in pipes_data:
+        # [ID Node1 Node2 Length Diameter Roughness MinorLoss Status]
+        if len(row) < 3:
+            continue
+        pipe_id = row[0]
+        node1_id = row[1]
+        node2_id = row[2]
+
+        if node1_id not in coords or node2_id not in coords:
+            skipped_pipes += 1
+            continue
+
+        # Build geometry
+        line_coords = [coords[node1_id]]
+        line_coords.extend(vertices.get(pipe_id, []))
+        line_coords.append(coords[node2_id])
+
+        geom_dict = {"type": "LineString", "coordinates": line_coords}
+        if transformer:
+            geom_dict = _reproject(geom_dict, transformer)
+
+        try:
+            geos = GEOSGeometry(json.dumps(geom_dict))
+            if geos.geom_type == "LineString":
+                geos = MultiLineString(geos)
+        except Exception:
+            skipped_pipes += 1
+            continue
+
+        # Parse attributes
+        length = _to_float(row[3]) if len(row) > 3 else None
+        diam = _to_float(row[4]) if len(row) > 4 else None
+        roughness = _to_float(row[5]) if len(row) > 5 else None
+        status_str = row[7].lower() if len(row) > 7 else "open"
+        status = Pipe.Status.CLOSED if "cv" in status_str or "closed" in status_str else Pipe.Status.OPEN
+
+        pipe_objs.append(Pipe(
+            network=network,
+            external_id=pipe_id,
+            geometry=geos,
+            diameter_mm=diam,
+            roughness=roughness,
+            status=status,
+            material=Pipe.Material.UNKNOWN,
+            attributes={"epanet_length": length} if length is not None else {},
+        ))
+
+    if skipped_pipes:
+        warnings.append(f"{skipped_pipes} pipes skipped (missing node coordinates or invalid geometry)")
+
+    Pipe.objects.bulk_create(pipe_objs, batch_size=500)
+    network.total_pipes = len(pipe_objs)
+
+    # Calculate actual length using PostGIS and Zone assignment
+    if pipe_objs:
+        with connection.cursor() as cur:
+            cur.execute(
+                "UPDATE networks_pipe SET length_m = ST_Length(geometry::geography) "
+                "WHERE network_id = %s AND length_m IS NULL",
+                [str(network.id)],
+            )
+            
+            # Recalculate network total length
+            cur.execute(
+                "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 "
+                "FROM networks_pipe WHERE network_id = %s",
+                [str(network.id)],
+            )
+            network.total_length_km = cur.fetchone()[0]
+            
+        if Zone.objects.filter(network=network).exists():
+            with connection.cursor() as cur:
+                cur.execute(
+                    """UPDATE networks_pipe p SET zone_id = z.id
+                       FROM networks_zone z
+                       WHERE p.network_id = %s AND z.network_id = %s
+                       AND ST_Intersects(p.geometry, z.geometry) AND p.zone_id IS NULL""",
+                    [str(network.id), str(network.id)],
+                )
+
+    network.save(update_fields=["total_pipes", "total_length_km"])
+
+    logger.info(
+        "INP: created %d pipes (%d skipped) for network %s",
+        len(pipe_objs), skipped_pipes, network.id,
+    )
+
 
 def _apply_epanet_net_types(network, node_types, warnings):
     """
