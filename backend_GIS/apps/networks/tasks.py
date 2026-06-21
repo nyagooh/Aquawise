@@ -513,27 +513,6 @@ def _parse_inp_sections(path):
     return sections
 
 
-def _extract_net_node_types(path):
-    """
-    Scan an EPANET .net binary for node-type prefixes.
-    Returns {node_id: node_type_string} for tanks, reservoirs, and valves only
-    (junctions are already derived from pipe endpoints).
-    """
-    import re as _re
-    with open(path, "rb") as f:
-        data = f.read()
-    result = {}
-    for m in _re.finditer(rb"[A-Z][A-Z0-9_\-]{1,29}", data):
-        nid = m.group(0).decode("ascii", errors="replace")
-        if _re.match(r"^(TCV|FCV|PRV|GPV|PSV)-", nid):
-            result[nid] = "valve"
-        elif nid.startswith("T-"):
-            result[nid] = "tank"
-        elif nid.startswith("R-") and len(nid) > 2:
-            result[nid] = "reservoir"
-    # Deduplicate (same ID may appear many times in binary)
-    return dict(result)
-
 
 def _apply_epanet_inp(network, sections, warnings):
     """
@@ -748,49 +727,6 @@ def _apply_epanet_inp(network, sections, warnings):
     )
 
 
-def _apply_epanet_net_types(network, node_types, warnings):
-    """
-    .net binary: we have node IDs and types but no geographic coords.
-    Creates special nodes (tank/reservoir/valve) at the network centroid
-    so they appear in Sensors. Upload an .inp for accurate positions.
-    """
-    if not node_types:
-        warnings.append("No special nodes (T-, R-, TCV-, FCV-, PRV-) found in .net binary")
-        return
-
-    with connection.cursor() as cur:
-        cur.execute(
-            "SELECT ST_AsText(ST_Centroid(ST_Collect(geometry::geometry))) "
-            "FROM networks_pipe WHERE network_id = %s",
-            [str(network.id)],
-        )
-        row = cur.fetchone()
-        centroid_wkt = row[0] if row and row[0] else "POINT(0 0)"
-
-    centroid = GEOSGeometry(centroid_wkt)
-    valid_types = {c[0] for c in Node.NodeType.choices}
-
-    new_nodes = []
-    for node_id, ntype in node_types.items():
-        if ntype not in valid_types:
-            continue
-        new_nodes.append(Node(
-            network=network,
-            external_id=node_id,
-            node_type=ntype,
-            geometry=centroid,
-            attributes={"unlocated": True, "source": "epanet_net"},
-        ))
-
-    Node.objects.bulk_create(new_nodes, batch_size=200, ignore_conflicts=True)
-    network.total_nodes = Node.objects.filter(network=network).count()
-    network.save(update_fields=["total_nodes"])
-    warnings.append(
-        f".net binary: {len(new_nodes)} special nodes placed at network centroid. "
-        "Upload an .inp file for accurate geographic positions."
-    )
-    logger.info(".net: created %d special nodes for network %s", len(new_nodes), network.id)
-
 
 @shared_task(bind=True, ignore_result=True)
 def ingest_epanet(self, upload_id: str):
@@ -817,9 +753,6 @@ def ingest_epanet(self, upload_id: str):
         if ext == "inp":
             sections = _parse_inp_sections(upload.file_path)
             _apply_epanet_inp(network, sections, warnings)
-        elif ext == "net":
-            node_types = _extract_net_node_types(upload.file_path)
-            _apply_epanet_net_types(network, node_types, warnings)
         else:
             raise ValueError(f"Unsupported EPANET extension: .{ext}")
 
