@@ -41,16 +41,27 @@ class NetworkUploadView(APIView):
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("zip", "inp"):
+        if ext not in ("zip", "inp", "geojson", "json", "kml", "kmz"):
             return Response(
-                {"error": "Only .zip (shapefile) or .inp (EPANET) files accepted"},
+                {"error": "Only .zip (shapefile), .inp (EPANET), .geojson/.json, or .kml/.kmz files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        file_type = "shapefile" if ext == "zip" else f"epanet_{ext}"
+        if ext == "zip":
+            file_type = "shapefile"
+        elif ext == "inp":
+            file_type = "epanet_inp"
+        elif ext in ("geojson", "json"):
+            file_type = "geojson"
+        else:
+            file_type = "kml"
+
+        name = request.POST.get("name", "").strip()
+
         upload = NetworkUpload.objects.create(
             organisation=request.user.organisation,
             file_name=file.name,
+            network_name=name,
             file_path="",
             file_type=file_type,
         )
@@ -70,6 +81,18 @@ class NetworkUploadView(APIView):
                 ingest_shapefile.delay(str(upload.id))
             except Exception:
                 ingest_shapefile.apply(args=[str(upload.id)])
+        elif ext in ("geojson", "json"):
+            from .tasks import ingest_geojson
+            try:
+                ingest_geojson.delay(str(upload.id))
+            except Exception:
+                ingest_geojson.apply(args=[str(upload.id)])
+        elif ext in ("kml", "kmz"):
+            from .tasks import ingest_kml
+            try:
+                ingest_kml.delay(str(upload.id))
+            except Exception:
+                ingest_kml.apply(args=[str(upload.id)])
 
         return Response({"upload_id": str(upload.id), "status": upload.status}, status=status.HTTP_202_ACCEPTED)
 
@@ -98,6 +121,29 @@ class WaterNetworkDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         network.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        name = request.data.get("name", "").strip()
+        if not name:
+            return Response({"error": "Name cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
+
+        network.name = name
+        network.save(update_fields=["name"])
+        
+        return Response({
+            "id": str(network.id),
+            "name": network.name,
+            "total_pipes": network.total_pipes,
+            "total_nodes": network.total_nodes,
+            "total_length_km": network.total_length_km,
+            "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
+            "created_at": network.created_at,
+        })
 
 
 class NetworkValidationReportView(APIView):
