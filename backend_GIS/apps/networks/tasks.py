@@ -15,7 +15,7 @@ from pyproj import Transformer
 from shapely import from_geojson, to_geojson
 from shapely.ops import transform
 
-from .models import NetworkUpload, Node, Pipe, WaterNetwork, Zone
+from .models import Asset, NetworkUpload, Node, Pipe, WaterNetwork, Zone
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,22 @@ _YEAR_FIELDS = ["year", "install_yr", "installation_year", "year_inst", "inst_da
 _PIPE_ZONE_FIELDS = ["zone", "zone_id", "dma", "dma_id", "zone_name", "district", "network"]
 _ZONE_NAME_FIELDS = ["name", "zone_name", "dma_name", "zone", "district", "label"]
 _ZONE_CODE_FIELDS = ["code", "zone_code", "dma_code", "dma_id"]
+
+
+def _generate_untitled_name(organisation):
+    existing = set(
+        WaterNetwork.objects.filter(
+            organisation=organisation,
+            name__istartswith="Untitled"
+        ).values_list("name", flat=True)
+    )
+    existing_lower = {n.lower() for n in existing}
+    if "untitled" not in existing_lower:
+        return "Untitled"
+    i = 1
+    while f"untitled{i}" in existing_lower:
+        i += 1
+    return f"Untitled{i}"
 
 
 def _find_field(props, candidates):
@@ -181,7 +197,11 @@ def ingest_shapefile(self, upload_id: str):
                     elif "polygon" in gt:
                         polygon_layers.append(shp_path)
 
-            network_name = upload.file_name.rsplit(".", 1)[0].replace("_", " ").title()
+            if upload.network_name:
+                network_name = upload.network_name
+            else:
+                network_name = _generate_untitled_name(upload.organisation)
+
             network = WaterNetwork.objects.create(
                 organisation=upload.organisation,
                 project=upload.project,
@@ -767,6 +787,780 @@ def ingest_epanet(self, upload_id: str):
 
     except Exception as exc:
         logger.exception("EPANET ingestion failed for upload %s", upload_id)
+        upload.status = NetworkUpload.Status.FAILED
+        upload.validation_report = {"error": str(exc), "warnings": warnings}
+        upload.completed_at = timezone.now()
+        upload.save()
+
+
+@shared_task(bind=True, ignore_result=True)
+def ingest_geojson(self, upload_id: str):
+    try:
+        upload = NetworkUpload.objects.get(id=upload_id)
+    except NetworkUpload.DoesNotExist:
+        logger.error("NetworkUpload %s not found", upload_id)
+        return
+
+    upload.status = NetworkUpload.Status.PROCESSING
+    upload.save(update_fields=["status"])
+
+    network = None
+    warnings = []
+
+    try:
+        with open(upload.file_path, "r", encoding="utf-8", errors="replace") as f:
+            data = json.load(f)
+
+        if data.get("type") != "FeatureCollection":
+            raise ValueError("GeoJSON must be a FeatureCollection")
+
+        features = data.get("features", [])
+        if not features:
+            raise ValueError("GeoJSON FeatureCollection contains no features")
+
+        if upload.network_name:
+            network_name = upload.network_name
+        else:
+            network_name = _generate_untitled_name(upload.organisation)
+
+        network = WaterNetwork.objects.create(
+            organisation=upload.organisation,
+            project=upload.project,
+            upload=upload,
+            name=network_name,
+            source_crs="EPSG:4326",
+        )
+
+        zones = []
+        pipes = []
+        nodes = []
+        assets = []
+        
+        zone_cache = {}
+
+        for feat in features:
+            geom_dict = feat.get("geometry")
+            if not geom_dict:
+                continue
+            geom_type = geom_dict.get("type")
+            props = feat.get("properties") or {}
+
+            try:
+                geos = GEOSGeometry(json.dumps(geom_dict))
+            except Exception as e:
+                warnings.append(f"Invalid geometry in feature: {str(e)}")
+                continue
+
+            if geom_type in ("Polygon", "MultiPolygon"):
+                if geos.geom_type == "Polygon":
+                    geos = MultiPolygon(geos)
+                name_f = _find_field(props, _ZONE_NAME_FIELDS)
+                code_f = _find_field(props, _ZONE_CODE_FIELDS)
+                zones.append(Zone(
+                    network=network,
+                    name=str(props.get(name_f) if name_f else f"Zone {feat.get('id', len(zones))}"),
+                    code=str(props.get(code_f, "") if code_f else "")[:20],
+                    geometry=geos,
+                    population_estimate=_to_int(props.get("population_estimate") or props.get("population")),
+                ))
+            elif geom_type in ("LineString", "MultiLineString"):
+                if geos.geom_type == "LineString":
+                    geos = MultiLineString(geos)
+                material = _normalize_material(
+                    props.get(_find_field(props, _MATERIAL_FIELDS) or "") or ""
+                )
+                diam = _to_float(props.get(_find_field(props, _DIAMETER_FIELDS) or ""))
+                ext_id_f = _find_field(props, _EXT_ID_FIELDS)
+                ext_id = str(props.get(ext_id_f, "") if ext_id_f else feat.get("id", ""))[:100]
+                pipe_status = _normalize_pipe_status(
+                    props.get(_find_field(props, _STATUS_FIELDS) or "") or ""
+                )
+                year = _extract_year(props.get(_find_field(props, _YEAR_FIELDS) or ""))
+                roughness = ROUGHNESS_DEFAULTS.get(material.upper())
+
+                zone_obj = None
+                zone_f = _find_field(props, _PIPE_ZONE_FIELDS)
+                if zone_f:
+                    zone_name = str(props.get(zone_f) or "").strip()
+                    if zone_name:
+                        if zone_name not in zone_cache:
+                            code = zone_name[:20]
+                            zone_cache[zone_name], _ = Zone.objects.get_or_create(
+                                network=network, code=code,
+                                defaults={"name": zone_name},
+                            )
+                        zone_obj = zone_cache[zone_name]
+
+                known_fields = {f.lower() for group in [
+                    _MATERIAL_FIELDS, _DIAMETER_FIELDS, _STATUS_FIELDS,
+                    _EXT_ID_FIELDS, _YEAR_FIELDS, _PIPE_ZONE_FIELDS,
+                ] for f in group}
+                extras = {k: v for k, v in props.items() if k.lower() not in known_fields and v is not None}
+
+                pipes.append(Pipe(
+                    network=network,
+                    zone=zone_obj,
+                    external_id=ext_id,
+                    geometry=geos,
+                    material=material,
+                    diameter_mm=diam,
+                    roughness=roughness,
+                    status=pipe_status,
+                    installation_year=year,
+                    attributes=extras,
+                ))
+            elif geom_type in ("Point", "MultiPoint"):
+                if geos.geom_type == "MultiPoint":
+                    geos = geos[0]
+                
+                ext_id_f = _find_field(props, _EXT_ID_FIELDS)
+                ext_id = str(props.get(ext_id_f, "") if ext_id_f else feat.get("id", ""))[:100]
+
+                is_asset = props.get("asset") in ("tank", "pressure_valve", "meter_valve", "sensor", "pump", "valve", "meter")
+                if is_asset:
+                    asset_type = props.get("asset")
+                    if asset_type == "tank":
+                        asset_type = "storage_tank"
+                    elif asset_type == "pressure_valve" or asset_type == "meter_valve":
+                        asset_type = "valve"
+                    elif asset_type == "sensor":
+                        asset_type = "meter"
+                    
+                    attrs = {k: v for k, v in props.items() if k not in ("name", "asset", "status")}
+                    attrs["asset"] = props.get("asset")
+                    attrs["id"] = ext_id or props.get("id", "")
+                    
+                    assets.append(Asset(
+                        network=network,
+                        asset_type=asset_type,
+                        name=props.get("name") or f"Asset {ext_id}",
+                        geometry=geos,
+                        status=props.get("status") or "active",
+                        attributes=attrs
+                    ))
+                else:
+                    node_type = _normalize_node_type(
+                        props.get(_find_field(props, _NODE_TYPE_FIELDS) or "") or ""
+                    )
+                    elev = _to_float(props.get(_find_field(props, _ELEVATION_FIELDS) or ""))
+                    demand = _to_float(props.get("demand_lps") or props.get("demand"))
+                    known_fields = {f.lower() for group in [
+                        _NODE_TYPE_FIELDS, _ELEVATION_FIELDS, _EXT_ID_FIELDS,
+                    ] for f in group}
+                    extras = {k: v for k, v in props.items() if k.lower() not in known_fields and v is not None}
+                    nodes.append(Node(
+                        network=network,
+                        external_id=ext_id,
+                        node_type=node_type,
+                        geometry=geos,
+                        elevation_m=elev,
+                        demand_lps=demand,
+                        attributes=extras,
+                    ))
+
+        if zones:
+            Zone.objects.bulk_create(zones, batch_size=500)
+        if pipes:
+            Pipe.objects.bulk_create(pipes, batch_size=500)
+        if nodes:
+            Node.objects.bulk_create(nodes, batch_size=500)
+        if assets:
+            Asset.objects.bulk_create(assets, batch_size=500)
+
+        total_pipes = len(pipes)
+        total_nodes = len(nodes)
+        total_assets = len(assets)
+
+        if total_pipes > 0:
+            with connection.cursor() as cur:
+                cur.execute(
+                    "UPDATE networks_pipe SET length_m = ST_Length(geometry::geography)"
+                    " WHERE network_id = %s",
+                    [str(network.id)],
+                )
+
+        if Zone.objects.filter(network=network).exists():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE networks_pipe p
+                       SET zone_id = z.id
+                      FROM networks_zone z
+                     WHERE p.network_id = %s
+                       AND z.network_id = %s
+                       AND ST_Intersects(p.geometry, z.geometry)
+                       AND p.zone_id IS NULL
+                    """,
+                    [str(network.id), str(network.id)],
+                )
+                cursor.execute(
+                    """
+                    UPDATE networks_node n
+                       SET zone_id = z.id
+                      FROM networks_zone z
+                     WHERE n.network_id = %s
+                       AND z.network_id = %s
+                       AND ST_Within(n.geometry, z.geometry)
+                       AND n.zone_id IS NULL
+                    """,
+                    [str(network.id), str(network.id)],
+                )
+
+        if total_nodes == 0 and total_pipes > 0:
+            with connection.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO networks_node
+                           (id, network_id, external_id, node_type, geometry, attributes)
+                    SELECT
+                        gen_random_uuid(),
+                        %(net)s::uuid,
+                        '',
+                        'junction',
+                        ST_SetSRID(
+                            ST_MakePoint(
+                                ROUND(ST_X(pt.geom)::numeric, 6)::float8,
+                                ROUND(ST_Y(pt.geom)::numeric, 6)::float8
+                            ),
+                            4326
+                        )::geometry(Point, 4326),
+                        '{}'::jsonb
+                    FROM (
+                        SELECT DISTINCT
+                            ROUND(ST_X(geom)::numeric, 6) AS rx,
+                            ROUND(ST_Y(geom)::numeric, 6) AS ry,
+                            ST_MakePoint(
+                                ROUND(ST_X(geom)::numeric, 6)::float8,
+                                ROUND(ST_Y(geom)::numeric, 6)::float8
+                            ) AS geom
+                        FROM (
+                            SELECT ST_StartPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                              FROM networks_pipe WHERE network_id = %(net)s::uuid
+                            UNION ALL
+                            SELECT ST_EndPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                              FROM networks_pipe WHERE network_id = %(net)s::uuid
+                        ) raw
+                        WHERE geom IS NOT NULL
+                    ) pt
+                    """,
+                    {"net": str(network.id)},
+                )
+                total_nodes = cur.rowcount
+                if total_nodes > 0 and Zone.objects.filter(network=network).exists():
+                    cur.execute(
+                        """
+                        UPDATE networks_node n
+                           SET zone_id = z.id
+                          FROM networks_zone z
+                         WHERE n.network_id = %s
+                           AND z.network_id = %s
+                           AND ST_Within(n.geometry, z.geometry)
+                           AND n.zone_id IS NULL
+                        """,
+                        [str(network.id), str(network.id)],
+                    )
+
+        network.total_pipes = total_pipes
+        network.total_nodes = total_nodes
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT ST_AsText(ST_SetSRID(ST_Extent(geometry::geometry), 4326))
+                  FROM (
+                    SELECT geometry FROM networks_pipe WHERE network_id = %s
+                    UNION ALL
+                    SELECT geometry FROM networks_node WHERE network_id = %s
+                  ) geoms
+                """,
+                [str(network.id), str(network.id)],
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                network.bbox = GEOSGeometry(row[0]).envelope
+
+            cursor.execute(
+                "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
+                [str(network.id)],
+            )
+            network.total_length_km = cursor.fetchone()[0]
+
+        network.save()
+
+        upload.status = (
+            NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings else NetworkUpload.Status.COMPLETE
+        )
+        upload.validation_report = {
+            "pipes": total_pipes,
+            "nodes": total_nodes,
+            "assets": total_assets,
+            "warnings": warnings,
+        }
+        upload.network = network
+        upload.completed_at = timezone.now()
+        upload.save()
+        logger.info("GeoJSON ingestion complete for upload %s: %d pipes, %d nodes, %d assets", upload_id, total_pipes, total_nodes, total_assets)
+
+    except Exception as exc:
+        logger.exception("GeoJSON ingestion failed for upload %s", upload_id)
+        if network:
+            network.delete()
+        upload.status = NetworkUpload.Status.FAILED
+        upload.validation_report = {"error": str(exc), "warnings": warnings}
+        upload.completed_at = timezone.now()
+        upload.save()
+
+
+# ── KML/KMZ Ingestion ──────────────────────────────────────────────────────────
+
+def _extract_kml_from_kmz(kmz_path, extract_dir):
+    with zipfile.ZipFile(kmz_path, "r") as z:
+        for name in z.namelist():
+            if name.lower().endswith(".kml"):
+                return z.extract(name, extract_dir)
+    raise ValueError("No .kml file found in KMZ archive")
+
+
+def _parse_kml_coords(coords_str):
+    coords = []
+    chunks = coords_str.replace("\n", " ").replace("\r", " ").replace("\t", " ").strip().split()
+    for chunk in chunks:
+        parts = chunk.split(",")
+        if len(parts) >= 2:
+            try:
+                lon = float(parts[0])
+                lat = float(parts[1])
+                coords.append((lon, lat))
+            except ValueError:
+                continue
+    return coords
+
+
+def _parse_kml_geometry(elem, ns):
+    tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+
+    if tag == "Point":
+        coord_elem = elem.find(f".//{{{ns}}}coordinates") if ns else elem.find(".//coordinates")
+        if coord_elem is not None and coord_elem.text:
+            pts = _parse_kml_coords(coord_elem.text)
+            if pts:
+                return {"type": "Point", "coordinates": pts[0]}
+    
+    elif tag == "LineString":
+        coord_elem = elem.find(f".//{{{ns}}}coordinates") if ns else elem.find(".//coordinates")
+        if coord_elem is not None and coord_elem.text:
+            pts = _parse_kml_coords(coord_elem.text)
+            if len(pts) >= 2:
+                return {"type": "LineString", "coordinates": pts}
+            elif len(pts) == 1:
+                return {"type": "Point", "coordinates": pts[0]}
+
+    elif tag == "Polygon":
+        outer_elem = elem.find(f".//{{{ns}}}outerBoundaryIs" if ns else ".//outerBoundaryIs")
+        if outer_elem is not None:
+            ring = outer_elem.find(f".//{{{ns}}}LinearRing" if ns else ".//LinearRing")
+            if ring is not None:
+                coord_elem = ring.find(f".//{{{ns}}}coordinates" if ns else ".//coordinates")
+                if coord_elem is not None and coord_elem.text:
+                    outer_pts = _parse_kml_coords(coord_elem.text)
+                    if len(outer_pts) >= 3:
+                        if outer_pts[0] != outer_pts[-1]:
+                            outer_pts.append(outer_pts[0])
+                        rings = [outer_pts]
+                        
+                        inner_elems = elem.findall(f".//{{{ns}}}innerBoundaryIs" if ns else ".//innerBoundaryIs")
+                        for inner in inner_elems:
+                            iring = inner.find(f".//{{{ns}}}LinearRing" if ns else ".//LinearRing")
+                            if iring is not None:
+                                icoord = iring.find(f".//{{{ns}}}coordinates" if ns else ".//coordinates")
+                                if icoord is not None and icoord.text:
+                                    inner_pts = _parse_kml_coords(icoord.text)
+                                    if len(inner_pts) >= 3:
+                                        if inner_pts[0] != inner_pts[-1]:
+                                            inner_pts.append(inner_pts[0])
+                                        rings.append(inner_pts)
+                        return {"type": "Polygon", "coordinates": rings}
+
+    elif tag == "MultiGeometry":
+        geoms = []
+        for child in elem:
+            geom = _parse_kml_geometry(child, ns)
+            if geom:
+                geoms.append(geom)
+        if geoms:
+            types = {g["type"] for g in geoms}
+            if len(types) == 1:
+                t = list(types)[0]
+                if t == "Point":
+                    return {"type": "MultiPoint", "coordinates": [g["coordinates"] for g in geoms]}
+                elif t == "LineString":
+                    return {"type": "MultiLineString", "coordinates": [g["coordinates"] for g in geoms]}
+                elif t == "Polygon":
+                    return {"type": "MultiPolygon", "coordinates": [g["coordinates"] for g in geoms]}
+            return {"type": "GeometryCollection", "geometries": geoms}
+
+    for child in elem:
+        geom = _parse_kml_geometry(child, ns)
+        if geom:
+            return geom
+
+    return None
+
+
+def _parse_kml_properties(placemark_elem, ns):
+    props = {}
+    
+    for tag_name in ("name", "description"):
+        elem = placemark_elem.find(f"./{{{ns}}}{tag_name}" if ns else f"./{tag_name}")
+        if elem is not None and elem.text:
+            props[tag_name] = elem.text.strip()
+            
+    ext_elem = placemark_elem.find(f"./{{{ns}}}ExtendedData" if ns else "./ExtendedData")
+    if ext_elem is not None:
+        for data in ext_elem.findall(f".//{{{ns}}}Data" if ns else ".//Data"):
+            name = data.attrib.get("name")
+            if name:
+                val_elem = data.find(f"./{{{ns}}}value" if ns else "./value")
+                if val_elem is not None and val_elem.text:
+                    props[name] = val_elem.text.strip()
+                    
+        for sdata in ext_elem.findall(f".//{{{ns}}}SimpleData" if ns else ".//SimpleData"):
+            name = sdata.attrib.get("name")
+            if name and sdata.text:
+                props[name] = sdata.text.strip()
+                
+    return props
+
+
+@shared_task(bind=True, ignore_result=True)
+def ingest_kml(self, upload_id: str):
+    try:
+        upload = NetworkUpload.objects.get(id=upload_id)
+    except NetworkUpload.DoesNotExist:
+        logger.error("NetworkUpload %s not found", upload_id)
+        return
+
+    upload.status = NetworkUpload.Status.PROCESSING
+    upload.save(update_fields=["status"])
+
+    network = None
+    warnings = []
+
+    try:
+        ext = upload.file_name.rsplit(".", 1)[-1].lower()
+        
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if ext == "kmz":
+                kml_path = _extract_kml_from_kmz(upload.file_path, tmpdir)
+            else:
+                kml_path = upload.file_path
+
+            import xml.etree.ElementTree as ET
+            tree = ET.parse(kml_path)
+            root = tree.getroot()
+            
+            ns = ""
+            if root.tag.startswith("{"):
+                ns = root.tag.split("}")[0][1:]
+                
+            placemarks = root.findall(f".//{{{ns}}}Placemark" if ns else ".//Placemark")
+            if not placemarks:
+                raise ValueError("No Placemark elements found in KML")
+
+            if upload.network_name:
+                network_name = upload.network_name
+            else:
+                network_name = _generate_untitled_name(upload.organisation)
+
+            network = WaterNetwork.objects.create(
+                organisation=upload.organisation,
+                project=upload.project,
+                upload=upload,
+                name=network_name,
+                source_crs="EPSG:4326",
+            )
+
+            zones = []
+            pipes = []
+            nodes = []
+            assets = []
+            zone_cache = {}
+
+            def add_feature(geom, props, placemark_id):
+                if not geom:
+                    return
+                
+                gtype = geom.get("type")
+                if gtype == "GeometryCollection":
+                    for sub_geom in geom.get("geometries", []):
+                        add_feature(sub_geom, props, placemark_id)
+                    return
+
+                try:
+                    geos = GEOSGeometry(json.dumps(geom))
+                except Exception as e:
+                    warnings.append(f"Invalid geometry in placemark {props.get('name')}: {str(e)}")
+                    return
+
+                if gtype in ("Polygon", "MultiPolygon"):
+                    if geos.geom_type == "Polygon":
+                        geos = MultiPolygon(geos)
+                    name_f = _find_field(props, _ZONE_NAME_FIELDS)
+                    code_f = _find_field(props, _ZONE_CODE_FIELDS)
+                    zones.append(Zone(
+                        network=network,
+                        name=str(props.get(name_f) or props.get("name") or f"Zone {len(zones)}"),
+                        code=str(props.get(code_f, "") if code_f else "")[:20],
+                        geometry=geos,
+                        population_estimate=_to_int(props.get("population_estimate") or props.get("population")),
+                    ))
+                elif gtype in ("LineString", "MultiLineString"):
+                    if geos.geom_type == "LineString":
+                        geos = MultiLineString(geos)
+                    material = _normalize_material(
+                        props.get(_find_field(props, _MATERIAL_FIELDS) or "") or ""
+                    )
+                    diam = _to_float(props.get(_find_field(props, _DIAMETER_FIELDS) or ""))
+                    ext_id_f = _find_field(props, _EXT_ID_FIELDS)
+                    ext_id = str(props.get(ext_id_f) or props.get("id") or placemark_id or "")[:100]
+                    pipe_status = _normalize_pipe_status(
+                        props.get(_find_field(props, _STATUS_FIELDS) or "") or ""
+                    )
+                    year = _extract_year(props.get(_find_field(props, _YEAR_FIELDS) or ""))
+                    roughness = ROUGHNESS_DEFAULTS.get(material.upper())
+
+                    zone_obj = None
+                    zone_f = _find_field(props, _PIPE_ZONE_FIELDS)
+                    if zone_f:
+                        zone_name = str(props.get(zone_f) or "").strip()
+                        if zone_name:
+                            if zone_name not in zone_cache:
+                                code = zone_name[:20]
+                                zone_cache[zone_name], _ = Zone.objects.get_or_create(
+                                    network=network, code=code,
+                                    defaults={"name": zone_name},
+                                )
+                            zone_obj = zone_cache[zone_name]
+
+                    known_fields = {f.lower() for group in [
+                        _MATERIAL_FIELDS, _DIAMETER_FIELDS, _STATUS_FIELDS,
+                        _EXT_ID_FIELDS, _YEAR_FIELDS, _PIPE_ZONE_FIELDS,
+                    ] for f in group}
+                    extras = {k: v for k, v in props.items() if k.lower() not in known_fields and v is not None}
+
+                    pipes.append(Pipe(
+                        network=network,
+                        zone=zone_obj,
+                        external_id=ext_id,
+                        geometry=geos,
+                        material=material,
+                        diameter_mm=diam,
+                        roughness=roughness,
+                        status=pipe_status,
+                        installation_year=year,
+                        attributes=extras,
+                    ))
+                elif gtype in ("Point", "MultiPoint"):
+                    if geos.geom_type == "MultiPoint":
+                        geos = geos[0]
+                    
+                    ext_id_f = _find_field(props, _EXT_ID_FIELDS)
+                    ext_id = str(props.get(ext_id_f) or props.get("id") or placemark_id or "")[:100]
+
+                    is_asset = props.get("asset") in ("tank", "pressure_valve", "meter_valve", "sensor", "pump", "valve", "meter")
+                    if is_asset:
+                        asset_type = props.get("asset")
+                        if asset_type == "tank":
+                            asset_type = "storage_tank"
+                        elif asset_type == "pressure_valve" or asset_type == "meter_valve":
+                            asset_type = "valve"
+                        elif asset_type == "sensor":
+                            asset_type = "meter"
+                        
+                        attrs = {k: v for k, v in props.items() if k not in ("name", "asset", "status")}
+                        attrs["asset"] = props.get("asset")
+                        attrs["id"] = ext_id or props.get("id", "")
+                        
+                        assets.append(Asset(
+                            network=network,
+                            asset_type=asset_type,
+                            name=props.get("name") or f"Asset {ext_id}",
+                            geometry=geos,
+                            status=props.get("status") or "active",
+                            attributes=attrs
+                        ))
+                    else:
+                        node_type = _normalize_node_type(
+                            props.get(_find_field(props, _NODE_TYPE_FIELDS) or "") or ""
+                        )
+                        elev = _to_float(props.get(_find_field(props, _ELEVATION_FIELDS) or ""))
+                        demand = _to_float(props.get("demand_lps") or props.get("demand"))
+                        known_fields = {f.lower() for group in [
+                            _NODE_TYPE_FIELDS, _ELEVATION_FIELDS, _EXT_ID_FIELDS,
+                        ] for f in group}
+                        extras = {k: v for k, v in props.items() if k.lower() not in known_fields and v is not None}
+                        nodes.append(Node(
+                            network=network,
+                            external_id=ext_id,
+                            node_type=node_type,
+                            geometry=geos,
+                            elevation_m=elev,
+                            demand_lps=demand,
+                            attributes=extras,
+                        ))
+
+            for placemark in placemarks:
+                props = _parse_kml_properties(placemark, ns)
+                placemark_id = placemark.attrib.get("id")
+                geom = _parse_kml_geometry(placemark, ns)
+                if geom:
+                    add_feature(geom, props, placemark_id)
+
+            if zones:
+                Zone.objects.bulk_create(zones, batch_size=500)
+            if pipes:
+                Pipe.objects.bulk_create(pipes, batch_size=500)
+            if nodes:
+                Node.objects.bulk_create(nodes, batch_size=500)
+            if assets:
+                Asset.objects.bulk_create(assets, batch_size=500)
+
+            total_pipes = len(pipes)
+            total_nodes = len(nodes)
+            total_assets = len(assets)
+
+            if total_pipes > 0:
+                with connection.cursor() as cur:
+                    cur.execute(
+                        "UPDATE networks_pipe SET length_m = ST_Length(geometry::geography)"
+                        " WHERE network_id = %s",
+                        [str(network.id)],
+                    )
+
+            if Zone.objects.filter(network=network).exists():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        UPDATE networks_pipe p
+                           SET zone_id = z.id
+                          FROM networks_zone z
+                         WHERE p.network_id = %s
+                           AND z.network_id = %s
+                           AND ST_Intersects(p.geometry, z.geometry)
+                           AND p.zone_id IS NULL
+                        """,
+                        [str(network.id), str(network.id)],
+                    )
+                    cursor.execute(
+                        """
+                        UPDATE networks_node n
+                           SET zone_id = z.id
+                          FROM networks_zone z
+                         WHERE n.network_id = %s
+                           AND z.network_id = %s
+                           AND ST_Within(n.geometry, z.geometry)
+                           AND n.zone_id IS NULL
+                        """,
+                        [str(network.id), str(network.id)],
+                    )
+
+            if total_nodes == 0 and total_pipes > 0:
+                with connection.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO networks_node
+                               (id, network_id, external_id, node_type, geometry, attributes)
+                        SELECT
+                            gen_random_uuid(),
+                            %(net)s::uuid,
+                            '',
+                            'junction',
+                            ST_SetSRID(
+                                ST_MakePoint(
+                                    ROUND(ST_X(pt.geom)::numeric, 6)::float8,
+                                    ROUND(ST_Y(pt.geom)::numeric, 6)::float8
+                                ),
+                                4326
+                            )::geometry(Point, 4326),
+                            '{}'::jsonb
+                        FROM (
+                            SELECT DISTINCT
+                                ROUND(ST_X(geom)::numeric, 6) AS rx,
+                                ROUND(ST_Y(geom)::numeric, 6) AS ry,
+                                ST_MakePoint(
+                                    ROUND(ST_X(geom)::numeric, 6)::float8,
+                                    ROUND(ST_Y(geom)::numeric, 6)::float8
+                                ) AS geom
+                            FROM (
+                                SELECT ST_StartPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                                  FROM networks_pipe WHERE network_id = %(net)s::uuid
+                                UNION ALL
+                                SELECT ST_EndPoint((ST_Dump(geometry::geometry)).geom) AS geom
+                                  FROM networks_pipe WHERE network_id = %(net)s::uuid
+                            ) raw
+                            WHERE geom IS NOT NULL
+                        ) pt
+                        """,
+                        {"net": str(network.id)},
+                    )
+                    total_nodes = cur.rowcount
+                    if total_nodes > 0 and Zone.objects.filter(network=network).exists():
+                        cur.execute(
+                            """
+                            UPDATE networks_node n
+                               SET zone_id = z.id
+                              FROM networks_zone z
+                             WHERE n.network_id = %s
+                               AND z.network_id = %s
+                               AND ST_Within(n.geometry, z.geometry)
+                               AND n.zone_id IS NULL
+                            """,
+                            [str(network.id), str(network.id)],
+                        )
+
+            network.total_pipes = total_pipes
+            network.total_nodes = total_nodes
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT ST_AsText(ST_SetSRID(ST_Extent(geometry::geometry), 4326))
+                      FROM (
+                        SELECT geometry FROM networks_pipe WHERE network_id = %s
+                        UNION ALL
+                        SELECT geometry FROM networks_node WHERE network_id = %s
+                      ) geoms
+                    """,
+                    [str(network.id), str(network.id)],
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    network.bbox = GEOSGeometry(row[0]).envelope
+
+                cursor.execute(
+                    "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
+                    [str(network.id)],
+                )
+                network.total_length_km = cursor.fetchone()[0]
+
+            network.save()
+
+            upload.status = (
+                NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings else NetworkUpload.Status.COMPLETE
+            )
+            upload.validation_report = {
+                "pipes": total_pipes,
+                "nodes": total_nodes,
+                "assets": total_assets,
+                "warnings": warnings,
+            }
+            upload.network = network
+            upload.completed_at = timezone.now()
+            upload.save()
+            logger.info("KML/KMZ ingestion complete for upload %s: %d pipes, %d nodes, %d assets", upload_id, total_pipes, total_nodes, total_assets)
+
+    except Exception as exc:
+        logger.exception("KML/KMZ ingestion failed for upload %s", upload_id)
+        if network:
+            network.delete()
         upload.status = NetworkUpload.Status.FAILED
         upload.validation_report = {"error": str(exc), "warnings": warnings}
         upload.completed_at = timezone.now()
