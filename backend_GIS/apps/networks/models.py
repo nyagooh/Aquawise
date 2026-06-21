@@ -21,7 +21,6 @@ class NetworkUpload(models.Model):
         ("shapefile", "Shapefile"),
         ("epanet", "EPANET .inp"),
         ("epanet_inp", "EPANET .inp"),
-        ("epanet_net", "EPANET .net"),
     ])
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.PENDING)
     validation_report = models.JSONField(default=dict, blank=True)
