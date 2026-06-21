@@ -41,9 +41,9 @@ class NetworkUploadView(APIView):
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("zip", "inp", "net"):
+        if ext not in ("zip", "inp"):
             return Response(
-                {"error": "Only .zip (shapefile), .inp, or .net (EPANET) files accepted"},
+                {"error": "Only .zip (shapefile) or .inp (EPANET) files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -354,9 +354,9 @@ class EpanetUploadView(APIView):
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("inp", "net"):
+        if ext != "inp":
             return Response(
-                {"error": "Only .inp or .net EPANET files accepted"},
+                {"error": "Only .inp EPANET files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
