@@ -102,6 +102,7 @@ export interface AssetFeature {
 }
 
 export interface NetworkMeta {
+  name?: string;
   source: string;
   feature_count: number;
   asset_count: number;
@@ -131,40 +132,263 @@ export interface NetworkData {
 }
 
 let cache: Promise<NetworkData> | null = null;
+let accessToken: string | null = null;
+
+export async function getAuthHeaders(): Promise<HeadersInit> {
+  if (!accessToken) {
+    const res = await fetch('/api/v1/auth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin123' })
+    });
+    if (!res.ok) {
+      throw new Error('Failed to authenticate with backend.');
+    }
+    const data = await res.json();
+    accessToken = data.access;
+  }
+  return {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+export function clearNetworkCache() {
+  cache = null;
+}
+
+async function loadFromBackend(): Promise<NetworkData> {
+  const headers = await getAuthHeaders();
+  
+  // 1. Fetch active network
+  let networkId = localStorage.getItem('activeNetworkId');
+  if (!networkId) {
+    const netsRes = await fetch('/api/v1/networks/', { headers });
+    if (!netsRes.ok) throw new Error('Failed to fetch networks list');
+    const networks = await netsRes.json();
+    const network = networks.find((n: any) => n.name === 'Kiwasco Network') || networks[0];
+    if (!network) throw new Error('No networks found in backend');
+    networkId = network.id;
+    localStorage.setItem('activeNetworkId', networkId!);
+  }
+
+  // 2. Fetch zones
+  const zonesRes = await fetch(`/api/v1/networks/${networkId}/zones/`, { headers });
+  if (!zonesRes.ok) throw new Error('Failed to fetch zones');
+  const zonesFc = await zonesRes.json();
+  const zoneMap = new Map<string, string>();
+  zonesFc.features.forEach((feat: any) => {
+    if (feat.properties && feat.properties.id) {
+      zoneMap.set(feat.properties.id, feat.properties.code || feat.properties.name);
+    }
+  });
+
+  // 3. Fetch pipes
+  const pipesRes = await fetch(`/api/v1/networks/${networkId}/pipes/`, { headers });
+  if (!pipesRes.ok) throw new Error('Failed to fetch pipes');
+  const pipesFc = await pipesRes.json();
+  
+  const pipes: PipeFeature[] = pipesFc.features.map((feat: any) => {
+    const props = feat.properties;
+    let uiClass: PipeClass = 'distribution';
+    if (props.status === 'closed') {
+      uiClass = 'backfeed';
+    } else if (props.diameter_mm && props.diameter_mm >= 150) {
+      uiClass = 'main';
+    } else if (props.diameter_mm && props.diameter_mm <= 32) {
+      uiClass = 'household';
+    }
+
+    let mappedStatus: PipeStatus = 'open';
+    let mappedService: ServiceState = 'in-service';
+    if (props.status === 'closed') {
+      mappedStatus = 'closed';
+      mappedService = 'pending';
+    } else if (props.status === 'out_of_service') {
+      mappedStatus = 'unknown';
+      mappedService = 'out-of-service';
+    } else if (props.status === 'pending') {
+      mappedStatus = 'unknown';
+      mappedService = 'pending';
+    }
+
+    return {
+      type: 'Feature',
+      id: props.external_id || props.id,
+      geometry: feat.geometry,
+      properties: {
+        id: props.external_id || props.id,
+        class: props.diameter_mm && props.diameter_mm >= 150 ? 'transmission' : 'distribution',
+        ui_class: uiClass,
+        network_raw: props.material || 'PVC',
+        material: props.material,
+        diameter_mm: props.diameter_mm,
+        length_m: props.length_m,
+        status: mappedStatus,
+        service: mappedService,
+        zone: zoneMap.get(props.zone_id) || props.zone_id || null,
+        installed: props.installation_year || 2020,
+        node_from: null,
+        node_to: null,
+        remarks: null,
+        layer: null
+      }
+    };
+  });
+
+  // 4. Fetch assets
+  const assetsRes = await fetch(`/api/v1/networks/${networkId}/assets/`, { headers });
+  if (!assetsRes.ok) throw new Error('Failed to fetch assets');
+  const assetsFc = await assetsRes.json();
+  
+  const assets: AssetFeature[] = assetsFc.features.map((feat: any) => {
+    const props = feat.properties;
+    return {
+      type: 'Feature',
+      id: props.id,
+      geometry: feat.geometry,
+      properties: {
+        ...props,
+        id: props.id,
+        status: props.status || 'ok'
+      }
+    };
+  });
+
+  // 5. Fetch stats
+  const statsRes = await fetch(`/api/v1/networks/${networkId}/stats/`, { headers });
+  if (!statsRes.ok) throw new Error('Failed to fetch stats');
+  const stats = await statsRes.json();
+
+  const assetCounts: Partial<Record<AssetKind, number>> = {};
+  assets.forEach((f) => {
+    const kind = f.properties.asset as AssetKind;
+    assetCounts[kind] = (assetCounts[kind] || 0) + 1;
+  });
+
+  const byClass: Partial<Record<PipeClass, number>> = {};
+  const lengthKmByClass: Partial<Record<PipeClass, number>> = {};
+  pipes.forEach((p) => {
+    const cls = p.properties.ui_class;
+    byClass[cls] = (byClass[cls] || 0) + 1;
+    const lenKm = (p.properties.length_m || 0) / 1000;
+    lengthKmByClass[cls] = (lengthKmByClass[cls] || 0) + lenKm;
+  });
+
+  const lengthKmByZone: Record<string, number> = {};
+  stats.zones_breakdown.forEach((z: any) => {
+    lengthKmByZone[z.code || z.name] = z.length_km;
+  });
+
+  const lengthKmByMaterial: Record<string, number> = {};
+  stats.materials_breakdown.forEach((m: any) => {
+    lengthKmByMaterial[m.material] = m.length_km;
+  });
+
+  const materials: Array<[string, number]> = stats.materials_breakdown.map((m: any) => [m.material, m.count]);
+  const statusCounts: Record<PipeStatus, number> = {
+    open: stats.status_breakdown.open || 0,
+    closed: stats.status_breakdown.closed || 0,
+    unknown: stats.status_breakdown.unknown || 0
+  };
+
+  const netRes = await fetch(`/api/v1/networks/${networkId}/`, { headers });
+  if (!netRes.ok) throw new Error('Failed to fetch network detail');
+  const netDetail = await netRes.json();
+
+  let bbox: [number, number, number, number] = [34.6, -0.15, 34.95, -0.01];
+  let center: [number, number] = [34.75, -0.08];
+  if (netDetail.bbox && netDetail.bbox.coordinates) {
+    const coords = netDetail.bbox.coordinates[0];
+    const lons = coords.map((pt: any) => pt[0]);
+    const lats = coords.map((pt: any) => pt[1]);
+    const minx = Math.min(...lons);
+    const miny = Math.min(...lats);
+    const maxx = Math.max(...lons);
+    const maxy = Math.max(...lats);
+    bbox = [minx, miny, maxx, maxy];
+    center = [(minx + maxx) / 2, (miny + maxy) / 2];
+  }
+
+  const meta: NetworkMeta = {
+    name: netDetail.name,
+    source: 'Django PostGIS Backend',
+    feature_count: pipes.length,
+    asset_count: assets.length,
+    asset_counts: assetCounts,
+    by_class: byClass,
+    length_km_by_class: lengthKmByClass,
+    length_km_by_zone: lengthKmByZone,
+    length_km_by_material: lengthKmByMaterial,
+    top_zones: stats.zones_breakdown.slice(0, 5).map((z: any) => [z.code || z.name, z.length_km] as [string, number]),
+    zones_normalized: stats.zones_breakdown.map((z: any) => [z.code || z.name, z.length_km] as [string, number]),
+    materials: materials,
+    common_diameters_mm: [],
+    diameter_distribution: {},
+    age_distribution: stats.age_distribution,
+    status_counts: statusCounts,
+    service_counts: {
+      'in-service': statusCounts.open,
+      'out-of-service': 0,
+      'pending': statusCounts.closed,
+      'unknown': statusCounts.unknown
+    },
+    total_length_m: stats.total_length_km * 1000,
+    total_length_km: stats.total_length_km,
+    bbox: bbox,
+    center: center
+  };
+
+  const synthetic = synthesizeQualitySensors(pipes);
+  meta.asset_count += synthetic.length;
+  meta.asset_counts.sensor = (meta.asset_counts.sensor || 0) + synthetic.length;
+
+  return { pipes, assets: [...assets, ...synthetic], meta };
+}
 
 export function loadNetwork(): Promise<NetworkData> {
   if (cache) return cache;
   cache = (async () => {
-    const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
-    const url = (path: string) => `${base.replace(/\/$/, '')}/data/${path}`;
-    const [pipesRes, assetsRes, metaRes] = await Promise.all([
-      fetch(url('kisumu-pipes.geojson')),
-      fetch(url('kisumu-assets.geojson')),
-      fetch(url('kisumu-meta.json'))
-    ]);
-    if (!pipesRes.ok || !assetsRes.ok || !metaRes.ok) {
-      throw new Error('Failed to load Kisumu network dataset.');
-    }
-    const pipesFc = await pipesRes.json();
-    const assetsFc = await assetsRes.json();
-    const rawMeta: NetworkMeta = await metaRes.json();
+    try {
+      console.log("Attempting to load network data from Django REST API...");
+      return await loadFromBackend();
+    } catch (err) {
+      console.warn("Backend load failed, falling back to static files:", err);
+      // Fallback
+      const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
+      const url = (path: string) => `${base.replace(/\/$/, '')}/data/${path}`;
+      const [pipesRes, assetsRes, metaRes] = await Promise.all([
+        fetch(url('kisumu-pipes.geojson')),
+        fetch(url('kisumu-assets.geojson')),
+        fetch(url('kisumu-meta.json'))
+      ]);
+      if (!pipesRes.ok || !assetsRes.ok || !metaRes.ok) {
+        throw new Error('Failed to load Kisumu network dataset.');
+      }
+      const pipesFc = await pipesRes.json();
+      const assetsFc = await assetsRes.json();
+      const rawMeta: NetworkMeta = await metaRes.json();
 
-    const pipes = pipesFc.features as PipeFeature[];
-    const assets = assetsFc.features as AssetFeature[];
-    const synthetic = synthesizeQualitySensors(pipes);
-    // Reflect synthetic sensors in the meta counts so KPIs match the rendered list.
-    const meta: NetworkMeta = synthetic.length
-      ? {
-          ...rawMeta,
-          asset_count: rawMeta.asset_count + synthetic.length,
-          asset_counts: {
-            ...rawMeta.asset_counts,
-            sensor: (rawMeta.asset_counts.sensor || 0) + synthetic.length
+      const pipes = pipesFc.features as PipeFeature[];
+      const assets = assetsFc.features as AssetFeature[];
+      const synthetic = synthesizeQualitySensors(pipes);
+      const meta: NetworkMeta = synthetic.length
+        ? {
+            ...rawMeta,
+            name: rawMeta.name || 'Kisumu Sandbox',
+            asset_count: rawMeta.asset_count + synthetic.length,
+            asset_counts: {
+              ...rawMeta.asset_counts,
+              sensor: (rawMeta.asset_counts.sensor || 0) + synthetic.length
+            }
           }
-        }
-      : rawMeta;
+        : {
+            ...rawMeta,
+            name: rawMeta.name || 'Kisumu Sandbox'
+          };
 
-    return { pipes, assets: [...assets, ...synthetic], meta };
+      return { pipes, assets: [...assets, ...synthetic], meta };
+    }
   })();
   return cache;
 }
@@ -185,7 +409,11 @@ function synthesizeQualitySensors(pipes: PipeFeature[]): AssetFeature[] {
   for (const z of zones) {
     const sample = pipes.find((p) => p.properties.zone === z);
     if (sample) {
-      const coords = sample.geometry.coordinates;
+      const geom = sample.geometry;
+      let coords = geom.coordinates;
+      if (geom.type === 'MultiLineString') {
+        coords = (geom.coordinates as any)[0];
+      }
       zonePoint[z] = coords[Math.floor(coords.length / 2)] as [number, number];
     }
   }
