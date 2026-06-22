@@ -34,7 +34,7 @@ export interface PipeProps {
 export interface PipeFeature {
   type: 'Feature';
   id: string;
-  geometry: { type: 'LineString'; coordinates: [number, number][] };
+  geometry: { type: 'LineString' | 'MultiLineString'; coordinates: any };
   properties: PipeProps;
 }
 
@@ -308,6 +308,47 @@ async function loadFromBackend(): Promise<NetworkData> {
     const maxy = Math.max(...lats);
     bbox = [minx, miny, maxx, maxy];
     center = [(minx + maxx) / 2, (miny + maxy) / 2];
+  }
+
+  // Detect if coordinates are schematic (non-geographic or huge span)
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const isGeographic = minLon >= -180 && maxLon <= 180 && minLat >= -90 && maxLat <= 90;
+  const lonSpan = Math.abs(maxLon - minLon);
+  const latSpan = Math.abs(maxLat - minLat);
+  const schematic = !isGeographic || lonSpan > 2.0 || latSpan > 2.0;
+
+  if (schematic) {
+    const cx = (minLon + maxLon) / 2;
+    const cy = (minLat + maxLat) / 2;
+    const maxRange = Math.max(lonSpan, latSpan) || 1.0;
+    const scale = 0.05 / maxRange;
+
+    const normCoord = (pt: [number, number]): [number, number] => [
+      (pt[0] - cx) * scale,
+      (pt[1] - cy) * scale
+    ];
+
+    pipes.forEach((p) => {
+      if (p.geometry.type === 'LineString') {
+        p.geometry.coordinates = (p.geometry.coordinates as [number, number][]).map(normCoord);
+      } else if (p.geometry.type === 'MultiLineString') {
+        p.geometry.coordinates = (p.geometry.coordinates as any).map((line: [number, number][]) =>
+          line.map(normCoord)
+        );
+      }
+    });
+
+    assets.forEach((a) => {
+      a.geometry.coordinates = normCoord(a.geometry.coordinates);
+    });
+
+    bbox = [
+      (minLon - cx) * scale,
+      (minLat - cy) * scale,
+      (maxLon - cx) * scale,
+      (maxLat - cy) * scale
+    ];
+    center = [0.0, 0.0];
   }
 
   const meta: NetworkMeta = {
