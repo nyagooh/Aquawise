@@ -62,6 +62,8 @@ export default function GISMap() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [layers, setLayers] = useState<LayerVis>(DEFAULT_LAYERS);
   const [focus, setFocus] = useState<Focus>(null);
+  const [isSchematic, setIsSchematic] = useState<boolean>(false);
+  const [showBasemap, setShowBasemap] = useState<boolean>(true);
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -74,7 +76,19 @@ export default function GISMap() {
   useEffect(() => {
     let alive = true;
     loadNetwork()
-      .then((data) => { if (alive) setNetwork(data); })
+      .then((data) => {
+        if (alive) {
+          setNetwork(data);
+          // Detect schematic heuristic based on bounding box
+          const [minLon, minLat, maxLon, maxLat] = data.meta.bbox;
+          const isGeographic = minLon >= -180 && maxLon <= 180 && minLat >= -90 && maxLat <= 90;
+          const lonSpan = Math.abs(maxLon - minLon);
+          const latSpan = Math.abs(maxLat - minLat);
+          const schematic = !isGeographic || lonSpan > 2.0 || latSpan > 2.0;
+          setIsSchematic(schematic);
+          setShowBasemap(!schematic);
+        }
+      })
       .catch((err) => {
         console.error(err);
         if (alive) setLoadError(err.message || 'Unable to load network data.');
@@ -110,12 +124,6 @@ export default function GISMap() {
     // makes them clickable without forcing the operator to pixel-hunt.
     rendererRef.current = L.canvas({ padding: 0.4, tolerance: 6 });
 
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTR,
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
-
     /* layer groups */
     const groups: Partial<Record<PipeClass | AssetKind, L.LayerGroup>> = {};
     [...PIPE_KEYS, ...ASSET_KEYS].forEach((k) => {
@@ -145,8 +153,8 @@ export default function GISMap() {
           (line: [number, number][]) => line.map(([lon, lat]) => [lat, lon])
         );
       } else {
-        coords = feat.geometry.coordinates.map(
-          ([lon, lat]) => [lat, lon]
+        coords = (feat.geometry.coordinates as [number, number][]).map(
+          ([lon, lat]: [number, number]) => [lat, lon]
         );
       }
       const line = L.polyline(coords, {
@@ -231,17 +239,22 @@ export default function GISMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network]);
 
-  /* ── 3. swap tiles on theme change without recreating map ── */
+  /* ── 3. swap tiles on theme or basemap change without recreating map ── */
   useEffect(() => {
     const map = leafletRef.current;
     if (!map) return;
-    if (tileRef.current) map.removeLayer(tileRef.current);
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTR,
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
-  }, [mode]);
+    if (tileRef.current) {
+      map.removeLayer(tileRef.current);
+      tileRef.current = null;
+    }
+    if (showBasemap) {
+      tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
+        attribution: TILE_ATTR,
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+    }
+  }, [mode, showBasemap]);
 
   /* ── 4. layer toggles ── */
   useEffect(() => {
@@ -273,8 +286,8 @@ export default function GISMap() {
           (line: [number, number][]) => line.map(([lon, lat]) => [lat, lon])
         );
       } else {
-        coords = focus.feature.geometry.coordinates.map(
-          ([lon, lat]) => [lat, lon]
+        coords = (focus.feature.geometry.coordinates as [number, number][]).map(
+          ([lon, lat]: [number, number]) => [lat, lon]
         );
       }
       const ring = L.polyline(coords, {
@@ -346,7 +359,7 @@ export default function GISMap() {
   return (
     <Shell active="gis" title="GIS Map" sub={network?.meta.name ? `${network.meta.name} · live operational view` : 'Loading network…'} pagePadding={false} hideRightRail>
       <div className="gis-canvas gis-canvas--real">
-        <div ref={mapRef} className="gis-leaflet" />
+        <div ref={mapRef} className={`gis-leaflet${!showBasemap ? ' gis-leaflet--blank' : ''}`} />
 
         {!network && !loadError && (
           <div className="map-loading">
@@ -371,6 +384,8 @@ export default function GISMap() {
               onAllPipes={setAllPipes}
               onAllAssets={setAllAssets}
               meta={network.meta}
+              showBasemap={showBasemap}
+              onToggleBasemap={() => setShowBasemap((sb) => !sb)}
             />
             <StatBadge meta={network.meta} />
           </>
@@ -607,7 +622,9 @@ function LayerControl({
   onToggle,
   onAllPipes,
   onAllAssets,
-  meta
+  meta,
+  showBasemap,
+  onToggleBasemap
 }: {
   layers: LayerVis;
   counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number> };
@@ -615,6 +632,8 @@ function LayerControl({
   onAllPipes: (on: boolean) => void;
   onAllAssets: (on: boolean) => void;
   meta: NetworkData['meta'];
+  showBasemap: boolean;
+  onToggleBasemap: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const visiblePipeCount = PIPE_KEYS.reduce((sum, k) => sum + (layers[k] ? counts.pipeCounts[k] : 0), 0);
@@ -673,6 +692,21 @@ function LayerControl({
               />
             ))}
           </div>
+          <div className="gis-lc-section">
+            <div className="gis-lc-section-head">
+              <span>Basemap</span>
+            </div>
+            <LayerToggle
+              label="Map Imagery"
+              on={showBasemap}
+              swatch={
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ color: 'hsl(var(--primary))' }}>
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+              }
+              onClick={onToggleBasemap}
+            />
+          </div>
           <div className="gis-lc-section gis-lc-status">
             <div className="gis-lc-section-head"><span>Status</span></div>
             <div className="gis-lc-status-row">
@@ -692,14 +726,14 @@ function LayerControl({
 }
 
 function LayerToggle({ label, count, on, swatch, onClick }: {
-  label: string; count: number; on: boolean; swatch: React.ReactNode; onClick: () => void;
+  label: string; count?: number; on: boolean; swatch: React.ReactNode; onClick: () => void;
 }) {
   return (
     <button className={`gis-layer-toggle${on ? ' on' : ''}`} onClick={onClick} type="button">
       <span className="gis-lt-check">{on ? '✓' : ''}</span>
       <span className="gis-lt-swatch">{swatch}</span>
       <span className="gis-lt-label">{label}</span>
-      <span className="gis-lt-count">{count.toLocaleString()}</span>
+      {count !== undefined && <span className="gis-lt-count">{count.toLocaleString()}</span>}
     </button>
   );
 }
