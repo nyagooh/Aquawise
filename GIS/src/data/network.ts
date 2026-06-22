@@ -339,6 +339,10 @@ async function loadFromBackend(): Promise<NetworkData> {
     center: center
   };
 
+  if (pipes.length === 0 && assets.length === 0) {
+    throw new Error("EMPTY_NETWORK: A network with 0 pipes and 0 nodes has no lines/markers to render, and its bounding box defaults to null.");
+  }
+
   const synthetic = synthesizeQualitySensors(pipes);
   meta.asset_count += synthetic.length;
   meta.asset_counts.sensor = (meta.asset_counts.sensor || 0) + synthetic.length;
@@ -352,7 +356,11 @@ export function loadNetwork(): Promise<NetworkData> {
     try {
       console.log("Attempting to load network data from Django REST API...");
       return await loadFromBackend();
-    } catch (err) {
+    } catch (err: any) {
+      if (err.message && err.message.startsWith("EMPTY_NETWORK")) {
+        // Propagate user validation error directly without silent Kisumu fallback
+        throw new Error(err.message.replace("EMPTY_NETWORK: ", ""));
+      }
       console.warn("Backend load failed, falling back to static files:", err);
       // Fallback
       const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
