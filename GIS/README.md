@@ -65,6 +65,41 @@ VITE_API_URL=https://your-backend-host.example
 > point `VITE_API_URL` at it. Until then the static demo works, but uploads and
 > the lead form will show a "could not reach the server" error.
 
+## Hosting the backend (so upload + lead form work)
+
+The demo backend ships as a slim container — [`backend/docker/Dockerfile.demo`](backend/docker/Dockerfile.demo)
+(SQLite, gunicorn; `fiona/pyproj/shapely` wheels bundle GDAL, so no system geo
+packages). Deploy it anywhere that runs a container, then set `VITE_API_URL` in
+Vercel to its public URL.
+
+### Render (one-click via Blueprint)
+
+A Blueprint is included at [`backend/render.yaml`](backend/render.yaml).
+
+1. Push this repo to GitHub.
+2. Render → **New → Blueprint** → select the repo. It reads `render.yaml` and
+   provisions a Docker web service from `GIS/backend` using `Dockerfile.demo`.
+3. Deploy. Render gives you a URL like `https://aquawise-gis-backend.onrender.com`.
+4. Verify: open `<url>/healthz` → `{"status": "ok"}`.
+
+**Manual setup (any host — Render/Railway/Fly):**
+- Root directory: `GIS/backend`
+- Dockerfile: `docker/Dockerfile.demo`
+- The container runs `migrate` then `gunicorn` on `$PORT` automatically.
+- Env vars:
+  - `DJANGO_DEBUG=false`
+  - `SECRET_KEY=<random string>`
+  - `DEMO_LEAD_RECIPIENT=annmaina.info@gmail.com` (where demo requests are sent)
+  - For the lead form to actually email (not just log): `EMAIL_HOST`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD` (e.g. Gmail SMTP + app password)
+  - Optional `CORS_ALLOWED_ORIGINS=https://your-app.vercel.app` to lock down CORS
+
+### Then connect Vercel → backend
+
+In Vercel → Project → Settings → Environment Variables, add
+`VITE_API_URL=https://aquawise-gis-backend.onrender.com` (your backend URL, no
+trailing slash) and **redeploy**. Uploads and the demo/Book-a-Walkthrough form
+will now work in production.
+
 ## Routes
 
 | Path           | Page         | Purpose                                             |

@@ -13,9 +13,13 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = "demo-insecure-key-not-for-production"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+SECRET_KEY = os.environ.get("SECRET_KEY", "demo-insecure-key-not-for-production")
+DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() == "true"
+# Comma-separated hosts; defaults to open (fine for a public read-only demo API).
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+_render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _render_host and _render_host not in ALLOWED_HOSTS and "*" not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_render_host)
 
 INSTALLED_APPS = [
     "django.contrib.auth",
@@ -47,8 +51,14 @@ STATIC_URL = "/static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 USE_TZ = True
 
-# Allow the Vite dev server (and any origin, for the open demo) to call the API.
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS: restrict to specific origins when CORS_ALLOWED_ORIGINS is set
+# (comma-separated, e.g. your Vercel URL); otherwise allow any origin so the
+# open demo works from localhost and previews.
+_cors = [o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
+if _cors:
+    CORS_ALLOWED_ORIGINS = _cors
+else:
+    CORS_ALLOW_ALL_ORIGINS = True
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [],
