@@ -1,16 +1,16 @@
 /**
- * Demo Hub — premium intermediate landing between marketing and live map.
+ * Networks Hub — project and network selection page.
  *
  * Routes:
- *   /demo         → two-option chooser (View Your Network / Upload GIS Data)
- *   /demo/upload  → upload workflow for utilities that want to bring their own data
+ *   /networks         → list available networks from the database and choose which one to view
+ *   /networks/upload  → upload workflow to ingest new shapefile zip bundles or EPANET .inp files
  */
 import { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../theme';
-import { loadNetwork, type NetworkMeta } from '../data/network';
+import { loadNetwork, type NetworkMeta, getAuthHeaders, clearNetworkCache } from '../data/network';
 
-export default function DemoHub() {
+export default function NetworksHub() {
   const location = useLocation();
   const isUpload = location.pathname.endsWith('/upload');
   return isUpload ? <UploadView /> : <ChooserView />;
@@ -30,7 +30,7 @@ function DemoFrame({ children }: { children: React.ReactNode }) {
           <span>Aqua<b>wise</b></span>
         </Link>
         <div className="demo-hub-nav-meta">
-          <span className="demo-hub-pill"><span className="live-dot" />Live · Kisumu Water Network</span>
+          <span className="demo-hub-pill"><span className="live-dot" />Live · Water Intelligence Platform</span>
           <button className="theme-toggle" onClick={toggle} title={`Switch to ${mode === 'dark' ? 'light' : 'dark'}`}>
             {mode === 'dark' ? '☀' : '☾'} {mode === 'dark' ? 'Light' : 'Dark'}
           </button>
@@ -42,130 +42,238 @@ function DemoFrame({ children }: { children: React.ReactNode }) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   Chooser
+   Networks Chooser List
    ════════════════════════════════════════════════════════════ */
+
+interface NetworkItem {
+  id: string;
+  name: string;
+  total_pipes: number;
+  total_nodes: number;
+  total_length_km: number;
+  source_crs: string;
+  bbox: any;
+  created_at: string;
+}
+
+type AssetKind = 'tank' | 'pressure_valve' | 'meter_valve' | 'sensor';
 
 function ChooserView() {
   const navigate = useNavigate();
-  const [meta, setMeta] = useState<NetworkMeta | null>(null);
+  const [networks, setNetworks] = useState<NetworkItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchNetworksList = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch('/api/v1/networks/', { headers });
+      if (!res.ok) throw new Error('Failed to fetch networks list');
+      const data = await res.json();
+      setNetworks(data);
+    } catch (err: any) {
+      setError(err.message || 'Error loading networks');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let alive = true;
-    loadNetwork()
-      .then((d) => { if (alive) setMeta(d.meta); })
-      .catch(() => { /* swallow — preview-only stats */ });
-    return () => { alive = false; };
+    fetchNetworksList();
   }, []);
+
+  const selectNetwork = (id: string) => {
+    localStorage.setItem('activeNetworkId', id);
+    clearNetworkCache();
+    navigate('/gis');
+  };
+
+  const deleteNetwork = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this network and all of its associated pipes, nodes, and assets?')) return;
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/v1/networks/${id}/`, {
+        method: 'DELETE',
+        headers
+      });
+      if (!res.ok) throw new Error('Failed to delete network');
+      
+      // Clear localStorage if the active network is deleted
+      if (localStorage.getItem('activeNetworkId') === id) {
+        localStorage.removeItem('activeNetworkId');
+      }
+
+      fetchNetworksList();
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const renameNetwork = async (id: string, currentName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newName = prompt('Enter a new name for this network:', currentName);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      alert('Network name cannot be empty.');
+      return;
+    }
+    if (trimmed === currentName) return;
+
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/v1/networks/${id}/`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ name: trimmed })
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to rename network');
+      }
+      
+      if (localStorage.getItem('activeNetworkId') === id) {
+        clearNetworkCache();
+      }
+
+      fetchNetworksList();
+    } catch (err: any) {
+      alert(`Rename failed: ${err.message}`);
+    }
+  };
 
   return (
     <DemoFrame>
       <header className="demo-hub-head">
-        <div className="demo-hub-eyebrow">Choose how to start</div>
-        <h1>Start the live demo.</h1>
-        <p>View the Kisumu network or upload your own GIS.</p>
+        <div className="demo-hub-eyebrow">Water Network Manager</div>
+        <h1>Your Water Networks</h1>
+        <p>Select a network to load on the live map, or upload a new geospatial GIS dataset.</p>
       </header>
 
-      <section className="demo-hub-options">
-        <button
-          className="demo-hub-card primary"
-          onClick={() => navigate('/gis')}
-        >
-          <div className="demo-hub-card-inner">
-            <div className="demo-hub-card-head">
-              <div className="demo-hub-card-icon">
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
-                  <circle cx={12} cy={10} r={3} />
-                </svg>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--muted-foreground))' }}>
+          Loading networks from PostGIS...
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--destructive))' }}>
+          {error}
+        </div>
+      ) : (
+        <section className="demo-hub-options" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '24px' }}>
+          {networks.map((net) => {
+            const isActive = localStorage.getItem('activeNetworkId') === net.id;
+            return (
+              <div
+                key={net.id}
+                className={`demo-hub-card ${isActive ? 'primary' : ''}`}
+                onClick={() => selectNetwork(net.id)}
+                style={{ cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column' }}
+              >
+                <div className="demo-hub-card-inner" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+                  <div className="demo-hub-card-head" style={{ justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div className="demo-hub-card-icon">
+                      <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" />
+                        <circle cx={12} cy={10} r={3} />
+                      </svg>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {isActive && <div className="demo-hub-card-tag" style={{ background: 'hsl(var(--primary))', color: '#fff' }}>Active</div>}
+                      <button 
+                        className="btn btn-ghost" 
+                        onClick={(e) => renameNetwork(net.id, net.name, e)}
+                        style={{ padding: '4px 8px', color: 'hsl(var(--primary))', height: 'auto', fontSize: '12px' }}
+                        title="Rename Network"
+                      >
+                        Rename
+                      </button>
+                      <button 
+                        className="btn btn-ghost" 
+                        onClick={(e) => deleteNetwork(net.id, e)}
+                        style={{ padding: '4px 8px', color: 'hsl(var(--destructive))', height: 'auto', fontSize: '12px' }}
+                        title="Delete Network"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 8px' }}>{net.name}</h2>
+                  <p style={{ fontSize: '0.875rem', color: 'hsl(var(--muted-foreground))', margin: '0 0 16px', flex: 1 }}>
+                    CRS: {net.source_crs || 'WGS 84 (EPSG:4326)'}
+                  </p>
+                  
+                  <ul className="demo-hub-card-stats" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', padding: 0, listStyle: 'none', margin: '0 0 16px' }}>
+                    <li>
+                      <strong>{net.total_pipes ? net.total_pipes.toLocaleString() : '0'}</strong>
+                      <span>Pipes</span>
+                    </li>
+                    <li>
+                      <strong>{net.total_length_km ? `${net.total_length_km.toFixed(1)} km` : '0 km'}</strong>
+                      <span>Length</span>
+                    </li>
+                  </ul>
+                  
+                  <div className="demo-hub-card-cta" style={{ marginTop: 'auto' }}>
+                    Load this network
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <line x1={5} y1={12} x2={19} y2={12}/><polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                  </div>
+                </div>
               </div>
-              <div className="demo-hub-card-tag">Sandbox · live</div>
-            </div>
-            <h2>View Your Network</h2>
-            <p>Open the live Kisumu map — every pipe, valve and sensor.</p>
-            <ul className="demo-hub-card-stats">
-              <li>
-                <strong>{meta ? meta.feature_count.toLocaleString() : '—'}</strong>
-                <span>Pipe segments</span>
-              </li>
-              <li>
-                <strong>{meta ? `${meta.total_length_km.toFixed(0)} km` : '—'}</strong>
-                <span>Total length</span>
-              </li>
-              <li>
-                <strong>{meta ? Object.keys(meta.length_km_by_zone).filter(z => z !== 'HDPE' && z !== 'CDD' && z !== 'MTY').length : '—'}</strong>
-                <span>Service zones</span>
-              </li>
-              <li>
-                <strong>{meta ? meta.asset_count : '—'}</strong>
-                <span>Telemetry nodes</span>
-              </li>
-            </ul>
-            <div className="demo-hub-card-cta">
-              Enter the live map
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <line x1={5} y1={12} x2={19} y2={12}/><polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </div>
-          </div>
-        </button>
+            );
+          })}
 
-        <button
-          className="demo-hub-card"
-          onClick={() => navigate('/demo/upload')}
-        >
-          <div className="demo-hub-card-inner">
-            <div className="demo-hub-card-head">
-              <div className="demo-hub-card-icon alt">
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1={12} y1={3} x2={12} y2={15} />
-                </svg>
-              </div>
-              <div className="demo-hub-card-tag">Your data</div>
-            </div>
-            <h2>Upload GIS Data</h2>
-            <p>Bring your shapefile, GeoJSON or EPANET export — render it on the map.</p>
-            <ul className="demo-hub-card-stats">
-              <li>
-                <strong>SHP</strong>
-                <span>Esri shapefile bundle</span>
-              </li>
-              <li>
-                <strong>GeoJSON</strong>
-                <span>EPSG:4326 polylines + points</span>
-              </li>
-              <li>
-                <strong>EPANET</strong>
-                <span>.inp hydraulic models</span>
-              </li>
-              <li>
-                <strong>KML / KMZ</strong>
-                <span>Drawing exports</span>
-              </li>
-            </ul>
-            <div className="demo-hub-card-cta">
-              Start the upload
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <line x1={5} y1={12} x2={19} y2={12}/><polyline points="12 5 19 12 12 19"/>
+          {/* Dotted Upload New Network Card */}
+          <div
+            className="demo-hub-card"
+            onClick={() => navigate('/networks/upload')}
+            style={{ 
+              cursor: 'pointer', 
+              border: '2px dashed hsl(var(--border))', 
+              boxShadow: 'none', 
+              background: 'transparent',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '40px 24px',
+              textAlign: 'center',
+              minHeight: '280px'
+            }}
+          >
+            <div className="demo-upload-icon" style={{ color: 'hsl(var(--muted-foreground))', marginBottom: '16px' }}>
+              <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1={12} y1={3} x2={12} y2={15} />
               </svg>
             </div>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, margin: '0 0 8px' }}>Upload GIS Data</h2>
+            <p style={{ fontSize: '0.875rem', color: 'hsl(var(--muted-foreground))', margin: '0 0 16px' }}>
+              Ingest a new shapefile (.zip) or EPANET model (.inp) to render on the map.
+            </p>
+            <div className="demo-hub-card-cta" style={{ color: 'hsl(var(--primary))' }}>
+              Start the upload →
+            </div>
           </div>
-        </button>
-      </section>
+        </section>
+      )}
 
       <footer className="demo-hub-foot">
         <div className="demo-hub-foot-cell">
-          <span>Source dataset</span>
-          <strong>Kisumu water demo data · 2024 export</strong>
+          <span>Active Organization</span>
+          <strong>KIWASCO — Kisumu Water & Sewerage</strong>
         </div>
         <div className="demo-hub-foot-cell">
-          <span>Projection</span>
-          <strong>WGS 84 · UTM 36S → EPSG:4326</strong>
+          <span>Storage Backend</span>
+          <strong>PostgreSQL 16 + PostGIS 3.4</strong>
         </div>
         <div className="demo-hub-foot-cell">
-          <span>Demo policy</span>
-          <strong>Read-only · no sign-up required</strong>
+          <span>Access Scope</span>
+          <strong>Multi-tenant isolated view</strong>
         </div>
       </footer>
     </DemoFrame>
@@ -180,6 +288,7 @@ function UploadView() {
   const navigate = useNavigate();
   const [hover, setHover] = useState(false);
   const [staged, setStaged] = useState<File[]>([]);
+  const [networkName, setNetworkName] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -194,24 +303,68 @@ function UploadView() {
     });
   };
 
-  const submit = () => {
+  const submit = async () => {
+    if (staged.length === 0) return;
     setBusy(true);
-    // Simulate ingestion; in production this would parse + POST.
-    setTimeout(() => {
-      setBusy(false);
+    try {
+      const headers = await getAuthHeaders();
+      const authHeaders = { ...headers } as any;
+      delete authHeaders['Content-Type'];
+
+      const fileToUpload = staged[0];
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+      formData.append('name', networkName);
+
+      const res = await fetch('/api/v1/networks/upload/', {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Upload failed');
+      }
+      const data = await res.json();
+      const uploadId = data.upload_id;
+
+      // Poll status
+      let complete = false;
+      let retries = 30;
+      while (!complete && retries > 0) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const valRes = await fetch(`/api/v1/networks/${uploadId}/validate/`, { headers });
+        if (!valRes.ok) throw new Error('Failed to fetch upload status');
+        const valData = await valRes.json();
+        if (valData.status === 'complete' || valData.status === 'complete_warnings') {
+          complete = true;
+          if (valData.network_id) {
+            localStorage.setItem('activeNetworkId', valData.network_id);
+          }
+        } else if (valData.status === 'failed') {
+          throw new Error(valData.validation_report?.error || 'Ingestion task failed');
+        }
+        retries--;
+      }
+
+      clearNetworkCache();
       navigate('/gis');
-    }, 1200);
+    } catch (err: any) {
+      alert(`Ingestion error: ${err.message}`);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
     <DemoFrame>
       <header className="demo-hub-head">
         <div className="demo-hub-eyebrow">
-          <Link to="/demo" className="demo-back-link">
+          <Link to="/networks" className="demo-back-link">
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
-            Back to options
+            Back to networks
           </Link>
         </div>
         <h1>Upload your GIS data.</h1>
@@ -274,6 +427,43 @@ function UploadView() {
                   </li>
                 ))}
               </ul>
+              
+              <div style={{ marginTop: '20px', marginBottom: '24px', textAlign: 'left' }}>
+                <label htmlFor="network-name" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, marginBottom: '6px', color: 'hsl(var(--foreground))' }}>
+                  Network Label (Optional)
+                </label>
+                <input
+                  id="network-name"
+                  type="text"
+                  placeholder="Enter a name for this network..."
+                  value={networkName}
+                  onChange={(e) => setNetworkName(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid hsl(var(--border))',
+                    background: 'hsl(var(--background))',
+                    color: 'hsl(var(--foreground))',
+                    fontSize: '0.875rem',
+                    outline: 'none',
+                    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                    boxSizing: 'border-box'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = 'hsl(var(--primary))';
+                    e.target.style.boxShadow = '0 0 0 2px hsl(var(--primary) / 0.15)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'hsl(var(--border))';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+                <span style={{ display: 'block', fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', marginTop: '6px' }}>
+                  If left blank, the system will name it &quot;Untitled&quot; (or &quot;Untitled1&quot;, &quot;Untitled2&quot;, etc.)
+                </span>
+              </div>
+
               <div className="demo-upload-staged-foot">
                 <button
                   className="btn btn-primary btn-lg"
@@ -306,9 +496,8 @@ function UploadView() {
           <div className="demo-upload-side-card subtle">
             <h3>Your data is yours</h3>
             <p>
-              All parsing runs in your browser for this demo. Nothing is uploaded to a
-              server — close the tab and the data is gone. Production deployments use
-              an isolated tenant ingestion pipeline (PostGIS + Mapbox vector tiles).
+              Uploads are securely isolated in your private organization namespace 
+              and backed by PostGIS spatial database layers and asynchronous parsing workers.
             </p>
           </div>
         </aside>
