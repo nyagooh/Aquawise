@@ -37,6 +37,34 @@ The frontend calls `http://localhost:8000` by default; override with the
 > remains available via `aquawise_gis.settings.development`; the demo settings
 > only wire the stateless `apps.parsing` parse endpoint.
 
+## Deploying on Vercel
+
+Vercel hosts the **frontend** (this `GIS/` folder). When importing the repo:
+
+| Setting           | Value                |
+| ----------------- | -------------------- |
+| Root Directory    | `GIS`                |
+| Framework Preset  | Vite                 |
+| Build Command     | `npm run build`      |
+| Output Directory  | `dist`               |
+
+`vercel.json` already rewrites all routes to `index.html` for client-side
+routing. The bundled Kisumu demo (map, dashboard, sensors) works with **no
+backend** — its data is static in `public/data/`.
+
+The **file upload** and **demo-request / Book a Walkthrough** features call the
+backend, so set the `VITE_API_URL` environment variable in Vercel
+(Project → Settings → Environment Variables) to your deployed backend URL:
+
+```
+VITE_API_URL=https://your-backend-host.example
+```
+
+> ⚠️ Vercel **cannot** run the Django/GDAL backend (it's a long-running server,
+> not a serverless function). Host it on Render / Railway / Fly.io / a VM, then
+> point `VITE_API_URL` at it. Until then the static demo works, but uploads and
+> the lead form will show a "could not reach the server" error.
+
 ## Routes
 
 | Path           | Page         | Purpose                                             |
