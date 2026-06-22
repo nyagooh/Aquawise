@@ -46,7 +46,7 @@ export default function Dashboard() {
   }, [data]);
 
   return (
-    <Shell active="dashboard" title="Operations Dashboard" sub={data ? `Kisumu Water Network · ${data.meta.feature_count.toLocaleString()} segments · ${data.meta.total_length_km.toFixed(0)} km` : 'Loading network…'}>
+    <Shell active="dashboard" title="Operations Dashboard" sub={data ? `${data.meta.name || 'Kisumu Water Network'} · ${data.meta.feature_count.toLocaleString()} segments · ${data.meta.total_length_km.toFixed(0)} km` : 'Loading network…'}>
       {!data || !derived ? (
         <DashboardSkeleton />
       ) : (
