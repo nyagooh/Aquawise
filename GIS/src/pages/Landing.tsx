@@ -4,11 +4,10 @@
  * Primary colour: TechBlue #2563EB. Alternating neutral / deep-navy-blue sections.
  * Layout: copy text centred at top, full-width product mockup below.
  */
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../theme';
-import { DemoRequestModal, type DemoRequestMode } from '../components/DemoRequestModal';
-import { hasDemoAccess, grantDemoAccess } from '../access';
+import { hasDemoAccess } from '../access';
 
 function useReveal() {
   useEffect(() => {
@@ -25,14 +24,12 @@ function useReveal() {
 export default function Landing() {
   const { mode, toggle } = useTheme();
   const navigate = useNavigate();
-  const [modalMode, setModalMode] = useState<DemoRequestMode | null>(null);
 
   // Live demo is gated behind the lead form — unless this session already passed it.
   const openDemo = useCallback(() => {
-    if (hasDemoAccess()) navigate('/demo');
-    else setModalMode('demo');
+    navigate(hasDemoAccess() ? '/demo' : '/request-demo');
   }, [navigate]);
-  const bookWalkthrough = useCallback(() => setModalMode('book'), []);
+  const bookWalkthrough = useCallback(() => navigate('/request-demo?mode=book'), [navigate]);
   useReveal();
 
   return (
@@ -393,13 +390,6 @@ export default function Landing() {
           ))}
         </div>
       </footer>
-
-      <DemoRequestModal
-        open={modalMode !== null}
-        mode={modalMode ?? 'demo'}
-        onClose={() => setModalMode(null)}
-        onSuccess={() => { grantDemoAccess(); setModalMode(null); navigate('/demo'); }}
-      />
     </div>
   );
 }

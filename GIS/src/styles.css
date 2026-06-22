@@ -4129,3 +4129,35 @@ button { font-family: inherit; }
   align-items: center;
   justify-content: center;
 }
+
+/* ════════════════════════════════════════════════════════════
+   Request-demo page (full-page lead form)
+   ════════════════════════════════════════════════════════════ */
+.request-demo-wrap {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 8px 20px 64px;
+}
+.request-demo-card {
+  background: hsl(var(--card, 0 0% 100%));
+  border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: 0 18px 48px -16px rgba(0, 0, 0, 0.22);
+}
+.request-demo-done { text-align: center; }
+.request-demo-done h2 { margin: 10px 0 6px; font-size: 1.4rem; letter-spacing: -0.02em; }
+.request-demo-done p { margin: 0 0 22px; color: hsl(var(--muted-foreground, 215 16% 47%)); line-height: 1.55; }
+.request-demo-done .demo-modal-check { margin: 0 auto; }
+
+/* ── Navbar tidy-ups / responsiveness ── */
+.landing-nav { gap: 12px; }
+.demo-hub-nav { gap: 12px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  /* Landing toggle uses SVG icons — drop its text label to save room. */
+  .landing-nav .theme-toggle { font-size: 0; gap: 0; padding: 8px; }
+  .landing-nav .theme-toggle svg { width: 16px; height: 16px; }
+  /* demo-hub toggle is emoji text — keep it, just hide the crowded pill. */
+  .demo-hub-pill { display: none; }
+  .landing-nav .btn-lg { padding: 8px 14px; font-size: 0.8125rem; }
+}
