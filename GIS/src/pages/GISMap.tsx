@@ -98,6 +98,14 @@ export default function GISMap() {
       maxZoom: 19
     });
     leafletRef.current = map;
+
+    // Fix map off-centering by forcing Leaflet to recalculate container bounds and center on the network
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+      map.fitBounds(L.latLngBounds([latMin, lonMin], [latMax, lonMax]), {
+        padding: [20, 20]
+      });
+    }, 200);
     // Larger click tolerance — household lines are hairline, so a 6 px buffer
     // makes them clickable without forcing the operator to pixel-hunt.
     rendererRef.current = L.canvas({ padding: 0.4, tolerance: 6 });
@@ -131,9 +139,16 @@ export default function GISMap() {
       const group = groups[cls];
       if (!group) return;
       const style = PIPE_STYLE[cls];
-      const coords: [number, number][] = feat.geometry.coordinates.map(
-        ([lon, lat]) => [lat, lon]
-      );
+      let coords: any;
+      if (feat.geometry.type === 'MultiLineString') {
+        coords = (feat.geometry.coordinates as any).map(
+          (line: [number, number][]) => line.map(([lon, lat]) => [lat, lon])
+        );
+      } else {
+        coords = feat.geometry.coordinates.map(
+          ([lon, lat]) => [lat, lon]
+        );
+      }
       const line = L.polyline(coords, {
         color: style.color,
         weight: style.weight,
@@ -206,6 +221,7 @@ export default function GISMap() {
     map.on('click', () => setFocus(null));
 
     return () => {
+      clearTimeout(timer);
       map.remove();
       leafletRef.current = null;
       layerGroupsRef.current = {};
@@ -251,9 +267,16 @@ export default function GISMap() {
       focusOutlineRef.current = null;
     }
     if (focus?.kind === 'pipe') {
-      const coords: [number, number][] = focus.feature.geometry.coordinates.map(
-        ([lon, lat]) => [lat, lon]
-      );
+      let coords: any;
+      if (focus.feature.geometry.type === 'MultiLineString') {
+        coords = (focus.feature.geometry.coordinates as any).map(
+          (line: [number, number][]) => line.map(([lon, lat]) => [lat, lon])
+        );
+      } else {
+        coords = focus.feature.geometry.coordinates.map(
+          ([lon, lat]) => [lat, lon]
+        );
+      }
       const ring = L.polyline(coords, {
         color: '#facc15',
         weight: 6,
@@ -321,14 +344,14 @@ export default function GISMap() {
   }, [network]);
 
   return (
-    <Shell active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" pagePadding={false} hideRightRail>
+    <Shell active="gis" title="GIS Map" sub={network?.meta.name ? `${network.meta.name} · live operational view` : 'Loading network…'} pagePadding={false} hideRightRail>
       <div className="gis-canvas gis-canvas--real">
         <div ref={mapRef} className="gis-leaflet" />
 
         {!network && !loadError && (
           <div className="map-loading">
             <div className="map-loading-spinner" />
-            <div className="map-loading-text">Loading Kisumu water network …</div>
+            <div className="map-loading-text">Loading network data…</div>
             <div className="map-loading-sub">4,951 polylines · reprojecting UTM 36S → WGS84</div>
           </div>
         )}
