@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Landing from './pages/Landing';
-import DemoHub from './pages/DemoHub';
+import NetworksHub from './pages/NetworksHub';
 import Dashboard from './pages/Dashboard';
 import GISMap from './pages/GISMap';
 import Alerts from './pages/Alerts';
@@ -14,8 +14,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/demo" element={<DemoHub />} />
-      <Route path="/demo/upload" element={<DemoHub />} />
+      <Route path="/networks" element={<NetworksHub />} />
+      <Route path="/networks/upload" element={<NetworksHub />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/gis" element={<GISMap />} />
       <Route path="/alerts" element={<Alerts />} />
