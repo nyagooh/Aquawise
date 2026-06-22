@@ -6,12 +6,17 @@
  *   /demo/upload  → upload workflow for utilities that want to bring their own data
  */
 import { useEffect, useState, useRef } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTheme } from '../theme';
-import { loadNetwork, type NetworkMeta } from '../data/network';
+import { hasDemoAccess } from '../access';
+import { loadNetwork, storeUploadedNetwork, clearUploadedNetwork, type NetworkMeta } from '../data/network';
+import { parseNetworkFile } from '../api';
+import { zipStore } from '../zip';
 
 export default function DemoHub() {
   const location = useLocation();
+  // Live demo is gated — visitors must pass the lead form on the landing page.
+  if (!hasDemoAccess()) return <Navigate to="/" replace />;
   const isUpload = location.pathname.endsWith('/upload');
   return isUpload ? <UploadView /> : <ChooserView />;
 }
@@ -68,7 +73,7 @@ function ChooserView() {
       <section className="demo-hub-options">
         <button
           className="demo-hub-card primary"
-          onClick={() => navigate('/gis')}
+          onClick={() => { clearUploadedNetwork(); navigate('/gis'); }}
         >
           <div className="demo-hub-card-inner">
             <div className="demo-hub-card-head">
@@ -182,9 +187,11 @@ function UploadView() {
   const [staged, setStaged] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onFiles = (files: FileList | null) => {
     if (!files) return;
+    setError(null);
     setStaged((s) => {
       const next = [...s];
       Array.from(files).forEach((f) => {
@@ -194,13 +201,39 @@ function UploadView() {
     });
   };
 
-  const submit = () => {
+  const SINGLE_EXTS = ['geojson', 'json', 'zip', 'kml', 'kmz'];
+
+  const submit = async () => {
+    if (!staged.length) return;
     setBusy(true);
-    // Simulate ingestion; in production this would parse + POST.
-    setTimeout(() => {
-      setBusy(false);
+    setError(null);
+    try {
+      // A single ready-to-parse container (GeoJSON / zip / KML) goes as-is.
+      // Loose shapefile parts (.shp/.dbf/.shx/.prj/…) are bundled into a zip
+      // in the browser so the backend receives one archive.
+      let toUpload: File;
+      const ext = staged[0].name.split('.').pop()?.toLowerCase() || '';
+      if (staged.length === 1 && SINGLE_EXTS.includes(ext)) {
+        toUpload = staged[0];
+      } else {
+        const blob = await zipStore(staged);
+        const base = staged.find((f) => f.name.toLowerCase().endsWith('.shp'))?.name.replace(/\.shp$/i, '')
+          || 'network';
+        toUpload = new File([blob], `${base}.zip`, { type: 'application/zip' });
+      }
+
+      const parsed = await parseNetworkFile(toUpload);
+      if (!parsed.pipes?.features?.length) {
+        throw new Error('No pipe geometry was found in that file.');
+      }
+      clearUploadedNetwork();
+      storeUploadedNetwork(parsed);
       navigate('/gis');
-    }, 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try another file.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -274,6 +307,15 @@ function UploadView() {
                   </li>
                 ))}
               </ul>
+              {error && (
+                <div className="demo-upload-error" role="alert" style={{
+                  margin: '12px 0', padding: '10px 14px', borderRadius: 8,
+                  background: 'rgba(239,68,68,0.12)', color: '#b91c1c',
+                  border: '1px solid rgba(239,68,68,0.35)', fontSize: 14, lineHeight: 1.45
+                }}>
+                  {error}
+                </div>
+              )}
               <div className="demo-upload-staged-foot">
                 <button
                   className="btn btn-primary btn-lg"
@@ -282,7 +324,7 @@ function UploadView() {
                 >
                   {busy ? 'Ingesting…' : 'Ingest & render on live map →'}
                 </button>
-                <button className="btn btn-ghost btn-lg" onClick={() => navigate('/gis')}>
+                <button className="btn btn-ghost btn-lg" onClick={() => { clearUploadedNetwork(); navigate('/gis'); }}>
                   Skip — use Kisumu sandbox
                 </button>
               </div>
@@ -306,9 +348,10 @@ function UploadView() {
           <div className="demo-upload-side-card subtle">
             <h3>Your data is yours</h3>
             <p>
-              All parsing runs in your browser for this demo. Nothing is uploaded to a
-              server — close the tab and the data is gone. Production deployments use
-              an isolated tenant ingestion pipeline (PostGIS + Mapbox vector tiles).
+              Your file is parsed by the AquaWise GIS service and reprojected to
+              WGS84, then rendered straight to the map — the result lives only in
+              this browser tab and is gone when you close it. Production deployments
+              use an isolated tenant ingestion pipeline (PostGIS + vector tiles).
             </p>
           </div>
         </aside>

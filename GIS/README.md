@@ -13,6 +13,30 @@ npm run dev
 
 Vite dev server runs on http://localhost:5174.
 
+## Upload → render (GIS backend)
+
+The **Upload GIS Data** flow (`/demo/upload`) posts a file to the bundled GIS
+backend, which parses + reprojects it to WGS84 and returns GeoJSON the map
+renders directly. Supported uploads: `.geojson`/`.json`, a zipped shapefile
+(`.zip`), or `.kml`/`.kmz`. Loose shapefile parts (`.shp/.dbf/.shx/.prj`) are
+bundled into a zip in the browser automatically.
+
+Start the backend (lightweight demo mode — SQLite, no PostGIS/Redis/Celery/auth):
+
+```bash
+cd GIS/backend
+DJANGO_SETTINGS_MODULE=aquawise_gis.settings.demo venv/bin/python manage.py migrate   # first run only
+DJANGO_SETTINGS_MODULE=aquawise_gis.settings.demo venv/bin/python manage.py runserver 0.0.0.0:8000
+```
+
+The frontend calls `http://localhost:8000` by default; override with the
+`VITE_API_URL` env var. Endpoint: `POST /api/v1/parse/` (form field `file`)
+→ `{ pipes, assets, meta }`.
+
+> The full multi-tenant backend (PostGIS + Celery + JWT, in `GIS/backend/apps`)
+> remains available via `aquawise_gis.settings.development`; the demo settings
+> only wire the stateless `apps.parsing` parse endpoint.
+
 ## Routes
 
 | Path           | Page         | Purpose                                             |

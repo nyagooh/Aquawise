@@ -4,9 +4,11 @@
  * Primary colour: TechBlue #2563EB. Alternating neutral / deep-navy-blue sections.
  * Layout: copy text centred at top, full-width product mockup below.
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTheme } from '../theme';
+import { DemoRequestModal, type DemoRequestMode } from '../components/DemoRequestModal';
+import { hasDemoAccess, grantDemoAccess } from '../access';
 
 function useReveal() {
   useEffect(() => {
@@ -23,7 +25,14 @@ function useReveal() {
 export default function Landing() {
   const { mode, toggle } = useTheme();
   const navigate = useNavigate();
-  const openDemo = useCallback(() => navigate('/demo'), [navigate]);
+  const [modalMode, setModalMode] = useState<DemoRequestMode | null>(null);
+
+  // Live demo is gated behind the lead form — unless this session already passed it.
+  const openDemo = useCallback(() => {
+    if (hasDemoAccess()) navigate('/demo');
+    else setModalMode('demo');
+  }, [navigate]);
+  const bookWalkthrough = useCallback(() => setModalMode('book'), []);
   useReveal();
 
   return (
@@ -73,7 +82,7 @@ export default function Landing() {
         </p>
         <div className="hero-ctas reveal reveal-delay-3">
           <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-          <a href="mailto:annmaina.info@gmail.com?subject=Aquawise%20Walkthrough%20Request" className="btn btn-ghost btn-lg">Book a Walkthrough</a>
+          <button type="button" className="btn btn-ghost btn-lg" onClick={bookWalkthrough}>Book a Walkthrough</button>
         </div>
         <div className="hero-meta reveal reveal-delay-3">
           <span><span className="dot" />Free 30-minute demo</span>
@@ -360,7 +369,7 @@ export default function Landing() {
           </p>
           <div className="final-cta-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={openDemo}>Explore Live Demo →</button>
-            <a href="mailto:annmaina.info@gmail.com?subject=Aquawise%20Walkthrough%20Request" className="btn btn-ghost btn-lg">Book a Walkthrough</a>
+            <button type="button" className="btn btn-ghost btn-lg" onClick={bookWalkthrough}>Book a Walkthrough</button>
           </div>
           <div className="final-trust">
             <span><span className="dot-safe" />Free 30-minute demo</span>
@@ -384,6 +393,13 @@ export default function Landing() {
           ))}
         </div>
       </footer>
+
+      <DemoRequestModal
+        open={modalMode !== null}
+        mode={modalMode ?? 'demo'}
+        onClose={() => setModalMode(null)}
+        onSuccess={() => { grantDemoAccess(); setModalMode(null); navigate('/demo'); }}
+      />
     </div>
   );
 }

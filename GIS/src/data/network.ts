@@ -169,6 +169,59 @@ export function loadNetwork(): Promise<NetworkData> {
   return cache;
 }
 
+/** Session key holding a user-uploaded network parsed by the backend. */
+const UPLOAD_KEY = 'aw:uploaded-network';
+
+/**
+ * Persist a backend parse response (pipes/assets FeatureCollections + meta) so
+ * the map can render it after navigation. Stored in sessionStorage — cleared
+ * when the tab closes, matching the demo's "your data stays yours" promise.
+ */
+export function storeUploadedNetwork(raw: {
+  pipes: { features: unknown[] };
+  assets: { features: unknown[] };
+  meta: unknown;
+}): void {
+  sessionStorage.setItem(UPLOAD_KEY, JSON.stringify(raw));
+}
+
+export function hasUploadedNetwork(): boolean {
+  return sessionStorage.getItem(UPLOAD_KEY) != null;
+}
+
+export function clearUploadedNetwork(): void {
+  sessionStorage.removeItem(UPLOAD_KEY);
+}
+
+/**
+ * Build NetworkData from a stored upload, mirroring loadNetwork's shaping
+ * (feature extraction + synthesized quality sensors reflected in meta).
+ * Returns null when no upload is staged.
+ */
+export function loadUploadedNetwork(): NetworkData | null {
+  const stored = sessionStorage.getItem(UPLOAD_KEY);
+  if (!stored) return null;
+  const raw = JSON.parse(stored) as {
+    pipes: { features: PipeFeature[] };
+    assets: { features: AssetFeature[] };
+    meta: NetworkMeta;
+  };
+  const pipes = raw.pipes.features;
+  const assets = raw.assets.features;
+  const synthetic = synthesizeQualitySensors(pipes);
+  const meta: NetworkMeta = synthetic.length
+    ? {
+        ...raw.meta,
+        asset_count: raw.meta.asset_count + synthetic.length,
+        asset_counts: {
+          ...raw.meta.asset_counts,
+          sensor: (raw.meta.asset_counts.sensor || 0) + synthetic.length
+        }
+      }
+    : raw.meta;
+  return { pipes, assets: [...assets, ...synthetic], meta };
+}
+
 /**
  * Real Kisumu telemetry covers flow + pressure only. Water utilities also
  * monitor water-quality sensors (pH, turbidity) at reservoirs and key

@@ -15,6 +15,7 @@ import { SidePanel, SpRow } from '../components/SidePanel';
 import { useTheme } from '../theme';
 import {
   loadNetwork,
+  loadUploadedNetwork,
   type NetworkData,
   type PipeClass,
   type PipeFeature,
@@ -86,9 +87,15 @@ export default function GISMap() {
   const leakGroupRef = useRef<L.LayerGroup | null>(null);
   const focusOutlineRef = useRef<L.Layer | null>(null);
 
-  /* ── 1. fetch network ── */
+  /* ── 1. fetch network — a user-uploaded network takes priority over the
+        bundled Kisumu demo dataset ── */
   useEffect(() => {
     let alive = true;
+    const uploaded = loadUploadedNetwork();
+    if (uploaded) {
+      setNetwork(uploaded);
+      return () => { alive = false; };
+    }
     loadNetwork()
       .then((data) => { if (alive) setNetwork(data); })
       .catch((err) => {
