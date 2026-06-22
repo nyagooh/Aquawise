@@ -489,6 +489,7 @@ def ingest_shapefile(self, upload_id: str):
 
             network.save()
 
+            upload.network = network
             upload.status = (
                 NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings else NetworkUpload.Status.COMPLETE
             )
@@ -756,19 +757,26 @@ def ingest_epanet(self, upload_id: str):
         logger.error("NetworkUpload %s not found", upload_id)
         return
 
-    if not upload.network_id:
-        upload.status = NetworkUpload.Status.FAILED
-        upload.validation_report = {"error": "No network associated with this upload"}
-        upload.save(update_fields=["status", "validation_report"])
-        return
-
     upload.status = NetworkUpload.Status.PROCESSING
     upload.save(update_fields=["status"])
 
-    network = upload.network
     warnings = []
 
     try:
+        if not upload.network_id:
+            network_name = upload.network_name or _generate_untitled_name(upload.organisation)
+            network = WaterNetwork.objects.create(
+                organisation=upload.organisation,
+                project=upload.project,
+                upload=upload,
+                name=network_name,
+                source_crs="EPSG:4326",
+            )
+            upload.network = network
+            upload.save(update_fields=["network"])
+        else:
+            network = upload.network
+
         ext = upload.file_path.rsplit(".", 1)[-1].lower()
         if ext == "inp":
             sections = _parse_inp_sections(upload.file_path)
@@ -776,11 +784,34 @@ def ingest_epanet(self, upload_id: str):
         else:
             raise ValueError(f"Unsupported EPANET extension: .{ext}")
 
+        # Set network bounding box if nodes or pipes exist
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT ST_AsText(ST_SetSRID(ST_Extent(geometry::geometry), 4326))
+                  FROM (
+                    SELECT geometry FROM networks_pipe WHERE network_id = %s
+                    UNION ALL
+                    SELECT geometry FROM networks_node WHERE network_id = %s
+                  ) geoms
+                """,
+                [str(network.id), str(network.id)],
+            )
+            row = cursor.fetchone()
+            if row and row[0]:
+                from django.contrib.gis.geos import GEOSGeometry as _G
+                network.bbox = _G(row[0]).envelope
+                network.save(update_fields=["bbox"])
+
         upload.status = (
             NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings
             else NetworkUpload.Status.COMPLETE
         )
-        upload.validation_report = {"warnings": warnings}
+        upload.validation_report = {
+            "pipes": network.total_pipes,
+            "nodes": network.total_nodes,
+            "warnings": warnings,
+        }
         upload.completed_at = timezone.now()
         upload.save()
         logger.info("EPANET ingestion complete for upload %s", upload_id)
