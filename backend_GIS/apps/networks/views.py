@@ -81,6 +81,12 @@ class NetworkUploadView(APIView):
                 ingest_shapefile.delay(str(upload.id))
             except Exception:
                 ingest_shapefile.apply(args=[str(upload.id)])
+        elif ext == "inp":
+            from .tasks import ingest_epanet
+            try:
+                ingest_epanet.delay(str(upload.id))
+            except Exception:
+                ingest_epanet.apply(args=[str(upload.id)])
         elif ext in ("geojson", "json"):
             from .tasks import ingest_geojson
             try:
