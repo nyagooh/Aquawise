@@ -358,44 +358,10 @@ export function loadNetwork(): Promise<NetworkData> {
       return await loadFromBackend();
     } catch (err: any) {
       if (err.message && err.message.startsWith("EMPTY_NETWORK")) {
-        // Propagate user validation error directly without silent Kisumu fallback
         throw new Error(err.message.replace("EMPTY_NETWORK: ", ""));
       }
-      console.warn("Backend load failed, falling back to static files:", err);
-      // Fallback
-      const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
-      const url = (path: string) => `${base.replace(/\/$/, '')}/data/${path}`;
-      const [pipesRes, assetsRes, metaRes] = await Promise.all([
-        fetch(url('kisumu-pipes.geojson')),
-        fetch(url('kisumu-assets.geojson')),
-        fetch(url('kisumu-meta.json'))
-      ]);
-      if (!pipesRes.ok || !assetsRes.ok || !metaRes.ok) {
-        throw new Error('Failed to load Kisumu network dataset.');
-      }
-      const pipesFc = await pipesRes.json();
-      const assetsFc = await assetsRes.json();
-      const rawMeta: NetworkMeta = await metaRes.json();
-
-      const pipes = pipesFc.features as PipeFeature[];
-      const assets = assetsFc.features as AssetFeature[];
-      const synthetic = synthesizeQualitySensors(pipes);
-      const meta: NetworkMeta = synthetic.length
-        ? {
-            ...rawMeta,
-            name: rawMeta.name || 'Kisumu Sandbox',
-            asset_count: rawMeta.asset_count + synthetic.length,
-            asset_counts: {
-              ...rawMeta.asset_counts,
-              sensor: (rawMeta.asset_counts.sensor || 0) + synthetic.length
-            }
-          }
-        : {
-            ...rawMeta,
-            name: rawMeta.name || 'Kisumu Sandbox'
-          };
-
-      return { pipes, assets: [...assets, ...synthetic], meta };
+      console.error("Backend load failed:", err);
+      throw new Error(err.message || 'Unable to load network data from backend.');
     }
   })();
   return cache;
