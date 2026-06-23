@@ -126,9 +126,23 @@ export interface NetworkMeta {
   center: [number, number];
 }
 
+export interface JunctionFeature {
+  type: 'Feature';
+  id: string;
+  geometry: { type: 'Point'; coordinates: [number, number] };
+  properties: {
+    id: string;
+    external_id: string;
+    node_type: string;
+    elevation_m?: number;
+    demand_lps?: number;
+  };
+}
+
 export interface NetworkData {
   pipes: PipeFeature[];
   assets: AssetFeature[];
+  junctions?: JunctionFeature[];
   meta: NetworkMeta;
 }
 
@@ -256,6 +270,27 @@ async function loadFromBackend(): Promise<NetworkData> {
     };
   });
 
+  // 4b. Fetch nodes (junctions)
+  const nodesRes = await fetch(`/api/v1/networks/${networkId}/nodes/`, { headers });
+  if (!nodesRes.ok) throw new Error('Failed to fetch nodes');
+  const nodesFc = await nodesRes.json();
+  
+  const junctions: JunctionFeature[] = nodesFc.features.map((feat: any) => {
+    const props = feat.properties;
+    return {
+      type: 'Feature',
+      id: props.external_id || props.id,
+      geometry: feat.geometry,
+      properties: {
+        id: props.external_id || props.id,
+        external_id: props.external_id || props.id,
+        node_type: props.node_type || 'junction',
+        elevation_m: props.elevation_m,
+        demand_lps: props.demand_lps
+      }
+    };
+  });
+
   // 5. Fetch stats
   const statsRes = await fetch(`/api/v1/networks/${networkId}/stats/`, { headers });
   if (!statsRes.ok) throw new Error('Failed to fetch stats');
@@ -343,6 +378,10 @@ async function loadFromBackend(): Promise<NetworkData> {
       a.geometry.coordinates = normCoord(a.geometry.coordinates);
     });
 
+    junctions.forEach((j) => {
+      j.geometry.coordinates = normCoord(j.geometry.coordinates);
+    });
+
     bbox = [
       (minLon - cx) * scale,
       (minLat - cy) * scale,
@@ -390,7 +429,7 @@ async function loadFromBackend(): Promise<NetworkData> {
   meta.asset_count += synthetic.length;
   meta.asset_counts.sensor = (meta.asset_counts.sensor || 0) + synthetic.length;
 
-  return { pipes, assets: [...assets, ...synthetic], meta };
+  return { pipes, assets: [...assets, ...synthetic], junctions, meta };
 }
 
 export function loadNetwork(): Promise<NetworkData> {

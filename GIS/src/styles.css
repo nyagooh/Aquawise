@@ -4494,12 +4494,12 @@ button { font-family: inherit; }
 /* Dynamic flow animations */
 @keyframes leaflet-flow-fwd {
   to {
-    stroke-dashoffset: -28;
+    stroke-dashoffset: var(--flow-offset-fwd);
   }
 }
 @keyframes leaflet-flow-rev {
   to {
-    stroke-dashoffset: 28;
+    stroke-dashoffset: var(--flow-offset-rev);
   }
 }
 .flow-forward {
@@ -4513,6 +4513,27 @@ button { font-family: inherit; }
   animation-timing-function: linear !important;
   animation-iteration-count: infinite !important;
   animation-duration: 1.2s;
+}
+
+@keyframes demand-pulse {
+  0% {
+    stroke-width: 1.5px;
+    stroke-opacity: 0.95;
+    stroke: #ef4444;
+  }
+  50% {
+    stroke-width: 10px;
+    stroke-opacity: 0.2;
+    stroke: #ef4444;
+  }
+  100% {
+    stroke-width: 1.5px;
+    stroke-opacity: 0.95;
+    stroke: #ef4444;
+  }
+}
+.demand-pulsing {
+  animation: demand-pulse 1.8s ease-in-out infinite !important;
 }
 
 

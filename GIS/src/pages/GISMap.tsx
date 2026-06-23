@@ -42,7 +42,7 @@ type Focus =
   | { kind: 'asset'; feature: AssetFeature }
   | null;
 
-type LayerVis = Record<PipeClass | AssetKind, boolean>;
+type LayerVis = Record<PipeClass | AssetKind | 'junction', boolean>;
 
 const DEFAULT_LAYERS: LayerVis = {
   main: true,
@@ -53,7 +53,8 @@ const DEFAULT_LAYERS: LayerVis = {
   tank: true,
   pressure_valve: true,
   meter_valve: true,
-  sensor: true
+  sensor: true,
+  junction: true
 };
 
 const PIPE_KEYS: PipeClass[] = PIPE_CLASS_ORDER;
@@ -84,12 +85,13 @@ export default function GISMap() {
 
   const pipeLayersRef = useRef<Map<string, L.Polyline>>(new Map());
   const assetLayersRef = useRef<Map<string, L.Marker>>(new Map());
+  const junctionLayersRef = useRef<Map<string, L.CircleMarker>>(new Map());
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
   const rendererRef = useRef<L.Renderer | null>(null);
-  const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
+  const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind | 'junction', L.LayerGroup>>>({});
   const focusOutlineRef = useRef<L.Layer | null>(null);
 
   /* ── 1. fetch network ── */
@@ -145,8 +147,8 @@ export default function GISMap() {
     rendererRef.current = L.svg({ padding: 0.1 });
 
     /* layer groups */
-    const groups: Partial<Record<PipeClass | AssetKind, L.LayerGroup>> = {};
-    [...PIPE_KEYS, ...ASSET_KEYS].forEach((k) => {
+    const groups: Partial<Record<PipeClass | AssetKind | 'junction', L.LayerGroup>> = {};
+    ([...PIPE_KEYS, ...ASSET_KEYS, 'junction'] as Array<PipeClass | AssetKind | 'junction'>).forEach((k) => {
       const g = L.layerGroup();
       groups[k] = g;
       if (DEFAULT_LAYERS[k]) g.addTo(map);
@@ -263,6 +265,66 @@ export default function GISMap() {
       }
     });
 
+    /* junctions — points */
+    if (network.junctions) {
+      network.junctions.forEach((feat) => {
+        const props = feat.properties;
+        const [lon, lat] = feat.geometry.coordinates;
+        const marker = L.circleMarker([lat, lon], {
+          radius: 3.5,
+          color: '#475569',
+          weight: 1.5,
+          fillColor: '#94a3b8',
+          fillOpacity: 0.95,
+          renderer,
+          className: 'aw-junction-marker'
+        });
+        marker.bindPopup(() => `
+          <div class="aw-popup-content">
+            <h4 class="aw-popup-title">Junction ${props.external_id}</h4>
+            <div class="aw-popup-grid">
+              <div class="aw-popup-row"><span>Type</span><strong>Junction</strong></div>
+              <div class="aw-popup-row"><span>Elevation</span><strong>${props.elevation_m ? props.elevation_m.toFixed(1) + ' m' : 'N/A'}</strong></div>
+              <div class="aw-popup-row"><span>Base Demand</span><strong>${props.demand_lps ? props.demand_lps.toFixed(2) + ' L/s' : '0.00 L/s'}</strong></div>
+            </div>
+          </div>
+        `, {
+          className: 'aw-popup aw-popup-junction',
+          closeButton: false,
+          offset: [0, -2],
+          maxWidth: 240
+        });
+        marker.bindTooltip(`Junction ${props.external_id}`, { direction: 'top', offset: [0, -4] });
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          setFocus({
+            kind: 'asset',
+            feature: {
+              type: 'Feature',
+              id: props.id,
+              geometry: feat.geometry,
+              properties: {
+                id: props.id,
+                name: `Junction ${props.external_id}`,
+                asset: 'sensor',
+                status: 'ok',
+                flow_lps: 0,
+                pressure_bar: 0,
+                last_seen: '',
+                type: 'pressure',
+                pipe_id: ''
+              } as any
+            }
+          });
+        });
+        const grp = groups.junction;
+        if (grp) {
+          marker.addTo(grp);
+          junctionLayersRef.current.set(props.id, marker);
+        }
+      });
+    }
+
     /* dismiss focus on empty click */
     map.on('click', () => setFocus(null));
 
@@ -278,6 +340,7 @@ export default function GISMap() {
       tileRef.current = null;
       pipeLayersRef.current.clear();
       assetLayersRef.current.clear();
+      junctionLayersRef.current.clear();
     };
     // mode is read at init; subsequent changes handled by the tile-swap effect below
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -305,7 +368,7 @@ export default function GISMap() {
     const map = leafletRef.current;
     const groups = layerGroupsRef.current;
     if (!map) return;
-    ([...PIPE_KEYS, ...ASSET_KEYS] as Array<PipeClass | AssetKind>).forEach((k) => {
+    ([...PIPE_KEYS, ...ASSET_KEYS, 'junction'] as Array<PipeClass | AssetKind | 'junction'>).forEach((k) => {
       const g = groups[k];
       if (!g) return;
       const on = layers[k];
@@ -420,17 +483,24 @@ export default function GISMap() {
       const baseStyle = feature ? PIPE_STYLE[feature.properties.ui_class] : { weight: 3, opacity: 0.8 };
       
       const isFlowing = Math.abs(flow) > 0.1;
-      let dashArray = 'dashArray' in baseStyle ? baseStyle.dashArray : undefined;
-      if (isFlowing) {
-        dashArray = '8 6';
-      }
       
+      const pathEl = (layer as any)._path;
+      let pathLength = 100;
+      if (pathEl) {
+        try {
+          pathLength = pathEl.getTotalLength() || 100;
+        } catch (e) {
+          pathLength = 100;
+        }
+      }
+
       const targetColor = getVelocityColor(vel, isDark);
       const targetWeight = getFlowWeight(flow, baseStyle.weight * scale);
       const targetOpacity = 0.95;
+      const targetDashArray = isFlowing ? `8 ${pathLength.toFixed(1)}` : undefined;
       const targetDirection = isFlowing ? (vel > 0 ? 'forward' : 'reverse') : 'idle';
       const targetAnimSpeed = isFlowing 
-        ? `${Math.max(0.15, 2.0 - Math.min(1.6, Math.abs(vel))).toFixed(2)}s` 
+        ? `${Math.min(8.0, Math.max(0.3, pathLength / (Math.abs(vel) * 40))).toFixed(2)}s` 
         : '';
 
       const cached = (layer as any)._cachedStyle;
@@ -438,37 +508,35 @@ export default function GISMap() {
         cached.color !== targetColor ||
         cached.weight !== targetWeight ||
         cached.opacity !== targetOpacity ||
-        cached.dashArray !== dashArray ||
-        cached.direction !== targetDirection ||
-        cached.animSpeed !== targetAnimSpeed;
+        cached.dashArray !== targetDashArray ||
+        cached.direction !== targetDirection;
 
       if (changed) {
         layer.setStyle({
           color: targetColor,
           weight: targetWeight,
           opacity: targetOpacity,
-          dashArray: dashArray
+          dashArray: targetDashArray
         });
         
         (layer as any)._cachedStyle = {
           color: targetColor,
           weight: targetWeight,
           opacity: targetOpacity,
-          dashArray: dashArray,
-          direction: targetDirection,
-          animSpeed: targetAnimSpeed
+          dashArray: targetDashArray,
+          direction: targetDirection
         };
         
-        const pathEl = (layer as any)._path;
         if (pathEl) {
+          pathEl.style.setProperty('--flow-offset-fwd', `-${(pathLength + 8).toFixed(1)}px`);
+          pathEl.style.setProperty('--flow-offset-rev', `${(pathLength + 8).toFixed(1)}px`);
+          
           if (targetDirection === 'forward') {
             pathEl.classList.add('flow-forward');
             pathEl.classList.remove('flow-reverse');
-            pathEl.style.animationDuration = targetAnimSpeed;
           } else if (targetDirection === 'reverse') {
             pathEl.classList.add('flow-reverse');
             pathEl.classList.remove('flow-forward');
-            pathEl.style.animationDuration = targetAnimSpeed;
           } else {
             pathEl.classList.remove('flow-forward', 'flow-reverse');
             pathEl.style.animationDuration = '';
@@ -476,19 +544,59 @@ export default function GISMap() {
         }
       } else {
         // Double-check path element classes are consistent (crucial if Leaflet recreated them on panning)
-        const pathEl = (layer as any)._path;
         if (pathEl) {
           if (targetDirection === 'forward' && !pathEl.classList.contains('flow-forward')) {
             pathEl.classList.add('flow-forward');
             pathEl.classList.remove('flow-reverse');
-            pathEl.style.animationDuration = targetAnimSpeed;
           } else if (targetDirection === 'reverse' && !pathEl.classList.contains('flow-reverse')) {
             pathEl.classList.add('flow-reverse');
             pathEl.classList.remove('flow-forward');
-            pathEl.style.animationDuration = targetAnimSpeed;
           } else if (targetDirection === 'idle' && (pathEl.classList.contains('flow-forward') || pathEl.classList.contains('flow-reverse'))) {
             pathEl.classList.remove('flow-forward', 'flow-reverse');
             pathEl.style.animationDuration = '';
+          }
+        }
+      }
+
+      // Inline velocity-based duration scaling updates continuously for smooth transitions
+      if (pathEl && isFlowing) {
+        const speedFactor = Math.abs(vel) * 40; // 40 pixels per second per (m/s)
+        const duration = Math.min(8.0, Math.max(0.3, pathLength / speedFactor));
+        pathEl.style.animationDuration = `${duration.toFixed(2)}s`;
+      } else if (pathEl) {
+        pathEl.style.animationDuration = '';
+      }
+    });
+
+    // Update junction circle markers with pressure and demand at active timestep
+    junctionLayersRef.current.forEach((marker, id) => {
+      const simNode = simData.nodes[id];
+      if (simNode) {
+        const press = simNode.pressure[simHour] || 0.0;
+        const demand = simNode.demand[simHour] || 0.0;
+        
+        marker.getTooltip()?.setContent(`Junction ${id} · ${press.toFixed(1)}m · ${demand.toFixed(1)}L/s`);
+
+        // Node pressure color mapping
+        const nodeColor = press < 10.0 ? '#ef4444' : press < 15.0 ? '#f59e0b' : '#22c55e';
+        const outlineColor = press < 10.0 ? '#b91c1c' : press < 15.0 ? '#d97706' : '#15803d';
+
+        // Consumer Demand radius scaling
+        const radius = 3.5 + Math.min(10, Math.abs(demand) * 0.8);
+        
+        marker.setStyle({
+          fillColor: nodeColor,
+          color: outlineColor,
+          radius: radius
+        });
+
+        // Pulsing animation based on active demand
+        const pathEl = marker.getElement();
+        if (pathEl) {
+          if (demand > 0.05) {
+            pathEl.classList.add('demand-pulsing');
+          } else {
+            pathEl.classList.remove('demand-pulsing');
           }
         }
       }
@@ -560,6 +668,20 @@ export default function GISMap() {
       }
     });
 
+    // Restore standard junction styling
+    junctionLayersRef.current.forEach((marker, id) => {
+      marker.getTooltip()?.setContent(`Junction ${id}`);
+      marker.setStyle({
+        fillColor: '#94a3b8',
+        color: '#475569',
+        radius: 3.5
+      });
+      const pathEl = marker.getElement();
+      if (pathEl) {
+        pathEl.classList.remove('demand-pulsing');
+      }
+    });
+
     assetLayersRef.current.forEach((marker, id) => {
       const feature = network?.assets.find(a => a.properties.id === id);
       if (!feature) return;
@@ -597,27 +719,27 @@ export default function GISMap() {
     } else if (workmode === 'Asset management') {
       setLayers({
         main: true, distribution: true, household: false, backfeed: false, boundary: false,
-        tank: true, pressure_valve: true, meter_valve: true, sensor: false
+        tank: true, pressure_valve: true, meter_valve: true, sensor: false, junction: false
       });
     } else if (workmode === 'All tools') {
       setLayers({
         main: true, distribution: true, household: true, backfeed: true, boundary: true,
-        tank: true, pressure_valve: true, meter_valve: true, sensor: true
+        tank: true, pressure_valve: true, meter_valve: true, sensor: true, junction: true
       });
     } else if (workmode === 'Operation planning') {
       setLayers({
         main: true, distribution: true, household: false, backfeed: true, boundary: false,
-        tank: true, pressure_valve: true, meter_valve: false, sensor: false
+        tank: true, pressure_valve: true, meter_valve: false, sensor: false, junction: false
       });
     } else if (workmode === 'Service analysis') {
       setLayers({
         main: true, distribution: true, household: false, backfeed: false, boundary: false,
-        tank: false, pressure_valve: false, meter_valve: false, sensor: true
+        tank: false, pressure_valve: false, meter_valve: false, sensor: true, junction: false
       });
     } else if (workmode === 'Non-revenue water') {
       setLayers({
         main: true, distribution: true, household: false, backfeed: true, boundary: false,
-        tank: true, pressure_valve: false, meter_valve: true, sensor: true
+        tank: true, pressure_valve: false, meter_valve: true, sensor: true, junction: false
       });
     }
   }, [workmode]);
@@ -700,7 +822,7 @@ export default function GISMap() {
 
 
   const toggleLayer = useCallback(
-    (k: PipeClass | AssetKind) => setLayers((p) => ({ ...p, [k]: !p[k] })),
+    (k: PipeClass | AssetKind | 'junction') => setLayers((p) => ({ ...p, [k]: !p[k] })),
     []
   );
   const setAllPipes = useCallback((on: boolean) => {
@@ -720,7 +842,8 @@ export default function GISMap() {
       tank: 0, pressure_valve: 0, meter_valve: 0, sensor: 0
     };
     for (const a of network.assets) assetCounts[a.properties.asset]++;
-    return { pipeCounts, assetCounts };
+    const junctionCount = network.junctions?.length || 0;
+    return { pipeCounts, assetCounts, junctionCount };
   }, [network]);
 
   const handleSearchResultClick = (kind: 'pipe' | 'asset', item: any) => {
@@ -1300,8 +1423,8 @@ function LayerControl({
   simData
 }: {
   layers: LayerVis;
-  counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number> };
-  onToggle: (k: PipeClass | AssetKind) => void;
+  counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number>; junctionCount: number };
+  onToggle: (k: PipeClass | AssetKind | 'junction') => void;
   onAllPipes: (on: boolean) => void;
   onAllAssets: (on: boolean) => void;
   meta: NetworkData['meta'];
@@ -1346,6 +1469,13 @@ function LayerControl({
                 onClick={() => onToggle(k)}
               />
             ))}
+            <LayerToggle
+              label="Network Junctions"
+              count={counts.junctionCount}
+              on={layers.junction}
+              swatch={<JunctionSwatch />}
+              onClick={() => onToggle('junction')}
+            />
           </div>
           <div className="gis-lc-section">
             <div className="gis-lc-section-head">
@@ -1436,6 +1566,15 @@ function PipeSwatch({ cls }: { cls: PipeClass }) {
         backgroundImage: s.dashArray ? `repeating-linear-gradient(90deg, ${s.color} 0 6px, transparent 6px 10px)` : undefined,
         height: Math.min(5, Math.max(2, s.weight))
       }}
+    />
+  );
+}
+
+function JunctionSwatch() {
+  return (
+    <span
+      className="gis-asset-swatch sensor"
+      style={{ background: '#94a3b8', border: '1.5px solid #475569', boxShadow: 'none', width: '8px', height: '8px', borderRadius: '50%' }}
     />
   );
 }
