@@ -4536,6 +4536,51 @@ button { font-family: inherit; }
   animation: demand-pulse 1.8s ease-in-out infinite !important;
 }
 
+/* Custom Toggle Switch */
+.aw-switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+}
 
+.aw-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
 
+.aw-switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.15);
+  transition: .3s;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
 
+.aw-switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 12px;
+  width: 12px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #B4B4CA;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+.aw-switch input:checked + .aw-switch-slider {
+  background-color: #3C5DDB; /* Active blue color matching app theme */
+  border-color: rgba(60, 93, 219, 0.5);
+}
+
+.aw-switch input:checked + .aw-switch-slider:before {
+  transform: translateX(16px);
+  background-color: #FFFFFF;
+}
