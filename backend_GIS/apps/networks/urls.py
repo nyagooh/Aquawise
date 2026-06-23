@@ -13,4 +13,5 @@ urlpatterns = [
     path("<uuid:pk>/stats/", views.NetworkStatsView.as_view(), name="network-stats"),
     path("<uuid:pk>/epanet/", views.EpanetUploadView.as_view(), name="network-epanet-upload"),
     path("<uuid:pk>/uploads/", views.NetworkUploadsListView.as_view(), name="network-uploads-list"),
+    path("<uuid:pk>/simulation/", views.NetworkSimulationView.as_view(), name="network-simulation"),
 ]

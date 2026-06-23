@@ -474,3 +474,111 @@ class NetworkUploadsListView(APIView):
             })
 
         return Response(data)
+
+
+class NetworkSimulationView(APIView):
+    """Run an EPANET hydraulic simulation using WNTR and return time-series results."""
+    def get(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        
+        # Find the .inp upload
+        upload = NetworkUpload.objects.filter(
+            network=network,
+            file_type="epanet_inp",
+            status__in=[NetworkUpload.Status.COMPLETE, NetworkUpload.Status.COMPLETE_WITH_WARNINGS]
+        ).first()
+        
+        if not upload or not upload.file_path or not os.path.exists(upload.file_path):
+            # Check if any epanet_inp type upload is present regardless of status, just in case
+            upload = NetworkUpload.objects.filter(
+                network=network,
+                file_type="epanet_inp"
+            ).first()
+            if not upload or not upload.file_path or not os.path.exists(upload.file_path):
+                return Response(
+                    {"error": "No EPANET simulation model file found for this network"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        try:
+            import wntr
+            import tempfile
+            import re
+            
+            # Read and sanitize the file
+            with open(upload.file_path, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+            
+            # Sanitize 'Average' statistic to 'AVERAGED' to prevent WNTR enum error
+            content = re.sub(r'(?i)statistic\s+average\b', 'Statistic AVERAGED', content)
+            
+            with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            
+            try:
+                wn = wntr.network.WaterNetworkModel(tmp_path)
+                sim = wntr.sim.WNTRSimulator(wn)
+                results = sim.run_sim()
+                
+                timesteps = [int(t) for t in results.node["pressure"].index]
+                
+                # Process nodes
+                nodes_sim = {}
+                node_names = results.node["pressure"].columns.tolist()
+                for name in node_names:
+                    pressures = results.node["pressure"][name].tolist()
+                    demands = results.node["demand"][name].tolist() if "demand" in results.node else [0.0] * len(timesteps)
+                    nodes_sim[name] = {
+                        "pressure": pressures,
+                        "demand": demands
+                    }
+                
+                # Process links (pipes, pumps, valves)
+                links_sim = {}
+                link_names = results.link["flowrate"].columns.tolist()
+                for name in link_names:
+                    flows = results.link["flowrate"][name].tolist()
+                    velocities = results.link["velocity"][name].tolist() if "velocity" in results.link else [0.0] * len(timesteps)
+                    status = results.link["status"][name].tolist() if "status" in results.link else [1.0] * len(timesteps)
+                    # convert link status code to string status: 0 = closed, 1 = open / active
+                    status_strs = ["closed" if s == 0 else "open" for s in status]
+                    links_sim[name] = {
+                        "flow": flows,
+                        "velocity": velocities,
+                        "status": status_strs
+                    }
+                    
+                # Diurnal patterns
+                patterns = {}
+                for p_name in wn.pattern_name_list:
+                    p = wn.get_pattern(p_name)
+                    patterns[p_name] = p.multipliers
+                    
+                # Controls
+                controls = []
+                for c_name, control in wn.controls():
+                    controls.append(str(control))
+                    
+                return Response({
+                    "network_id": str(network.id),
+                    "timesteps": timesteps,
+                    "nodes": nodes_sim,
+                    "links": links_sim,
+                    "patterns": patterns,
+                    "controls": controls
+                })
+            finally:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                    
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": f"Failed to run hydraulic simulation: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
