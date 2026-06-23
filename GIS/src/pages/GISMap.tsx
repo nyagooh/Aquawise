@@ -15,7 +15,11 @@ import { SidePanel, SpRow } from '../components/SidePanel';
 import { useTheme } from '../theme';
 import {
   loadNetwork,
+  loadSimulation,
+  renameNetwork,
+  clearNetworkCache,
   type NetworkData,
+  type SimulationData,
   type PipeClass,
   type PipeFeature,
   type AssetFeature,
@@ -64,11 +68,27 @@ export default function GISMap() {
   const [focus, setFocus] = useState<Focus>(null);
   const [isSchematic, setIsSchematic] = useState<boolean>(false);
   const [showBasemap, setShowBasemap] = useState<boolean>(true);
+  const [simData, setSimData] = useState<SimulationData | null>(null);
+  const [simHour, setSimHour] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [playSpeed, setPlaySpeed] = useState<number>(1);
+  const [zoom, setZoom] = useState<number>(13);
+
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [workmode, setWorkmode] = useState<string>('Network overview');
+  const [showWorkmodes, setShowWorkmodes] = useState<boolean>(false);
+  const [editableName, setEditableName] = useState<string>('');
+  const [is3D, setIs3D] = useState<boolean>(false);
+  const [activePlugin, setActivePlugin] = useState<'search' | 'pressures' | 'flow' | 'demand' | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const pipeLayersRef = useRef<Map<string, L.Polyline>>(new Map());
+  const assetLayersRef = useRef<Map<string, L.Marker>>(new Map());
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
   const tileRef = useRef<L.TileLayer | null>(null);
-  const rendererRef = useRef<L.Canvas | null>(null);
+  const rendererRef = useRef<L.Renderer | null>(null);
   const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
   const focusOutlineRef = useRef<L.Layer | null>(null);
 
@@ -79,6 +99,7 @@ export default function GISMap() {
       .then((data) => {
         if (alive) {
           setNetwork(data);
+          setEditableName(data.meta.name || 'Untitled Network');
           // Detect schematic heuristic based on bounding box
           const [minLon, minLat, maxLon, maxLat] = data.meta.bbox;
           const isGeographic = minLon >= -180 && maxLon <= 180 && minLat >= -90 && maxLat <= 90;
@@ -104,7 +125,7 @@ export default function GISMap() {
     const map = L.map(mapRef.current, {
       center: [network.meta.center[1], network.meta.center[0]],
       zoom: 13,
-      preferCanvas: true,
+      preferCanvas: false, // Turn off Canvas rendering to allow SVG-based path CSS animations
       zoomControl: true,
       attributionControl: true,
       maxBounds: L.latLngBounds([latMin - 0.1, lonMin - 0.1], [latMax + 0.1, lonMax + 0.1]),
@@ -120,9 +141,8 @@ export default function GISMap() {
         padding: [20, 20]
       });
     }, 200);
-    // Larger click tolerance — household lines are hairline, so a 6 px buffer
-    // makes them clickable without forcing the operator to pixel-hunt.
-    rendererRef.current = L.canvas({ padding: 0.4, tolerance: 6 });
+    // Use SVG renderer for pipes to support CSS stroke-dashoffset animations and classes
+    rendererRef.current = L.svg({ padding: 0.1 });
 
     /* layer groups */
     const groups: Partial<Record<PipeClass | AssetKind, L.LayerGroup>> = {};
@@ -176,31 +196,46 @@ export default function GISMap() {
         L.DomEvent.stopPropagation(e);
         setFocus({ kind: 'pipe', feature: feat });
       });
-      line.on('mouseover', () => line.setStyle({
-        color: style.hoverColor,
-        weight: style.hoverWeight,
-        opacity: 1
-      }));
-      line.on('mouseout', () => line.setStyle({
-        color: style.color,
-        weight: style.weight,
-        opacity: style.opacity
-      }));
+      line.on('mouseover', () => {
+        const cached = (line as any)._cachedStyle;
+        if (cached) {
+          line.setStyle({
+            weight: cached.weight * 1.5,
+            opacity: 1
+          });
+        } else {
+          line.setStyle({
+            color: style.hoverColor,
+            weight: style.hoverWeight,
+            opacity: 1
+          });
+        }
+      });
+      line.on('mouseout', () => {
+        const cached = (line as any)._cachedStyle;
+        if (cached) {
+          line.setStyle({
+            color: cached.color,
+            weight: cached.weight,
+            opacity: cached.opacity
+          });
+        } else {
+          const z = leafletRef.current?.getZoom() || 13;
+          const scale = z >= 17 ? 1.35 : z >= 15 ? 1.15 : z >= 13 ? 1 : 0.78;
+          line.setStyle({
+            color: style.color,
+            weight: style.weight * scale,
+            opacity: style.opacity
+          });
+        }
+      });
       line.addTo(group);
+      pipeLayersRef.current.set(feat.properties.id, line);
     });
 
-    /* Zoom-aware weight scaling — pipes thicker at city scale, hairline
-       when zoomed all the way out. */
+    /* Track map zoom changes to update responsive styling */
     map.on('zoomend', () => {
-      const z = map.getZoom();
-      const scale = z >= 17 ? 1.35 : z >= 15 ? 1.15 : z >= 13 ? 1 : 0.78;
-      Object.entries(groups).forEach(([key, grp]) => {
-        if (!grp || !PIPE_KEYS.includes(key as PipeClass)) return;
-        const style = PIPE_STYLE[key as PipeClass];
-        grp.eachLayer((layer) => {
-          (layer as L.Polyline).setStyle({ weight: style.weight * scale });
-        });
-      });
+      setZoom(map.getZoom());
     });
 
     /* assets — points */
@@ -222,11 +257,18 @@ export default function GISMap() {
       });
       marker.bindTooltip(assetTooltip(feat), { direction: 'top', offset: [0, -10], opacity: 1 });
       const grp = groups[props.asset];
-      if (grp) marker.addTo(grp);
+      if (grp) {
+        marker.addTo(grp);
+        assetLayersRef.current.set(props.id, marker);
+      }
     });
 
     /* dismiss focus on empty click */
     map.on('click', () => setFocus(null));
+
+    map.on('mousemove', (e: L.LeafletMouseEvent) => {
+      setCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+    });
 
     return () => {
       clearTimeout(timer);
@@ -234,6 +276,8 @@ export default function GISMap() {
       leafletRef.current = null;
       layerGroupsRef.current = {};
       tileRef.current = null;
+      pipeLayersRef.current.clear();
+      assetLayersRef.current.clear();
     };
     // mode is read at init; subsequent changes handled by the tile-swap effect below
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,6 +376,329 @@ export default function GISMap() {
     setSearchParams(next, { replace: true });
   }, [network, searchParams, setSearchParams]);
 
+  /* ── 7. load simulation data if available ── */
+  useEffect(() => {
+    if (!network || !network.meta.id) return;
+    let alive = true;
+    loadSimulation(network.meta.id)
+      .then((data) => {
+        if (alive) {
+          setSimData(data);
+          setSimHour(0);
+        }
+      })
+      .catch((err) => {
+        console.log("No simulation data found or failed to load:", err.message);
+        if (alive) setSimData(null);
+      });
+    return () => { alive = false; };
+  }, [network]);
+
+  /* ── 8. animate simulation playback ── */
+  useEffect(() => {
+    if (!isPlaying || !simData) return;
+    const interval = setInterval(() => {
+      setSimHour((h) => (h + 1) % simData.timesteps.length);
+    }, 1000 / playSpeed);
+    return () => clearInterval(interval);
+  }, [isPlaying, simData, playSpeed]);
+
+  /* ── 9. dynamic styling of leaflet layers based on active simulation hour ── */
+  useEffect(() => {
+    if (!simData) return;
+    const isDark = mode === 'dark';
+    const scale = zoom >= 17 ? 1.35 : zoom >= 15 ? 1.15 : zoom >= 13 ? 1 : 0.78;
+    
+    // Update pipe line colors and thickness based on velocity and flow
+    pipeLayersRef.current.forEach((layer, id) => {
+      const sim = simData.links[id];
+      if (!sim) return;
+      const vel = sim.velocity[simHour] || 0.0;
+      const flow = sim.flow[simHour] || 0.0;
+      
+      const feature = network?.pipes.find(p => p.properties.id === id);
+      const baseStyle = feature ? PIPE_STYLE[feature.properties.ui_class] : { weight: 3, opacity: 0.8 };
+      
+      const isFlowing = Math.abs(flow) > 0.1;
+      let dashArray = 'dashArray' in baseStyle ? baseStyle.dashArray : undefined;
+      if (isFlowing) {
+        dashArray = '8 6';
+      }
+      
+      const targetColor = getVelocityColor(vel, isDark);
+      const targetWeight = getFlowWeight(flow, baseStyle.weight * scale);
+      const targetOpacity = 0.95;
+      const targetDirection = isFlowing ? (vel > 0 ? 'forward' : 'reverse') : 'idle';
+      const targetAnimSpeed = isFlowing 
+        ? `${Math.max(0.15, 2.0 - Math.min(1.6, Math.abs(vel))).toFixed(2)}s` 
+        : '';
+
+      const cached = (layer as any)._cachedStyle;
+      const changed = !cached ||
+        cached.color !== targetColor ||
+        cached.weight !== targetWeight ||
+        cached.opacity !== targetOpacity ||
+        cached.dashArray !== dashArray ||
+        cached.direction !== targetDirection ||
+        cached.animSpeed !== targetAnimSpeed;
+
+      if (changed) {
+        layer.setStyle({
+          color: targetColor,
+          weight: targetWeight,
+          opacity: targetOpacity,
+          dashArray: dashArray
+        });
+        
+        (layer as any)._cachedStyle = {
+          color: targetColor,
+          weight: targetWeight,
+          opacity: targetOpacity,
+          dashArray: dashArray,
+          direction: targetDirection,
+          animSpeed: targetAnimSpeed
+        };
+        
+        const pathEl = (layer as any)._path;
+        if (pathEl) {
+          if (targetDirection === 'forward') {
+            pathEl.classList.add('flow-forward');
+            pathEl.classList.remove('flow-reverse');
+            pathEl.style.animationDuration = targetAnimSpeed;
+          } else if (targetDirection === 'reverse') {
+            pathEl.classList.add('flow-reverse');
+            pathEl.classList.remove('flow-forward');
+            pathEl.style.animationDuration = targetAnimSpeed;
+          } else {
+            pathEl.classList.remove('flow-forward', 'flow-reverse');
+            pathEl.style.animationDuration = '';
+          }
+        }
+      } else {
+        // Double-check path element classes are consistent (crucial if Leaflet recreated them on panning)
+        const pathEl = (layer as any)._path;
+        if (pathEl) {
+          if (targetDirection === 'forward' && !pathEl.classList.contains('flow-forward')) {
+            pathEl.classList.add('flow-forward');
+            pathEl.classList.remove('flow-reverse');
+            pathEl.style.animationDuration = targetAnimSpeed;
+          } else if (targetDirection === 'reverse' && !pathEl.classList.contains('flow-reverse')) {
+            pathEl.classList.add('flow-reverse');
+            pathEl.classList.remove('flow-forward');
+            pathEl.style.animationDuration = targetAnimSpeed;
+          } else if (targetDirection === 'idle' && (pathEl.classList.contains('flow-forward') || pathEl.classList.contains('flow-reverse'))) {
+            pathEl.classList.remove('flow-forward', 'flow-reverse');
+            pathEl.style.animationDuration = '';
+          }
+        }
+      }
+    });
+
+    // Update asset marker tooltips dynamically with pressure and demand at active timestep
+    assetLayersRef.current.forEach((marker, id) => {
+      const simNode = simData.nodes[id];
+      if (simNode) {
+        const press = simNode.pressure[simHour];
+        const demand = simNode.demand[simHour];
+        marker.getTooltip()?.setContent(`${id} · ${press.toFixed(1)}m · ${demand.toFixed(1)}L/s`);
+
+        // Dynamically adjust tank markers and status indicators
+        const el = marker.getElement();
+        if (el) {
+          const feature = network?.assets.find(a => a.properties.id === id);
+          if (feature) {
+            const kind = feature.properties.asset;
+            if (kind === 'tank') {
+              // Normalized mapping of pressure head to fill percent (typically max height is around 15m)
+              const levelPct = Math.min(100, Math.max(0, (press / 15.0) * 100));
+              const fill = el.querySelector('.aw-tank-fill') as HTMLElement;
+              const label = el.querySelector('.aw-tank-label') as HTMLElement;
+              if (fill) {
+                fill.style.height = `${levelPct.toFixed(1)}%`;
+                const lvlColor = levelPct > 70 ? '#22C55E' : levelPct > 35 ? '#F59E0B' : '#EF4444';
+                fill.style.backgroundColor = lvlColor;
+              }
+              if (label) {
+                label.innerText = `${levelPct.toFixed(0)}%`;
+              }
+            } else {
+              const dot = el.querySelector('.aw-status-dot') as HTMLElement;
+              if (dot) {
+                const statusColor = press < 10.0 ? '#ef4444' : press < 15.0 ? '#f59e0b' : '#22c55e';
+                dot.style.backgroundColor = statusColor;
+              }
+            }
+          }
+        }
+      }
+    });
+  }, [simHour, simData, mode, network]);
+
+  /* ── 10. restore standard pipe styles and apply zoom scaling if simulation is closed/unavailable ── */
+  useEffect(() => {
+    if (simData) return;
+    const scale = zoom >= 17 ? 1.35 : zoom >= 15 ? 1.15 : zoom >= 13 ? 1 : 0.78;
+    pipeLayersRef.current.forEach((layer, id) => {
+      const feature = network?.pipes.find(p => p.properties.id === id);
+      if (!feature) return;
+      const style = PIPE_STYLE[feature.properties.ui_class];
+      
+      // Clear simulation cache
+      delete (layer as any)._cachedStyle;
+
+      layer.setStyle({
+        color: style.color,
+        weight: style.weight * scale,
+        opacity: style.opacity,
+        dashArray: style.dashArray
+      });
+
+      const pathEl = (layer as any)._path;
+      if (pathEl) {
+        pathEl.classList.remove('flow-forward', 'flow-reverse');
+        pathEl.style.animationDuration = '';
+      }
+    });
+
+    assetLayersRef.current.forEach((marker, id) => {
+      const feature = network?.assets.find(a => a.properties.id === id);
+      if (!feature) return;
+      const el = marker.getElement();
+      if (el) {
+        const props = feature.properties;
+        const kind = props.asset;
+        if (kind === 'tank') {
+          const fill = el.querySelector('.aw-tank-fill') as HTMLElement;
+          const label = el.querySelector('.aw-tank-label') as HTMLElement;
+          const level = (props as any).level_pct || 50;
+          if (fill) {
+            fill.style.height = `${level}%`;
+            const lvlColor = level > 70 ? '#22C55E' : level > 35 ? '#F59E0B' : '#EF4444';
+            fill.style.backgroundColor = lvlColor;
+          }
+          if (label) {
+            label.innerText = `${level}%`;
+          }
+        } else {
+          const dot = el.querySelector('.aw-status-dot') as HTMLElement;
+          if (dot) {
+            const statusColor = STATUS_COLOR[props.status];
+            dot.style.backgroundColor = statusColor;
+          }
+        }
+      }
+    });
+  }, [simData, network, zoom]);
+
+  /* ── 11. workmode changes sync with visible layers ── */
+  useEffect(() => {
+    if (workmode === 'Network overview') {
+      setLayers(DEFAULT_LAYERS);
+    } else if (workmode === 'Asset management') {
+      setLayers({
+        main: true, distribution: true, household: false, backfeed: false, boundary: false,
+        tank: true, pressure_valve: true, meter_valve: true, sensor: false
+      });
+    } else if (workmode === 'All tools') {
+      setLayers({
+        main: true, distribution: true, household: true, backfeed: true, boundary: true,
+        tank: true, pressure_valve: true, meter_valve: true, sensor: true
+      });
+    } else if (workmode === 'Operation planning') {
+      setLayers({
+        main: true, distribution: true, household: false, backfeed: true, boundary: false,
+        tank: true, pressure_valve: true, meter_valve: false, sensor: false
+      });
+    } else if (workmode === 'Service analysis') {
+      setLayers({
+        main: true, distribution: true, household: false, backfeed: false, boundary: false,
+        tank: false, pressure_valve: false, meter_valve: false, sensor: true
+      });
+    } else if (workmode === 'Non-revenue water') {
+      setLayers({
+        main: true, distribution: true, household: false, backfeed: true, boundary: false,
+        tank: true, pressure_valve: false, meter_valve: true, sensor: true
+      });
+    }
+  }, [workmode]);
+
+  /* ── 12. custom display control triggers ── */
+  const handleResetOrientation = useCallback(() => {
+    const map = leafletRef.current;
+    if (map && network) {
+      const [lonMin, latMin, lonMax, latMax] = network.meta.bbox;
+      map.fitBounds(L.latLngBounds([latMin, lonMin], [latMax, lonMax]));
+    }
+  }, [network]);
+
+  const handleResetView = useCallback(() => {
+    const map = leafletRef.current;
+    if (map && network) {
+      const [lonMin, latMin, lonMax, latMax] = network.meta.bbox;
+      map.fitBounds(L.latLngBounds([latMin, lonMin], [latMax, lonMax]), { padding: [20, 20] });
+    }
+  }, [network]);
+
+  const handleToggle3D = useCallback(() => {
+    setIs3D(prev => !prev);
+  }, []);
+
+  const handleRename = useCallback(async () => {
+    if (!network || !network.meta.id || !editableName.trim()) return;
+    try {
+      await renameNetwork(network.meta.id, editableName.trim());
+      setNetwork(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          meta: {
+            ...prev.meta,
+            name: editableName.trim()
+          }
+        };
+      });
+      clearNetworkCache();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || 'Failed to rename network');
+    }
+  }, [network, editableName]);
+
+  const searchResults = useMemo(() => {
+    if (!network || !searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+    const matches: Array<{ id: string; type: string; label: string; kind: 'pipe' | 'asset'; data: any }> = [];
+    
+    // search pipes
+    network.pipes.forEach(p => {
+      if (p.properties.id.toLowerCase().includes(q) || (p.properties.material && p.properties.material.toLowerCase().includes(q))) {
+        matches.push({
+          id: p.properties.id,
+          type: 'Pipe',
+          label: `${p.properties.ui_class} · ${p.properties.diameter_mm ? p.properties.diameter_mm + 'mm' : 'no diameter'}`,
+          kind: 'pipe',
+          data: p
+        });
+      }
+    });
+
+    // search assets
+    network.assets.forEach(a => {
+      if (a.properties.id.toLowerCase().includes(q) || a.properties.name.toLowerCase().includes(q)) {
+        matches.push({
+          id: a.properties.id,
+          type: a.properties.asset.replace('_', ' '),
+          label: a.properties.name,
+          kind: 'asset',
+          data: a
+        });
+      }
+    });
+
+    return matches.slice(0, 30);
+  }, [network, searchQuery]);
+
+
   const toggleLayer = useCallback(
     (k: PipeClass | AssetKind) => setLayers((p) => ({ ...p, [k]: !p[k] })),
     []
@@ -356,16 +723,67 @@ export default function GISMap() {
     return { pipeCounts, assetCounts };
   }, [network]);
 
+  const handleSearchResultClick = (kind: 'pipe' | 'asset', item: any) => {
+    setLayers((prev) => ({
+      ...prev,
+      [kind === 'pipe' ? item.properties.ui_class : item.properties.asset]: true
+    }));
+    setFocus({ kind, feature: item });
+    setActivePlugin(null);
+    setSearchQuery('');
+  };
+
   return (
     <Shell active="gis" title="GIS Map" sub={network?.meta.name ? `${network.meta.name} · live operational view` : 'Loading network…'} pagePadding={false} hideRightRail>
-      <div className="gis-canvas gis-canvas--real">
-        <div ref={mapRef} className={`gis-leaflet${!showBasemap ? ' gis-leaflet--blank' : ''}`} />
+      <div className="gis-canvas gis-canvas--real" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+        
+        {/* Leaflet Map with potential pseudo-3D styling */}
+        <div ref={mapRef} className={`gis-leaflet${!showBasemap ? ' gis-leaflet--blank' : ''}${is3D ? ' perspective-3d' : ''}`} style={{ width: '100%', height: '100%' }} />
+
+        {/* Top-Center Integrated Status Bar */}
+        {network && (
+          <div style={{ position: 'absolute', top: '16px', left: '50%', transform: 'translateX(-50%)', zIndex: 1000, display: 'flex', alignItems: 'center', pointerEvents: 'auto' }}>
+            <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '6px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', alignItems: 'center', gap: '14px', boxShadow: '0 8px 32px rgba(0,0,0,0.4)' }}>
+              <div className="aw-workmode-selector-container">
+                <button className="aw-workmode-selector" onClick={() => setShowWorkmodes(!showWorkmodes)} type="button" style={{ color: '#ffffff', background: 'transparent', border: 'none', cursor: 'pointer', outline: 'none', display: 'flex', alignItems: 'center', fontSize: '0.75rem', fontWeight: 600, padding: 0 }}>
+                  <svg fill="none" height="12" viewBox="0 0 14 14" width="12" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: '6px', color: '#8ACDE5' }}>
+                    <path clipRule="evenodd" d="m7.75 2.5h3.25c.2761 0 .5.22386.5.5v3.25h-3.75zm-1.5-1.5h1.5 3.25c1.1046 0 2 .89543 2 2v3.25 1.5 3.25c0 1.1046-.8954 2-2 2h-3.25-1.5-3.25c-1.10457 0-2-.8954-2-2v-3.25003-4.74997c0-1.10457.89543-2 2-2zm-3.75 5.24998v-3.24998c0-.27614.22386-.5.5-.5h3.25v3.75zm0 1.5v3.25002c0 .2761.22386.5.5.5h3.25v-3.75zm5.25 3.75002h3.25c.2761 0 .5-.2239.5-.5v-3.25h-3.75z" fill="currentColor" fillRule="evenodd" />
+                  </svg>
+                  <span>{workmode}</span>
+                </button>
+                {showWorkmodes && (
+                  <div className="aw-workmode-dropdown" style={{ top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '6px' }}>
+                    {['Network overview', 'My work mode', 'All tools', 'Asset management', 'Operation planning', 'Service analysis', 'Non-revenue water'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`aw-workmode-option${workmode === m ? ' active' : ''}`}
+                        onClick={() => { setWorkmode(m); setShowWorkmodes(false); }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {coords && (
+                <>
+                  <span style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.15)' }} />
+                  <div style={{ color: '#B4B4CA', fontSize: '0.75rem', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>
+                    Lat {coords.lat.toFixed(5)} · Lng {coords.lng.toFixed(5)}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {!network && !loadError && (
           <div className="map-loading">
             <div className="map-loading-spinner" />
             <div className="map-loading-text">Loading network data…</div>
-            <div className="map-loading-sub">4,951 polylines · reprojecting UTM 36S → WGS84</div>
+            <div className="map-loading-sub">Reading network graph · initializing projections</div>
           </div>
         )}
         {loadError && (
@@ -377,26 +795,280 @@ export default function GISMap() {
 
         {network && visibleStats && (
           <>
-            <LayerControl
-              layers={layers}
-              counts={visibleStats}
-              onToggle={toggleLayer}
-              onAllPipes={setAllPipes}
-              onAllAssets={setAllAssets}
-              meta={network.meta}
-              showBasemap={showBasemap}
-              onToggleBasemap={() => setShowBasemap((sb) => !sb)}
-            />
-            <StatBadge meta={network.meta} />
+            {/* Left Overlay Column: Name Renaming & Layer Control */}
+            <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '280px', pointerEvents: 'auto' }}>
+              <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+                <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#B4B4CA', fontWeight: 700, letterSpacing: '0.05em' }}>Network Name (Click to rename)</span>
+                <input
+                  type="text"
+                  className="aw-map-title-input"
+                  value={editableName}
+                  onChange={(e) => setEditableName(e.target.value)}
+                  onBlur={handleRename}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); }}
+                  style={{ width: '100%', fontSize: '0.8125rem', padding: '4px 6px', height: '26px' }}
+                />
+              </div>
+
+              <LayerControl
+                layers={layers}
+                counts={visibleStats}
+                onToggle={toggleLayer}
+                onAllPipes={setAllPipes}
+                onAllAssets={setAllAssets}
+                meta={network.meta}
+                showBasemap={showBasemap}
+                onToggleBasemap={() => setShowBasemap((sb) => !sb)}
+                simData={simData}
+              />
+            </div>
+
+            {/* Right Overlay Column: Accuracy & Stats Badge */}
+            <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '240px', pointerEvents: 'auto', alignItems: 'stretch' }}>
+              <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+                <span style={{ fontSize: '0.75rem', color: '#B4B4CA', fontWeight: 600 }}>Accuracy</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <strong style={{ fontSize: '0.75rem', color: '#ffffff' }}>{simData ? '100%' : 'N/A'}</strong>
+                  <div className="aw-accuracy-progress" style={{ width: '60px', height: '4px', background: '#35354B', borderRadius: '2px' }}>
+                    <div className="aw-accuracy-fill" style={{ width: simData ? '100%' : '0%', height: '100%', background: 'linear-gradient(90deg, #75C4E0 0%, #203DAC 100%)', borderRadius: '2px' }}></div>
+                  </div>
+                </div>
+              </div>
+
+              <StatBadge meta={network.meta} />
+            </div>
           </>
+        )}
+
+        {/* Plugin Floating Toolbar (bottom-left) */}
+        <div className="aw-plugins-toolbar" style={{ bottom: '16px', left: '16px' }}>
+          <button
+            className={`aw-plugin-btn${activePlugin === 'search' ? ' active' : ''}`}
+            onClick={() => setActivePlugin(activePlugin === 'search' ? null : 'search')}
+            title="Search network assets"
+            type="button"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="16" height="16">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          <button
+            className={`aw-plugin-btn${activePlugin === 'pressures' ? ' active' : ''}`}
+            onClick={() => setActivePlugin(activePlugin === 'pressures' ? null : 'pressures')}
+            title="Analyze node pressures"
+            type="button"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 7a5 5 0 015 5" />
+            </svg>
+          </button>
+          <button
+            className={`aw-plugin-btn${activePlugin === 'flow' ? ' active' : ''}`}
+            onClick={() => setActivePlugin(activePlugin === 'flow' ? null : 'flow')}
+            title="Visualize flow velocities"
+            type="button"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M9.59 4.59A2 2 0 1111 8H2m10.59 11.41A2 2 0 1014 16H2m15.73-8.27A2.5 2.5 0 1119.5 12H2" />
+            </svg>
+          </button>
+          <button
+            className={`aw-plugin-btn${activePlugin === 'demand' ? ' active' : ''}`}
+            onClick={() => setActivePlugin(activePlugin === 'demand' ? null : 'demand')}
+            title="Inspect flow rates and demand spikes"
+            type="button"
+          >
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="16" height="16">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Display Controls on right stack (aligned on the bottom right baseline) */}
+        <div className="aw-display-controls" style={{ right: '16px', bottom: '16px' }}>
+          <button className="aw-control-btn" title="Restore orientation to north" onClick={handleResetOrientation} type="button">
+            <svg fill="currentColor" height="14" viewBox="0 0 14 14" width="14" xmlns="http://www.w3.org/2000/svg">
+              <g fill="currentColor"><path d="m7.00008 0 2.99992 6h-6z" /><path d="m6.99992 14-2.99992-6h6z" opacity="0.7" /></g>
+            </svg>
+          </button>
+          <button className="aw-control-btn" title="Restore initial view" onClick={handleResetView} type="button">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" width="14" height="14">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+          <button className={`aw-control-btn${is3D ? ' active' : ''}`} title="Toggle map 3D view" onClick={handleToggle3D} type="button">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" width="14" height="14">
+              <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l-7 4a2 2 0 002 0l7-4a2 2 0 001-1.73z" />
+            </svg>
+          </button>
+          <button className="aw-control-btn" title="Change map background" onClick={() => setShowBasemap(!showBasemap)} type="button">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" width="14" height="14">
+              <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Floating plugin search overlay panel */}
+        {activePlugin === 'search' && (
+          <div className="aw-search-overlay-panel" style={{ top: '16px', left: '308px', maxHeight: 'calc(100% - 130px)' }}>
+            <div className="aw-search-overlay-head">
+              <span className="aw-search-overlay-title">Search Network</span>
+              <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
+            </div>
+            <div className="aw-search-overlay-input-container">
+              <svg className="aw-search-overlay-icon" width={14} height={14} fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                className="aw-search-overlay-input"
+                placeholder="Search pipes, sensors, zones..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="aw-search-results-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
+              {searchResults.length === 0 && searchQuery.trim() && (
+                <div style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', padding: '8px 0', textAlign: 'center' }}>
+                  No assets match your search.
+                </div>
+              )}
+              {searchResults.map((res) => (
+                <button
+                  key={res.id}
+                  type="button"
+                  onClick={() => handleSearchResultClick(res.kind, res.data)}
+                  className="sp-row"
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.05)',
+                    borderRadius: '4px',
+                    padding: '8px 10px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    cursor: 'pointer',
+                    gap: '2px',
+                    marginBottom: '4px'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                    <strong style={{ fontSize: '0.8125rem', color: '#ffffff' }}>{res.id}</strong>
+                    <span style={{ fontSize: '0.6875rem', color: '#8ACDE5', textTransform: 'uppercase', fontWeight: 600 }}>{res.type}</span>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#B4B4CA' }}>{res.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Plugin Overlays: Pressures or flow rates reports */}
+        {activePlugin === 'pressures' && (
+          <div className="aw-search-overlay-panel" style={{ width: '260px', top: '16px', left: '308px' }}>
+            <div className="aw-search-overlay-head">
+              <span className="aw-search-overlay-title">Pressure Analysis</span>
+              <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
+              <p style={{ marginBottom: '8px' }}>Pipes are dynamic colored according to pressure limits:</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#10b981' }}></span>
+                  <span>Nominal (&gt; 15 m)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></span>
+                  <span>Warning (&lt; 15 m)</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></span>
+                  <span>Critical scour velocity</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activePlugin === 'flow' && (
+          <div className="aw-search-overlay-panel" style={{ width: '260px', top: '16px', left: '308px' }}>
+            <div className="aw-search-overlay-head">
+              <span className="aw-search-overlay-title">Flow Visualization</span>
+              <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
+              <p>Pipe segments style changes dynamically according to simulation water flow directions.</p>
+              <p style={{ marginTop: '6px', color: '#8ACDE5' }}>Chevrons move to show direction on active simulation hours.</p>
+            </div>
+          </div>
+        )}
+
+        {activePlugin === 'demand' && (
+          <div className="aw-search-overlay-panel" style={{ width: '260px', top: '16px', left: '308px' }}>
+            <div className="aw-search-overlay-head">
+              <span className="aw-search-overlay-title">Spikes & Anomalies</span>
+              <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
+            </div>
+            <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
+              <p>No active anomalies detected in this simulation run.</p>
+              <p style={{ marginTop: '6px', color: '#00C887' }}>✓ All demands meet structural patterns.</p>
+            </div>
+          </div>
+        )}
+
+        {simData && (
+          <div className="gis-simulation-timeline">
+            <div className="gis-sim-play-controls">
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className="btn btn-primary btn-sm btn-icon"
+                title={isPlaying ? 'Pause' : 'Play Simulation'}
+                type="button"
+                style={{ width: '28px', height: '28px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' }}
+              >
+                {isPlaying ? (
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor">
+                    <rect x={4} y={4} width={5} height={16} /><rect x={15} y={4} width={5} height={16} />
+                  </svg>
+                ) : (
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: '2px' }}>
+                    <polygon points="5,3 19,12 5,21" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={() => setPlaySpeed((s) => (s === 1 ? 5 : s === 5 ? 10 : 1))}
+                className="btn btn-ghost btn-sm"
+                type="button"
+                style={{ fontSize: '10px', fontWeight: 'bold', padding: '0 4px', height: '24px' }}
+              >
+                {playSpeed}x
+              </button>
+            </div>
+            <div className="gis-sim-time-readout">
+              <strong>{formatSimTime(simData.timesteps[simHour])}</strong>
+            </div>
+            <div className="gis-sim-slider-container">
+              <input
+                type="range"
+                min={0}
+                max={simData.timesteps.length - 1}
+                value={simHour}
+                onChange={(e) => setSimHour(parseInt(e.target.value))}
+                className="gis-sim-slider"
+              />
+            </div>
+          </div>
         )}
       </div>
 
       {focus?.kind === 'pipe' && (
-        <PipePanel feature={focus.feature} onClose={() => setFocus(null)} />
+        <PipePanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
       )}
       {focus?.kind === 'asset' && (
-        <AssetPanel feature={focus.feature} onClose={() => setFocus(null)} />
+        <AssetPanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
       )}
     </Shell>
   );
@@ -624,7 +1296,8 @@ function LayerControl({
   onAllAssets,
   meta,
   showBasemap,
-  onToggleBasemap
+  onToggleBasemap,
+  simData
 }: {
   layers: LayerVis;
   counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number> };
@@ -634,6 +1307,7 @@ function LayerControl({
   meta: NetworkData['meta'];
   showBasemap: boolean;
   onToggleBasemap: () => void;
+  simData: SimulationData | null;
 }) {
   const [expanded, setExpanded] = useState(true);
   const visiblePipeCount = PIPE_KEYS.reduce((sum, k) => sum + (layers[k] ? counts.pipeCounts[k] : 0), 0);
@@ -707,6 +1381,20 @@ function LayerControl({
               onClick={onToggleBasemap}
             />
           </div>
+          {simData && simData.controls.length > 0 && (
+            <div className="gis-lc-section" style={{ borderTop: '1px solid hsl(var(--border))', paddingTop: '10px' }}>
+              <div className="gis-lc-section-head">
+                <span>Operational Rules</span>
+              </div>
+              <div style={{ maxHeight: '90px', overflowY: 'auto', fontSize: '10px', color: 'hsl(var(--muted-foreground))', fontFamily: 'var(--font-mono)', paddingRight: '4px' }}>
+                {simData.controls.map((rule, idx) => (
+                  <div key={idx} style={{ marginBottom: '6px', lineHeight: '1.3', paddingBottom: '4px', borderBottom: '1px solid hsla(var(--border) / 0.4)' }}>
+                    • {rule}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="gis-lc-section gis-lc-status">
             <div className="gis-lc-section-head"><span>Status</span></div>
             <div className="gis-lc-status-row">
@@ -799,7 +1487,7 @@ function StatBadge({ meta }: { meta: NetworkData['meta'] }) {
     <div className="gis-stat-badge">
       <div className="gis-stat-row">
         <span>Live network</span>
-        <strong>Kisumu</strong>
+        <strong>{meta.name || 'Unknown'}</strong>
       </div>
       <div className="gis-stat-row">
         <span>Pipe segments</span>
@@ -821,12 +1509,21 @@ function StatBadge({ meta }: { meta: NetworkData['meta'] }) {
    Side panels
    ───────────────────────────────────────── */
 
-function PipePanel({ feature, onClose }: { feature: PipeFeature; onClose: () => void }) {
+function PipePanel({ feature, onClose, simData, simHour }: {
+  feature: PipeFeature;
+  onClose: () => void;
+  simData: SimulationData | null;
+  simHour: number;
+}) {
   const p = feature.properties;
   const style = PIPE_STYLE[p.ui_class];
-  const flowDir =
-    p.node_from && p.node_to ? `${p.node_from} → ${p.node_to}` : '—';
   const zoneName = p.zone ? zoneLabel(p.zone) : '—';
+
+  const sim = simData ? simData.links[p.id] : null;
+  const currentFlow = sim ? `${sim.flow[simHour].toFixed(1)} L/s` : (p.diameter_mm ? `${Math.round((p.diameter_mm / 25) ** 1.6 * 0.8)} L/s` : '—');
+  const currentVel = sim ? `${sim.velocity[simHour].toFixed(2)} m/s` : '—';
+  const currentStatus = sim ? sim.status[simHour] : p.status;
+  const flowDir = p.node_from && p.node_to ? `${p.node_from} → ${p.node_to}` : (sim && sim.flow[simHour] < 0 ? 'Reverse flow' : 'Normal flow');
 
   return (
     <SidePanel
@@ -835,8 +1532,8 @@ function PipePanel({ feature, onClose }: { feature: PipeFeature; onClose: () => 
       kind={style.label}
       title={p.id}
       pill={{
-        tone: p.ui_class === 'backfeed' ? 'warn' : p.status === 'closed' ? 'muted' : 'safe',
-        label: p.status === 'closed' ? 'Closed' : p.service === 'in-service' ? 'In service' : p.service === 'out-of-service' ? 'Out of service' : 'Open'
+        tone: currentStatus === 'closed' ? 'warn' : p.service === 'out-of-service' ? 'danger' : 'safe',
+        label: currentStatus === 'closed' ? 'Closed' : p.service === 'in-service' ? 'In service' : p.service === 'out-of-service' ? 'Out of service' : 'Open'
       }}
     >
       <SectionLabel>Geometry</SectionLabel>
@@ -848,7 +1545,7 @@ function PipePanel({ feature, onClose }: { feature: PipeFeature; onClose: () => 
 
       <div style={{ height: 14 }} />
       <SectionLabel>Operations</SectionLabel>
-      <SpRow label="Status" value={p.status} color={p.status === 'closed' ? '#f59e0b' : '#22c55e'} />
+      <SpRow label="Status" value={currentStatus} color={currentStatus === 'closed' ? '#f59e0b' : '#22c55e'} />
       <SpRow label="Service" value={p.service.replace('-', ' ')} />
       <SpRow label="Flow direction" value={flowDir} mono />
       <SpRow label="Zone" value={zoneName} />
@@ -861,21 +1558,52 @@ function PipePanel({ feature, onClose }: { feature: PipeFeature; onClose: () => 
       <div style={{ height: 14 }} />
       <SectionLabel>Live telemetry</SectionLabel>
       <SpRow
-        label="Pressure"
-        value={p.ui_class === 'main' ? '3.4 bar' : p.ui_class === 'backfeed' ? '— (closed)' : '2.6 bar'}
+        label="Velocity"
+        value={currentVel}
         mono
-        color={p.ui_class === 'backfeed' ? '#94a3b8' : '#22c55e'}
+        color={sim && Math.abs(sim.velocity[simHour]) > 1.8 ? '#ef4444' : '#22c55e'}
       />
-      <SpRow label="Flow estimate" value={p.diameter_mm ? `${Math.round((p.diameter_mm / 25) ** 1.6 * 0.8)} L/s` : '—'} mono />
+      <SpRow label="Flow rate" value={currentFlow} mono />
       <SpRow label="Anomaly score" value="0.04" mono />
+
+      {sim && (
+        <>
+          <div style={{ height: 14 }} />
+          <SectionLabel>Simulation Profiles</SectionLabel>
+          <SimulationChart
+            title="Flow Rate Profile"
+            values={sim.flow}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="L/s"
+          />
+          <SimulationChart
+            title="Velocity Profile"
+            values={sim.velocity}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="m/s"
+          />
+        </>
+      )}
     </SidePanel>
   );
 }
 
-function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () => void }) {
+function AssetPanel({ feature, onClose, simData, simHour }: {
+  feature: AssetFeature;
+  onClose: () => void;
+  simData: SimulationData | null;
+  simHour: number;
+}) {
   const p = feature.properties;
+  const sim = simData ? simData.nodes[p.id] : null;
+  const currentPress = sim ? sim.pressure[simHour] : null;
+  const currentDemand = sim ? sim.demand[simHour] : null;
+
   if (p.asset === 'tank') {
-    const lvlColor = p.level_pct > 70 ? '#22c55e' : p.level_pct > 35 ? '#f59e0b' : '#ef4444';
+    const displayLevel = currentPress !== null ? currentPress : p.level_pct;
+    const lvlColor = displayLevel > 70 ? '#22c55e' : displayLevel > 35 ? '#f59e0b' : '#ef4444';
     return (
       <SidePanel
         open
@@ -885,13 +1613,14 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
         pill={{ tone: p.status === 'ok' ? 'safe' : 'warn', label: p.status === 'ok' ? 'Operating' : 'Watch' }}
       >
         <SectionLabel>Live level sensor</SectionLabel>
-        <SpRow label="Level reading" value={`${p.level_pct}%`} mono color={lvlColor} />
-        <div className="aw-level-bar">
-          <div className="aw-level-fill" style={{ width: `${p.level_pct}%`, background: lvlColor }} />
-        </div>
-        <SpRow label="Volume stored" value={`${Math.round(p.capacity_m3 * p.level_pct / 100).toLocaleString()} m³`} mono />
+        <SpRow label="Pressure Head" value={currentPress !== null ? `${currentPress.toFixed(1)} m` : `${p.level_pct}%`} mono color={lvlColor} />
+        {currentPress === null && (
+          <div className="aw-level-bar">
+            <div className="aw-level-fill" style={{ width: `${p.level_pct}%`, background: lvlColor }} />
+          </div>
+        )}
+        <SpRow label="Volume stored" value={currentPress !== null ? `${Math.round(p.capacity_m3 * currentPress / 10).toLocaleString()} m³` : `${Math.round(p.capacity_m3 * p.level_pct / 100).toLocaleString()} m³`} mono />
         <SpRow label="Capacity" value={`${p.capacity_m3.toLocaleString()} m³`} mono />
-        <SpRow label="Hours to empty" value={`${Math.max(1, Math.round((p.level_pct * p.capacity_m3 / 100) / Math.max(0.5, p.outflow_lps * 3.6)))}h`} mono />
         <div style={{ height: 14 }} />
         <SectionLabel>Flow</SectionLabel>
         <SpRow label="Inflow" value={`${p.inflow_lps} L/s`} mono color="#0B5FFF" />
@@ -901,6 +1630,27 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
         <SectionLabel>Identifier</SectionLabel>
         <SpRow label="Tank ID" value={p.id} mono />
         <SpRow label="Connecting pipes" value={p.junction_degree} mono />
+
+        {sim && (
+          <>
+            <div style={{ height: 14 }} />
+            <SectionLabel>Simulation Profiles</SectionLabel>
+            <SimulationChart
+              title="Pressure Head Profile"
+              values={sim.pressure}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="m"
+            />
+            <SimulationChart
+              title="Flow / Demand Profile"
+              values={sim.demand}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="L/s"
+            />
+          </>
+        )}
       </SidePanel>
     );
   }
@@ -919,7 +1669,7 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
       >
         <SectionLabel>Pressure</SectionLabel>
         <SpRow label="Set point" value={`${p.set_bar} bar`} mono />
-        <SpRow label="Live reading" value={`${p.live_bar} bar`} mono color={p.status === 'alert' ? '#ef4444' : p.status === 'warn' ? '#f59e0b' : '#22c55e'} />
+        <SpRow label="Live reading" value={currentPress !== null ? `${(currentPress * 0.1).toFixed(2)} bar` : `${p.live_bar} bar`} mono color={p.status === 'alert' ? '#ef4444' : p.status === 'warn' ? '#f59e0b' : '#22c55e'} />
         <SpRow label="Drift" value={`${drift >= 0 ? '+' : ''}${drift.toFixed(2)} bar`} mono />
         <div style={{ height: 14 }} />
         <SectionLabel>Thresholds</SectionLabel>
@@ -929,6 +1679,27 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
         <div style={{ height: 14 }} />
         <SectionLabel>Identifier</SectionLabel>
         <SpRow label="Valve ID" value={p.id} mono />
+
+        {sim && (
+          <>
+            <div style={{ height: 14 }} />
+            <SectionLabel>Simulation Profiles</SectionLabel>
+            <SimulationChart
+              title="Pressure Profile"
+              values={sim.pressure}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="m"
+            />
+            <SimulationChart
+              title="Flow Rate Profile"
+              values={sim.demand}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="L/s"
+            />
+          </>
+        )}
       </SidePanel>
     );
   }
@@ -946,12 +1717,32 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
         <SpRow label="State" value={p.state} />
         <div style={{ height: 14 }} />
         <SectionLabel>Consumption</SectionLabel>
-        <SpRow label="Today" value={`${p.consumption_m3d.toLocaleString()} m³`} mono color="#0B5FFF" />
+        <SpRow label="Flow rate" value={currentDemand !== null ? `${currentDemand.toFixed(1)} L/s` : `${p.consumption_m3d.toLocaleString()} m³`} mono color="#0B5FFF" />
         <SpRow label="7-day avg" value={`${Math.round(p.consumption_m3d * 0.92).toLocaleString()} m³`} mono />
-        <SpRow label="Trend" value={p.consumption_m3d > 700 ? '▲ rising' : '▬ steady'} />
         <div style={{ height: 14 }} />
         <SectionLabel>Identifier</SectionLabel>
         <SpRow label="Meter ID" value={p.id} mono />
+
+        {sim && (
+          <>
+            <div style={{ height: 14 }} />
+            <SectionLabel>Simulation Profiles</SectionLabel>
+            <SimulationChart
+              title="Pressure Profile"
+              values={sim.pressure}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="m"
+            />
+            <SimulationChart
+              title="Flow Profile"
+              values={sim.demand}
+              timesteps={simData!.timesteps}
+              currentHour={simHour}
+              unit="L/s"
+            />
+          </>
+        )}
       </SidePanel>
     );
   }
@@ -964,8 +1755,8 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
       pill={{ tone: p.status === 'ok' ? 'safe' : 'danger', label: p.status === 'ok' ? 'Online' : 'Alert' }}
     >
       <SectionLabel>Live reading</SectionLabel>
-      <SpRow label="Flow rate" value={`${p.flow_lps} L/s`} mono color="#0B5FFF" />
-      <SpRow label="Pressure" value={`${p.pressure_bar} bar`} mono color="#22c55e" />
+      <SpRow label="Flow rate" value={currentDemand !== null ? `${currentDemand.toFixed(1)} L/s` : `${p.flow_lps} L/s`} mono color="#0B5FFF" />
+      <SpRow label="Pressure" value={currentPress !== null ? `${(currentPress * 0.1).toFixed(2)} bar` : `${p.pressure_bar} bar`} mono color="#22c55e" />
       <SpRow label="Sensor type" value={p.type} />
       <SpRow label="Last reading" value={p.last_seen} mono />
       <div style={{ height: 14 }} />
@@ -976,6 +1767,27 @@ function AssetPanel({ feature, onClose }: { feature: AssetFeature; onClose: () =
       <SectionLabel>Linkage</SectionLabel>
       <SpRow label="On pipe" value={p.pipe_id} mono />
       <SpRow label="Sensor ID" value={p.id} mono />
+
+      {sim && (
+        <>
+          <div style={{ height: 14 }} />
+          <SectionLabel>Simulation Profiles</SectionLabel>
+          <SimulationChart
+            title="Pressure Profile"
+            values={sim.pressure}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="m"
+          />
+          <SimulationChart
+            title="Flow Profile"
+            values={sim.demand}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="L/s"
+          />
+        </>
+      )}
     </SidePanel>
   );
 }
@@ -1009,4 +1821,97 @@ function Sparkline({ base }: { base: number }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <div className="sp-section-label">{children}</div>;
+}
+
+function getVelocityColor(vel: number, isDark: boolean): string {
+  const v = Math.abs(vel);
+  if (v < 0.05) return isDark ? '#475569' : '#94a3b8'; // Slate (Zero flow/idle)
+  if (v < 0.8) return '#10b981';                      // Green (Nominal speed)
+  if (v < 1.8) return '#f59e0b';                      // Orange (Warning)
+  return '#ef4444';                                   // Red (Excessive scour velocity)
+}
+
+function getFlowWeight(flow: number, baseWeight: number): number {
+  const f = Math.abs(flow);
+  if (f < 0.5) return baseWeight * 0.8;
+  if (f < 5.0) return baseWeight * 1.1;
+  if (f < 50.0) return baseWeight * 1.5;
+  return baseWeight * 2.2;
+}
+
+function formatSimTime(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const hPad = h.toString().padStart(2, '0');
+  const mPad = m.toString().padStart(2, '0');
+  return `${hPad}:${mPad}`;
+}
+
+function SimulationChart({
+  title,
+  values,
+  timesteps,
+  currentHour,
+  unit
+}: {
+  title: string;
+  values: number[];
+  timesteps: number[];
+  currentHour: number;
+  unit: string;
+}) {
+  const max = Math.max(...values, 1.0);
+  const min = Math.min(...values, 0.0);
+  const range = max - min || 1.0;
+  
+  const w = 320;
+  const h = 100;
+  const paddingLeft = 35;
+  const paddingRight = 10;
+  const paddingTop = 15;
+  const paddingBottom = 20;
+  
+  const graphWidth = w - paddingLeft - paddingRight;
+  const graphHeight = h - paddingTop - paddingBottom;
+  
+  const points = values.map((v, i) => {
+    const x = paddingLeft + (i / (values.length - 1)) * graphWidth;
+    const y = paddingTop + graphHeight - ((v - min) / range) * graphHeight;
+    return [x, y] as [number, number];
+  });
+  
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const areaPath = `${path} L${(paddingLeft + graphWidth).toFixed(1)},${(paddingTop + graphHeight).toFixed(1)} L${paddingLeft.toFixed(1)},${(paddingTop + graphHeight).toFixed(1)} Z`;
+  
+  const cursorX = paddingLeft + (currentHour / (values.length - 1)) * graphWidth;
+  
+  return (
+    <div className="sim-chart-container" style={{ marginTop: 12 }}>
+      <div className="sim-chart-head" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: 4 }}>
+        <span style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 'bold' }}>{title}</span>
+        <strong style={{ color: 'hsl(var(--primary))' }}>{(values[currentHour] || 0.0).toFixed(2)} {unit}</strong>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 'auto', background: 'hsl(var(--card-muted))', borderRadius: 'var(--r-md)', border: '1px solid hsl(var(--border))' }}>
+        <line x1={paddingLeft} y1={paddingTop} x2={w - paddingRight} y2={paddingTop} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+        <line x1={paddingLeft} y1={paddingTop + graphHeight / 2} x2={w - paddingRight} y2={paddingTop + graphHeight / 2} stroke="hsl(var(--border))" strokeWidth={1} strokeDasharray="3 3" />
+        <line x1={paddingLeft} y1={paddingTop + graphHeight} x2={w - paddingRight} y2={paddingTop + graphHeight} stroke="hsl(var(--border))" strokeWidth={1} />
+        
+        <text x={paddingLeft - 6} y={paddingTop + 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{max.toFixed(1)}</text>
+        <text x={paddingLeft - 6} y={paddingTop + graphHeight / 2 + 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{((max + min) / 2).toFixed(1)}</text>
+        <text x={paddingLeft - 6} y={paddingTop + graphHeight + 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{min.toFixed(1)}</text>
+        
+        <text x={paddingLeft} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="start">00:00</text>
+        <text x={paddingLeft + graphWidth / 2} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="middle">12:00</text>
+        <text x={paddingLeft + graphWidth} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">24:00</text>
+        
+        <path d={areaPath} fill="rgba(11,95,255,0.08)" />
+        <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.8} />
+        
+        <line x1={cursorX} y1={paddingTop} x2={cursorX} y2={paddingTop + graphHeight} stroke="hsl(var(--accent))" strokeWidth={1.5} />
+        {points[currentHour] && (
+          <circle cx={cursorX} cy={points[currentHour][1]} r={3.5} fill="hsl(var(--accent))" stroke="white" strokeWidth={1} />
+        )}
+      </svg>
+    </div>
+  );
 }

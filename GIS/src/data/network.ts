@@ -102,6 +102,7 @@ export interface AssetFeature {
 }
 
 export interface NetworkMeta {
+  id?: string;
   name?: string;
   source: string;
   feature_count: number;
@@ -166,7 +167,7 @@ async function loadFromBackend(): Promise<NetworkData> {
     const netsRes = await fetch('/api/v1/networks/', { headers });
     if (!netsRes.ok) throw new Error('Failed to fetch networks list');
     const networks = await netsRes.json();
-    const network = networks.find((n: any) => n.name === 'Kiwasco Network') || networks[0];
+    const network = networks[0];
     if (!network) throw new Error('No networks found in backend');
     networkId = network.id;
     localStorage.setItem('activeNetworkId', networkId!);
@@ -352,6 +353,7 @@ async function loadFromBackend(): Promise<NetworkData> {
   }
 
   const meta: NetworkMeta = {
+    id: networkId || undefined,
     name: netDetail.name,
     source: 'Django PostGIS Backend',
     feature_count: pipes.length,
@@ -406,6 +408,25 @@ export function loadNetwork(): Promise<NetworkData> {
     }
   })();
   return cache;
+}
+
+export interface SimulationData {
+  network_id: string;
+  timesteps: number[];
+  nodes: Record<string, { pressure: number[]; demand: number[] }>;
+  links: Record<string, { flow: number[]; velocity: number[]; status: string[] }>;
+  patterns: Record<string, number[]>;
+  controls: string[];
+}
+
+export async function loadSimulation(networkId: string): Promise<SimulationData> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/v1/networks/${networkId}/simulation/`, { headers });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to load simulation results');
+  }
+  return await res.json();
 }
 
 /**
@@ -662,3 +683,18 @@ export function deriveNRW(meta: NetworkMeta): number {
 export function lengthByClass(meta: NetworkMeta, cls: PipeClass): number {
   return meta.length_km_by_class[cls] || 0;
 }
+
+export async function renameNetwork(networkId: string, newName: string): Promise<any> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`/api/v1/networks/${networkId}/`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify({ name: newName })
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || 'Failed to rename network');
+  }
+  return await res.json();
+}
+
