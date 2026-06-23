@@ -81,6 +81,7 @@ export default function GISMap() {
   const [editableName, setEditableName] = useState<string>('');
   const [is3D, setIs3D] = useState<boolean>(false);
   const [activePlugin, setActivePlugin] = useState<'search' | 'pressures' | 'flow' | 'demand' | null>(null);
+  const [isSimEnabled, setIsSimEnabled] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const pipeLayersRef = useRef<Map<string, L.Polyline>>(new Map());
@@ -188,6 +189,16 @@ export default function GISMap() {
         lineJoin: 'round',
         renderer
       });
+      const flowLine = L.polyline(coords, {
+        color: style.color,
+        weight: style.weight,
+        opacity: 0,
+        dashArray: '0 9999',
+        lineCap: 'round',
+        lineJoin: 'round',
+        renderer,
+        interactive: false
+      });
       line.bindPopup(() => pipePopupHtml(feat), {
         className: 'aw-popup aw-popup-pipe',
         closeButton: false,
@@ -232,6 +243,8 @@ export default function GISMap() {
         }
       });
       line.addTo(group);
+      flowLine.addTo(group);
+      (line as any)._flowLine = flowLine;
       pipeLayersRef.current.set(feat.properties.id, line);
     });
 
@@ -468,7 +481,7 @@ export default function GISMap() {
 
   /* ── 9. dynamic styling of leaflet layers based on active simulation hour ── */
   useEffect(() => {
-    if (!simData) return;
+    if (!simData || !isSimEnabled) return;
     const isDark = mode === 'dark';
     const scale = zoom >= 17 ? 1.35 : zoom >= 15 ? 1.15 : zoom >= 13 ? 1 : 0.78;
     
@@ -484,7 +497,10 @@ export default function GISMap() {
       
       const isFlowing = Math.abs(flow) > 0.1;
       
+      const flowLine = (layer as any)._flowLine;
       const pathEl = (layer as any)._path;
+      const flowPathEl = flowLine ? (flowLine as any)._path : null;
+
       let pathLength = 100;
       if (pathEl) {
         try {
@@ -492,23 +508,36 @@ export default function GISMap() {
         } catch (e) {
           pathLength = 100;
         }
+      } else if (flowPathEl) {
+        try {
+          pathLength = flowPathEl.getTotalLength() || 100;
+        } catch (e) {
+          pathLength = 100;
+        }
       }
 
       const targetColor = getVelocityColor(vel, isDark);
       const targetWeight = getFlowWeight(flow, baseStyle.weight * scale);
-      const targetOpacity = 0.95;
-      const targetDashArray = isFlowing ? `8 ${pathLength.toFixed(1)}` : undefined;
+      
+      // The pipe should be dull, and the dash overlay should be bright.
+      const targetOpacity = 0.25; 
+      
+      const targetFlowColor = targetColor;
+      const targetFlowWeight = targetWeight;
+      const targetFlowOpacity = isFlowing ? 1.0 : 0.0;
+      const targetFlowDashArray = isFlowing ? `8 ${pathLength.toFixed(1)}` : '0 9999';
+      
       const targetDirection = isFlowing ? (vel > 0 ? 'forward' : 'reverse') : 'idle';
-      const targetAnimSpeed = isFlowing 
-        ? `${Math.min(8.0, Math.max(0.3, pathLength / (Math.abs(vel) * 40))).toFixed(2)}s` 
-        : '';
 
       const cached = (layer as any)._cachedStyle;
       const changed = !cached ||
         cached.color !== targetColor ||
         cached.weight !== targetWeight ||
         cached.opacity !== targetOpacity ||
-        cached.dashArray !== targetDashArray ||
+        cached.flowColor !== targetFlowColor ||
+        cached.flowWeight !== targetFlowWeight ||
+        cached.flowOpacity !== targetFlowOpacity ||
+        cached.flowDashArray !== targetFlowDashArray ||
         cached.direction !== targetDirection;
 
       if (changed) {
@@ -516,55 +545,75 @@ export default function GISMap() {
           color: targetColor,
           weight: targetWeight,
           opacity: targetOpacity,
-          dashArray: targetDashArray
+          dashArray: undefined
         });
+        
+        if (flowLine) {
+          flowLine.setStyle({
+            color: targetFlowColor,
+            weight: targetFlowWeight,
+            opacity: targetFlowOpacity,
+            dashArray: targetFlowDashArray
+          });
+        }
         
         (layer as any)._cachedStyle = {
           color: targetColor,
           weight: targetWeight,
           opacity: targetOpacity,
-          dashArray: targetDashArray,
+          flowColor: targetFlowColor,
+          flowWeight: targetFlowWeight,
+          flowOpacity: targetFlowOpacity,
+          flowDashArray: targetFlowDashArray,
           direction: targetDirection
         };
         
-        if (pathEl) {
-          pathEl.style.setProperty('--flow-offset-fwd', `-${(pathLength + 8).toFixed(1)}px`);
-          pathEl.style.setProperty('--flow-offset-rev', `${(pathLength + 8).toFixed(1)}px`);
+        if (flowPathEl) {
+          flowPathEl.style.setProperty('--flow-offset-fwd', `-${(pathLength + 8).toFixed(1)}px`);
+          flowPathEl.style.setProperty('--flow-offset-rev', `${(pathLength + 8).toFixed(1)}px`);
           
           if (targetDirection === 'forward') {
-            pathEl.classList.add('flow-forward');
-            pathEl.classList.remove('flow-reverse');
+            flowPathEl.classList.add('flow-forward');
+            flowPathEl.classList.remove('flow-reverse');
           } else if (targetDirection === 'reverse') {
-            pathEl.classList.add('flow-reverse');
-            pathEl.classList.remove('flow-forward');
+            flowPathEl.classList.add('flow-reverse');
+            flowPathEl.classList.remove('flow-forward');
           } else {
-            pathEl.classList.remove('flow-forward', 'flow-reverse');
-            pathEl.style.animationDuration = '';
+            flowPathEl.classList.remove('flow-forward', 'flow-reverse');
+            flowPathEl.style.animationDuration = '';
           }
         }
-      } else {
-        // Double-check path element classes are consistent (crucial if Leaflet recreated them on panning)
         if (pathEl) {
-          if (targetDirection === 'forward' && !pathEl.classList.contains('flow-forward')) {
-            pathEl.classList.add('flow-forward');
-            pathEl.classList.remove('flow-reverse');
-          } else if (targetDirection === 'reverse' && !pathEl.classList.contains('flow-reverse')) {
-            pathEl.classList.add('flow-reverse');
-            pathEl.classList.remove('flow-forward');
-          } else if (targetDirection === 'idle' && (pathEl.classList.contains('flow-forward') || pathEl.classList.contains('flow-reverse'))) {
-            pathEl.classList.remove('flow-forward', 'flow-reverse');
-            pathEl.style.animationDuration = '';
+          pathEl.classList.remove('flow-forward', 'flow-reverse');
+          pathEl.style.animationDuration = '';
+        }
+      } else {
+        // Double-check path element classes are consistent
+        if (flowPathEl) {
+          if (targetDirection === 'forward' && !flowPathEl.classList.contains('flow-forward')) {
+            flowPathEl.classList.add('flow-forward');
+            flowPathEl.classList.remove('flow-reverse');
+          } else if (targetDirection === 'reverse' && !flowPathEl.classList.contains('flow-reverse')) {
+            flowPathEl.classList.add('flow-reverse');
+            flowPathEl.classList.remove('flow-forward');
+          } else if (targetDirection === 'idle' && (flowPathEl.classList.contains('flow-forward') || flowPathEl.classList.contains('flow-reverse'))) {
+            flowPathEl.classList.remove('flow-forward', 'flow-reverse');
+            flowPathEl.style.animationDuration = '';
           }
+        }
+        if (pathEl) {
+          pathEl.classList.remove('flow-forward', 'flow-reverse');
+          pathEl.style.animationDuration = '';
         }
       }
 
       // Inline velocity-based duration scaling updates continuously for smooth transitions
-      if (pathEl && isFlowing) {
+      if (flowPathEl && isFlowing) {
         const speedFactor = Math.abs(vel) * 40; // 40 pixels per second per (m/s)
         const duration = Math.min(8.0, Math.max(0.3, pathLength / speedFactor));
-        pathEl.style.animationDuration = `${duration.toFixed(2)}s`;
-      } else if (pathEl) {
-        pathEl.style.animationDuration = '';
+        flowPathEl.style.animationDuration = `${duration.toFixed(2)}s`;
+      } else if (flowPathEl) {
+        flowPathEl.style.animationDuration = '';
       }
     });
 
@@ -640,11 +689,11 @@ export default function GISMap() {
         }
       }
     });
-  }, [simHour, simData, mode, network]);
+  }, [simHour, simData, mode, network, isSimEnabled]);
 
   /* ── 10. restore standard pipe styles and apply zoom scaling if simulation is closed/unavailable ── */
   useEffect(() => {
-    if (simData) return;
+    if (simData && isSimEnabled) return;
     const scale = zoom >= 17 ? 1.35 : zoom >= 15 ? 1.15 : zoom >= 13 ? 1 : 0.78;
     pipeLayersRef.current.forEach((layer, id) => {
       const feature = network?.pipes.find(p => p.properties.id === id);
@@ -665,6 +714,20 @@ export default function GISMap() {
       if (pathEl) {
         pathEl.classList.remove('flow-forward', 'flow-reverse');
         pathEl.style.animationDuration = '';
+      }
+
+      // Hide flow line
+      const flowLine = (layer as any)._flowLine;
+      if (flowLine) {
+        flowLine.setStyle({
+          opacity: 0,
+          dashArray: '0 9999'
+        });
+        const flowPathEl = (flowLine as any)._path;
+        if (flowPathEl) {
+          flowPathEl.classList.remove('flow-forward', 'flow-reverse');
+          flowPathEl.style.animationDuration = '';
+        }
       }
     });
 
@@ -710,7 +773,7 @@ export default function GISMap() {
         }
       }
     });
-  }, [simData, network, zoom]);
+  }, [simData, network, zoom, isSimEnabled]);
 
   /* ── 11. workmode changes sync with visible layers ── */
   useEffect(() => {
@@ -1124,6 +1187,24 @@ export default function GISMap() {
             <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
               <p>Pipe segments style changes dynamically according to simulation water flow directions.</p>
               <p style={{ marginTop: '6px', color: '#8ACDE5' }}>Chevrons move to show direction on active simulation hours.</p>
+              <div style={{ 
+                marginTop: '16px', 
+                paddingTop: '12px', 
+                borderTop: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between'
+              }}>
+                <span style={{ fontWeight: 500, color: '#FFFFFF' }}>Simulation Overlay</span>
+                <label className="aw-switch">
+                  <input 
+                    type="checkbox" 
+                    checked={isSimEnabled} 
+                    onChange={(e) => setIsSimEnabled(e.target.checked)} 
+                  />
+                  <span className="aw-switch-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
         )}
