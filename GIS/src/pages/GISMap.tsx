@@ -1,12 +1,3 @@
-/**
- * GISMap — real Kisumu water supply network.
- *
- * Renders 4,951 pipe segments from the converted shapefile across five
- * operational layers (mains, distribution, service, backfeed, zone boundary)
- * plus a synthesized telemetry overlay (tanks, pressure valves, meter
- * valves, flow+pressure sensors). Click any asset to see its full operational
- * profile in the side panel.
- */
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
@@ -15,11 +6,13 @@ import { SidePanel, SpRow } from '../components/SidePanel';
 import { useTheme } from '../theme';
 import {
   loadNetwork,
-  loadSimulation,
+  triggerSimulation,
+  pollSimulation,
   renameNetwork,
   clearNetworkCache,
   type NetworkData,
   type SimulationData,
+  type SimulationStatus,
   type PipeClass,
   type PipeFeature,
   type AssetFeature,
@@ -35,7 +28,7 @@ import {
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a> · Kisumu water demo data';
+  '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a>';
 
 type Focus =
   | { kind: 'pipe'; feature: PipeFeature }
@@ -70,6 +63,7 @@ export default function GISMap() {
   const [isSchematic, setIsSchematic] = useState<boolean>(false);
   const [showBasemap, setShowBasemap] = useState<boolean>(true);
   const [simData, setSimData] = useState<SimulationData | null>(null);
+  const [simStatus, setSimStatus] = useState<SimulationStatus>('none');
   const [simHour, setSimHour] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playSpeed, setPlaySpeed] = useState<number>(1);
@@ -103,12 +97,8 @@ export default function GISMap() {
         if (alive) {
           setNetwork(data);
           setEditableName(data.meta.name || 'Untitled Network');
-          // Detect schematic heuristic based on bounding box
-          const [minLon, minLat, maxLon, maxLat] = data.meta.bbox;
-          const isGeographic = minLon >= -180 && maxLon <= 180 && minLat >= -90 && maxLat <= 90;
-          const lonSpan = Math.abs(maxLon - minLon);
-          const latSpan = Math.abs(maxLat - minLat);
-          const schematic = !isGeographic || lonSpan > 2.0 || latSpan > 2.0;
+          // Use authoritative is_schematic flag from the backend
+          const schematic = data.meta.is_schematic === true;
           setIsSchematic(schematic);
           setShowBasemap(!schematic);
         }
@@ -452,23 +442,52 @@ export default function GISMap() {
     setSearchParams(next, { replace: true });
   }, [network, searchParams, setSearchParams]);
 
-  /* ── 7. load simulation data if available ── */
+  /* ── 7. async simulation: trigger run then poll until complete ── */
   useEffect(() => {
-    if (!network || !network.meta.id) return;
+    if (!network?.meta.id) return;
+    const networkId = network.meta.id;
     let alive = true;
-    loadSimulation(network.meta.id)
-      .then((data) => {
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function startAndPoll() {
+      try {
+        // Trigger a new run (backend ignores if one is already running)
+        await triggerSimulation(networkId);
+      } catch (err: any) {
         if (alive) {
-          setSimData(data);
-          setSimHour(0);
+          // No EPANET file uploaded yet — surface status but don't crash
+          console.info('Simulation not available:', err.message);
+          setSimStatus('none');
+          return;
         }
-      })
-      .catch((err) => {
-        console.log("No simulation data found or failed to load:", err.message);
-        if (alive) setSimData(null);
-      });
-    return () => { alive = false; };
-  }, [network]);
+      }
+
+      async function poll() {
+        if (!alive) return;
+        try {
+          const result = await pollSimulation(networkId);
+          if (!alive) return;
+          setSimStatus(result.status);
+          if (result.status === 'complete' && result.data) {
+            setSimData(result.data);
+            setSimHour(0);
+          } else if (result.status === 'queued' || result.status === 'running') {
+            pollTimer = setTimeout(poll, 3000);
+          }
+        } catch (err) {
+          console.warn('Simulation poll error:', err);
+        }
+      }
+
+      poll();
+    }
+
+    startAndPoll();
+    return () => {
+      alive = false;
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+  }, [network?.meta.id]);
 
   /* ── 8. animate simulation playback ── */
   useEffect(() => {
@@ -1219,6 +1238,18 @@ export default function GISMap() {
               <p>No active anomalies detected in this simulation run.</p>
               <p style={{ marginTop: '6px', color: '#00C887' }}>✓ All demands meet structural patterns.</p>
             </div>
+          </div>
+        )}
+
+        {(simStatus === 'queued' || simStatus === 'running') && !simData && (
+          <div className="gis-sim-loading-badge">
+            <span className="gis-sim-spinner" />
+            {simStatus === 'queued' ? 'Simulation queued…' : 'Running hydraulic simulation…'}
+          </div>
+        )}
+        {simStatus === 'failed' && !simData && (
+          <div className="gis-sim-loading-badge gis-sim-failed">
+            Simulation failed — check EPANET file
           </div>
         )}
 

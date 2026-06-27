@@ -52,6 +52,7 @@ interface NetworkItem {
   total_nodes: number;
   total_length_km: number;
   source_crs: string;
+  is_schematic: boolean;
   bbox: any;
   created_at: string;
 }
