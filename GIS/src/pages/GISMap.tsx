@@ -149,9 +149,10 @@ export default function GISMap() {
     // Use SVG renderer for pipes to support CSS stroke-dashoffset animations and classes
     rendererRef.current = L.svg({ padding: 0.1 });
 
-    /* layer groups */
+    /* layer groups — order matters for SVG z-stacking: groups added first render below later ones.
+       junctions → pipes → assets ensures pipes sit on top of junction dots. */
     const groups: Partial<Record<PipeClass | AssetKind | 'junction', L.LayerGroup>> = {};
-    ([...PIPE_KEYS, ...ASSET_KEYS, 'junction'] as Array<PipeClass | AssetKind | 'junction'>).forEach((k) => {
+    (['junction', ...PIPE_KEYS, ...ASSET_KEYS] as Array<PipeClass | AssetKind | 'junction'>).forEach((k) => {
       const g = L.layerGroup();
       groups[k] = g;
       if (DEFAULT_LAYERS[k]) g.addTo(map);
@@ -619,8 +620,11 @@ export default function GISMap() {
         const nodeColor = press < 10.0 ? '#ef4444' : press < 15.0 ? '#f59e0b' : '#22c55e';
         const outlineColor = press < 10.0 ? '#b91c1c' : press < 15.0 ? '#d97706' : '#15803d';
 
-        // Consumer Demand radius scaling (L/s scale)
-        const radius = 3.5 + Math.min(10, Math.abs(demandLs) * 0.8);
+        // Zoom-scaled base radius — same scale factor used by pipes
+        const baseRadius = 3.5 * scale;
+        // Demand growth capped tighter at low zoom so nodes don't blob together
+        const maxGrowth = zoom >= 15 ? 6 : zoom >= 13 ? 3 : 1;
+        const radius = baseRadius + Math.min(maxGrowth, Math.abs(demandLs) * 0.4 * scale);
 
         marker.setStyle({
           fillColor: nodeColor,
@@ -628,10 +632,10 @@ export default function GISMap() {
           radius: radius
         });
 
-        // Pulsing animation based on active demand (> 0.05 L/s = 0.00005 m³/s)
+        // Only pulse at zoom ≥ 14 — at zoom-out the animation is visual noise
         const pathEl = marker.getElement();
         if (pathEl) {
-          if (demand > 0.00005) {
+          if (demand > 0.00005 && zoom >= 14) {
             pathEl.classList.add('demand-pulsing');
           } else {
             pathEl.classList.remove('demand-pulsing');
