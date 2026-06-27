@@ -501,6 +501,12 @@ class NetworkSimulationView(APIView):
         except WaterNetwork.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
+        has_epanet = NetworkUpload.objects.filter(
+            network=network,
+            file_type__in=["epanet_inp", "epanet"],
+            status__in=[NetworkUpload.Status.COMPLETE, NetworkUpload.Status.COMPLETE_WITH_WARNINGS],
+        ).exists()
+
         run = (
             network.simulation_runs
             .order_by("-created_at")
@@ -508,11 +514,12 @@ class NetworkSimulationView(APIView):
         )
 
         if not run:
-            return Response({"status": "none"}, status=status.HTTP_200_OK)
+            return Response({"status": "none", "has_epanet": has_epanet}, status=status.HTTP_200_OK)
 
         data = {
             "run_id": str(run.id),
             "status": run.status,
+            "has_epanet": has_epanet,
             "error_message": run.error_message or None,
             "created_at": run.created_at,
             "completed_at": run.completed_at,
