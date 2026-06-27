@@ -41,6 +41,7 @@ class WaterNetwork(models.Model):
     upload = models.OneToOneField(NetworkUpload, on_delete=models.SET_NULL, null=True, blank=True)
     name = models.CharField(max_length=255)
     source_crs = models.CharField(max_length=50, blank=True)
+    is_schematic = models.BooleanField(default=False)
     bbox = gis_models.PolygonField(srid=4326, null=True, blank=True)
     total_length_km = models.FloatField(null=True, blank=True)
     total_pipes = models.IntegerField(default=0)

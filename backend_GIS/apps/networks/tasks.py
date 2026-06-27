@@ -95,6 +95,22 @@ def _reproject(geom_dict, transformer):
     return json.loads(to_geojson(reprojected))
 
 
+def _detect_is_schematic(bbox) -> bool:
+    """Return True if the network's bounding box is outside valid WGS84 geographic range.
+
+    Networks with projected or local-engineering coordinates that couldn't be
+    reprojected end up with values outside [-180, 180] / [-90, 90]; those should
+    be treated as schematic (no basemap tile overlay).
+    """
+    if bbox is None:
+        return False
+    try:
+        minx, miny, maxx, maxy = bbox.extent
+        return not (-180 <= minx <= 180 and -180 <= maxx <= 180 and -90 <= miny <= 90 and -90 <= maxy <= 90)
+    except Exception:
+        return False
+
+
 def _to_float(val):
     try:
         return float(val) if val is not None else None
@@ -487,6 +503,7 @@ def ingest_shapefile(self, upload_id: str):
                 )
                 network.total_length_km = cursor.fetchone()[0]
 
+            network.is_schematic = _detect_is_schematic(network.bbox)
             network.save()
 
             upload.network = network
@@ -801,7 +818,9 @@ def ingest_epanet(self, upload_id: str):
             if row and row[0]:
                 from django.contrib.gis.geos import GEOSGeometry as _G
                 network.bbox = _G(row[0]).envelope
-                network.save(update_fields=["bbox"])
+
+            network.is_schematic = _detect_is_schematic(network.bbox)
+            network.save(update_fields=["bbox", "is_schematic"])
 
         upload.status = (
             NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings
@@ -1115,6 +1134,7 @@ def ingest_geojson(self, upload_id: str):
             )
             network.total_length_km = cursor.fetchone()[0]
 
+        network.is_schematic = _detect_is_schematic(network.bbox)
         network.save()
 
         upload.status = (
@@ -1572,6 +1592,7 @@ def ingest_kml(self, upload_id: str):
                 )
                 network.total_length_km = cursor.fetchone()[0]
 
+            network.is_schematic = _detect_is_schematic(network.bbox)
             network.save()
 
             upload.status = (

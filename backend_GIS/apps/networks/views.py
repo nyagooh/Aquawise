@@ -13,6 +13,22 @@ from rest_framework.views import APIView
 from .models import Asset, NetworkUpload, Node, Pipe, WaterNetwork, Zone
 
 
+def _resolve_upload_path(file_path: str) -> str:
+    """Convert a stored file_path to an absolute local filesystem path.
+
+    Stored paths may be relative (when using default local storage) or
+    already absolute (legacy). Tries default_storage.path() first; if
+    the storage backend doesn't support it (e.g. S3), returns file_path
+    unchanged so callers can use default_storage.open() instead.
+    """
+    if os.path.isabs(file_path):
+        return file_path
+    try:
+        return default_storage.path(file_path)
+    except (ValueError, NotImplementedError):
+        return file_path
+
+
 class NetworkListView(APIView):
     def get(self, request):
         networks = WaterNetwork.objects.filter(
@@ -26,6 +42,7 @@ class NetworkListView(APIView):
                 "total_nodes": n.total_nodes,
                 "total_length_km": n.total_length_km,
                 "source_crs": n.source_crs,
+                "is_schematic": n.is_schematic,
                 "bbox": json.loads(n.bbox.geojson) if n.bbox else None,
                 "created_at": n.created_at,
             }
@@ -66,13 +83,14 @@ class NetworkUploadView(APIView):
             file_type=file_type,
         )
 
-        # Save file to media/uploads/<org_id>/<upload_id>.<ext>
         upload_dir = f"uploads/{request.user.organisation_id}"
         saved_path = default_storage.save(
             os.path.join(upload_dir, f"{upload.id}.{ext}"),
             ContentFile(file.read()),
         )
-        upload.file_path = default_storage.path(saved_path)
+        # Store the absolute path so Celery workers (which may have a different
+        # working directory) can locate the file directly.
+        upload.file_path = _resolve_upload_path(saved_path)
         upload.save(update_fields=["file_path"])
 
         if ext == "zip":
@@ -109,16 +127,7 @@ class WaterNetworkDetailView(APIView):
             network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
         except WaterNetwork.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response({
-            "id": str(network.id),
-            "name": network.name,
-            "source_crs": network.source_crs,
-            "total_pipes": network.total_pipes,
-            "total_nodes": network.total_nodes,
-            "total_length_km": network.total_length_km,
-            "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
-            "created_at": network.created_at,
-        })
+        return Response(_network_detail(network))
 
     def delete(self, request, pk):
         try:
@@ -140,16 +149,21 @@ class WaterNetworkDetailView(APIView):
 
         network.name = name
         network.save(update_fields=["name"])
-        
-        return Response({
-            "id": str(network.id),
-            "name": network.name,
-            "total_pipes": network.total_pipes,
-            "total_nodes": network.total_nodes,
-            "total_length_km": network.total_length_km,
-            "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
-            "created_at": network.created_at,
-        })
+        return Response(_network_detail(network))
+
+
+def _network_detail(network: WaterNetwork) -> dict:
+    return {
+        "id": str(network.id),
+        "name": network.name,
+        "source_crs": network.source_crs,
+        "is_schematic": network.is_schematic,
+        "total_pipes": network.total_pipes,
+        "total_nodes": network.total_nodes,
+        "total_length_km": network.total_length_km,
+        "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
+        "created_at": network.created_at,
+    }
 
 
 class NetworkValidationReportView(APIView):
@@ -392,7 +406,7 @@ class NetworkStatsView(APIView):
 
 
 class EpanetUploadView(APIView):
-    """Attach an EPANET .inp or .net file to an existing network."""
+    """Attach an EPANET .inp file to an existing network."""
     parser_classes = [MultiPartParser]
 
     def post(self, request, pk):
@@ -425,7 +439,7 @@ class EpanetUploadView(APIView):
             os.path.join(upload_dir, f"{upload.id}.{ext}"),
             ContentFile(file.read()),
         )
-        upload.file_path = default_storage.path(saved_path)
+        upload.file_path = _resolve_upload_path(saved_path)
         upload.save(update_fields=["file_path"])
 
         from .tasks import ingest_epanet
@@ -449,19 +463,17 @@ class NetworkUploadsListView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         uploads = NetworkUpload.objects.filter(network=network).order_by("-uploaded_at")
-        # Also include the original shapefile upload (linked via WaterNetwork.upload)
+        data = []
         if network.upload_id:
             shp = network.upload
-            data = [{
+            data.append({
                 "id": str(shp.id),
                 "file_name": shp.file_name,
                 "file_type": shp.file_type,
                 "status": shp.status,
                 "uploaded_at": shp.uploaded_at,
                 "validation_report": shp.validation_report or {},
-            }]
-        else:
-            data = []
+            })
 
         for u in uploads:
             data.append({
@@ -477,108 +489,45 @@ class NetworkUploadsListView(APIView):
 
 
 class NetworkSimulationView(APIView):
-    """Run an EPANET hydraulic simulation using WNTR and return time-series results."""
+    """Async EPANET hydraulic simulation.
+
+    GET  → returns latest SimulationRun status + result (if complete).
+    POST → triggers a new async simulation run.
+    """
+
     def get(self, request, pk):
         try:
             network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
         except WaterNetwork.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        
-        # Find the .inp upload
-        upload = NetworkUpload.objects.filter(
-            network=network,
-            file_type="epanet_inp",
-            status__in=[NetworkUpload.Status.COMPLETE, NetworkUpload.Status.COMPLETE_WITH_WARNINGS]
-        ).first()
-        
-        if not upload or not upload.file_path or not os.path.exists(upload.file_path):
-            # Check if any epanet_inp type upload is present regardless of status, just in case
-            upload = NetworkUpload.objects.filter(
-                network=network,
-                file_type="epanet_inp"
-            ).first()
-            if not upload or not upload.file_path or not os.path.exists(upload.file_path):
-                return Response(
-                    {"error": "No EPANET simulation model file found for this network"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        
+
+        run = (
+            network.simulation_runs
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not run:
+            return Response({"status": "none"}, status=status.HTTP_200_OK)
+
+        data = {
+            "run_id": str(run.id),
+            "status": run.status,
+            "error_message": run.error_message or None,
+            "created_at": run.created_at,
+            "completed_at": run.completed_at,
+        }
+
+        if run.status == "complete" and run.result:
+            data.update(run.result)
+
+        return Response(data)
+
+    def post(self, request, pk):
         try:
-            import wntr
-            import tempfile
-            import re
-            
-            # Read and sanitize the file
-            with open(upload.file_path, "r", encoding="utf-8", errors="ignore") as f:
-                content = f.read()
-            
-            # Sanitize 'Average' statistic to 'AVERAGED' to prevent WNTR enum error
-            content = re.sub(r'(?i)statistic\s+average\b', 'Statistic AVERAGED', content)
-            
-            with tempfile.NamedTemporaryFile(suffix=".inp", mode="w", delete=False, encoding="utf-8") as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            
-            try:
-                wn = wntr.network.WaterNetworkModel(tmp_path)
-                sim = wntr.sim.WNTRSimulator(wn)
-                results = sim.run_sim()
-                
-                timesteps = [int(t) for t in results.node["pressure"].index]
-                
-                # Process nodes
-                nodes_sim = {}
-                node_names = results.node["pressure"].columns.tolist()
-                for name in node_names:
-                    pressures = results.node["pressure"][name].tolist()
-                    demands = results.node["demand"][name].tolist() if "demand" in results.node else [0.0] * len(timesteps)
-                    nodes_sim[name] = {
-                        "pressure": pressures,
-                        "demand": demands
-                    }
-                
-                # Process links (pipes, pumps, valves)
-                links_sim = {}
-                link_names = results.link["flowrate"].columns.tolist()
-                for name in link_names:
-                    flows = results.link["flowrate"][name].tolist()
-                    velocities = results.link["velocity"][name].tolist() if "velocity" in results.link else [0.0] * len(timesteps)
-                    status = results.link["status"][name].tolist() if "status" in results.link else [1.0] * len(timesteps)
-                    # convert link status code to string status: 0 = closed, 1 = open / active
-                    status_strs = ["closed" if s == 0 else "open" for s in status]
-                    links_sim[name] = {
-                        "flow": flows,
-                        "velocity": velocities,
-                        "status": status_strs
-                    }
-                    
-                # Diurnal patterns
-                patterns = {}
-                for p_name in wn.pattern_name_list:
-                    p = wn.get_pattern(p_name)
-                    patterns[p_name] = p.multipliers
-                    
-                # Controls
-                controls = []
-                for c_name, control in wn.controls():
-                    controls.append(str(control))
-                    
-                return Response({
-                    "network_id": str(network.id),
-                    "timesteps": timesteps,
-                    "nodes": nodes_sim,
-                    "links": links_sim,
-                    "patterns": patterns,
-                    "controls": controls
-                })
-            finally:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                    
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response(
-                {"error": f"Failed to run hydraulic simulation: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        from apps.hydraulics.views import _trigger_run
+        return _trigger_run(request, network)
