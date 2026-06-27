@@ -17,6 +17,7 @@ import {
   type PipeFeature,
   type AssetFeature,
   type AssetKind,
+  type JunctionFeature,
   PIPE_STYLE,
   PIPE_CLASS_ORDER,
   ASSET_STYLE,
@@ -33,6 +34,7 @@ const TILE_ATTR =
 type Focus =
   | { kind: 'pipe'; feature: PipeFeature }
   | { kind: 'asset'; feature: AssetFeature }
+  | { kind: 'junction'; feature: JunctionFeature }
   | null;
 
 type LayerVis = Record<PipeClass | AssetKind | 'junction', boolean>;
@@ -68,6 +70,10 @@ export default function GISMap() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playSpeed, setPlaySpeed] = useState<number>(1);
   const [zoom, setZoom] = useState<number>(13);
+  const [simTriggerKey, setSimTriggerKey] = useState(0);
+  const [showSimToast, setShowSimToast] = useState(false);
+  const [renameSuccess, setRenameSuccess] = useState(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [workmode, setWorkmode] = useState<string>('Network overview');
@@ -81,6 +87,9 @@ export default function GISMap() {
   const pipeLayersRef = useRef<Map<string, L.Polyline>>(new Map());
   const assetLayersRef = useRef<Map<string, L.Marker>>(new Map());
   const junctionLayersRef = useRef<Map<string, L.CircleMarker>>(new Map());
+  // Fast O(1) feature lookups — avoids .find() in hot animation loops
+  const pipeMapRef = useRef<Map<string, PipeFeature>>(new Map());
+  const assetMapRef = useRef<Map<string, AssetFeature>>(new Map());
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -97,10 +106,12 @@ export default function GISMap() {
         if (alive) {
           setNetwork(data);
           setEditableName(data.meta.name || 'Untitled Network');
-          // Use authoritative is_schematic flag from the backend
           const schematic = data.meta.is_schematic === true;
           setIsSchematic(schematic);
           setShowBasemap(!schematic);
+          // Build O(1) lookup maps for hot animation loops
+          pipeMapRef.current = new Map(data.pipes.map(p => [p.properties.id, p]));
+          assetMapRef.current = new Map(data.assets.map(a => [a.properties.id, a]));
         }
       })
       .catch((err) => {
@@ -189,12 +200,6 @@ export default function GISMap() {
         renderer,
         interactive: false
       });
-      line.bindPopup(() => pipePopupHtml(feat), {
-        className: 'aw-popup aw-popup-pipe',
-        closeButton: false,
-        offset: [0, -2],
-        maxWidth: 280
-      });
       line.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         setFocus({ kind: 'pipe', feature: feat });
@@ -250,12 +255,6 @@ export default function GISMap() {
       const marker = L.marker([lat, lon], {
         icon: assetIcon(feat)
       });
-      marker.bindPopup(() => assetPopupHtml(feat), {
-        className: `aw-popup aw-popup-${props.asset}`,
-        closeButton: false,
-        offset: [0, -14],
-        maxWidth: 280
-      });
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
         setFocus({ kind: 'asset', feature: feat });
@@ -282,43 +281,10 @@ export default function GISMap() {
           renderer,
           className: 'aw-junction-marker'
         });
-        marker.bindPopup(() => `
-          <div class="aw-popup-content">
-            <h4 class="aw-popup-title">Junction ${props.external_id}</h4>
-            <div class="aw-popup-grid">
-              <div class="aw-popup-row"><span>Type</span><strong>Junction</strong></div>
-              <div class="aw-popup-row"><span>Elevation</span><strong>${props.elevation_m ? props.elevation_m.toFixed(1) + ' m' : 'N/A'}</strong></div>
-              <div class="aw-popup-row"><span>Base Demand</span><strong>${props.demand_lps ? props.demand_lps.toFixed(2) + ' L/s' : '0.00 L/s'}</strong></div>
-            </div>
-          </div>
-        `, {
-          className: 'aw-popup aw-popup-junction',
-          closeButton: false,
-          offset: [0, -2],
-          maxWidth: 240
-        });
         marker.bindTooltip(`Junction ${props.external_id}`, { direction: 'top', offset: [0, -4] });
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
-          setFocus({
-            kind: 'asset',
-            feature: {
-              type: 'Feature',
-              id: props.id,
-              geometry: feat.geometry,
-              properties: {
-                id: props.id,
-                name: `Junction ${props.external_id}`,
-                asset: 'sensor',
-                status: 'ok',
-                flow_lps: 0,
-                pressure_bar: 0,
-                last_seen: '',
-                type: 'pressure',
-                pipe_id: ''
-              } as any
-            }
-          });
+          setFocus({ kind: 'junction', feature: feat });
         });
         const grp = groups.junction;
         if (grp) {
@@ -435,6 +401,12 @@ export default function GISMap() {
         setLayers((p) => ({ ...p, [match.properties.ui_class]: true }));
         setFocus({ kind: 'pipe', feature: match });
       }
+    } else if (kind === 'junction') {
+      const match = network.junctions?.find((j) => j.properties.id === id);
+      if (match) {
+        setLayers((p) => ({ ...p, junction: true }));
+        setFocus({ kind: 'junction', feature: match });
+      }
     }
     // consume the param so a refresh doesn't keep re-focusing
     const next = new URLSearchParams(searchParams);
@@ -442,52 +414,45 @@ export default function GISMap() {
     setSearchParams(next, { replace: true });
   }, [network, searchParams, setSearchParams]);
 
-  /* ── 7. async simulation: trigger run then poll until complete ── */
+  /* ── 7. simulation polling — check existing status on load; re-polls when simTriggerKey changes ── */
   useEffect(() => {
     if (!network?.meta.id) return;
     const networkId = network.meta.id;
     let alive = true;
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
-    async function startAndPoll() {
+    async function poll() {
+      if (!alive) return;
       try {
-        // Trigger a new run (backend ignores if one is already running)
-        await triggerSimulation(networkId);
-      } catch (err: any) {
-        if (alive) {
-          // No EPANET file uploaded yet — surface status but don't crash
-          console.info('Simulation not available:', err.message);
-          setSimStatus('none');
-          return;
-        }
-      }
-
-      async function poll() {
+        const result = await pollSimulation(networkId);
         if (!alive) return;
-        try {
-          const result = await pollSimulation(networkId);
-          if (!alive) return;
-          setSimStatus(result.status);
-          if (result.status === 'complete' && result.data) {
-            setSimData(result.data);
-            setSimHour(0);
-          } else if (result.status === 'queued' || result.status === 'running') {
-            pollTimer = setTimeout(poll, 3000);
-          }
-        } catch (err) {
-          console.warn('Simulation poll error:', err);
+        setSimStatus(result.status);
+        if (result.status === 'complete' && result.data) {
+          setSimData(prev => {
+            if (!prev) {
+              // New data: show toast
+              setTimeout(() => {
+                setShowSimToast(true);
+                setTimeout(() => setShowSimToast(false), 4000);
+              }, 0);
+              return result.data!;
+            }
+            return prev; // already loaded — don't flash toast again
+          });
+          setSimHour(0);
+        } else if (result.status === 'queued' || result.status === 'running') {
+          pollTimerRef.current = setTimeout(poll, 3000);
         }
+      } catch (err) {
+        console.warn('Simulation poll error:', err);
       }
-
-      poll();
     }
 
-    startAndPoll();
+    poll();
     return () => {
       alive = false;
-      if (pollTimer) clearTimeout(pollTimer);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [network?.meta.id]);
+  }, [network?.meta.id, simTriggerKey]);
 
   /* ── 8. animate simulation playback ── */
   useEffect(() => {
@@ -511,7 +476,7 @@ export default function GISMap() {
       const vel = sim.velocity[simHour] || 0.0;
       const flow = sim.flow[simHour] || 0.0;
       
-      const feature = network?.pipes.find(p => p.properties.id === id);
+      const feature = pipeMapRef.current.get(id);
       const baseStyle = feature ? PIPE_STYLE[feature.properties.ui_class] : { weight: 3, opacity: 0.8 };
       
       const isFlowing = Math.abs(flow) > 0.1;
@@ -681,12 +646,12 @@ export default function GISMap() {
         // Dynamically adjust tank markers and status indicators
         const el = marker.getElement();
         if (el) {
-          const feature = network?.assets.find(a => a.properties.id === id);
+          const feature = assetMapRef.current.get(id);
           if (feature) {
             const kind = feature.properties.asset;
             if (kind === 'tank') {
-              // Normalized mapping of pressure head to fill percent (typically max height is around 15m)
-              const levelPct = Math.min(100, Math.max(0, (press / 15.0) * 100));
+              // Use static level_pct from props (pressure head cannot be reliably converted without tank geometry)
+              const levelPct = (feature.properties as any).level_pct ?? 50;
               const fill = el.querySelector('.aw-tank-fill') as HTMLElement;
               const label = el.querySelector('.aw-tank-label') as HTMLElement;
               if (fill) {
@@ -715,7 +680,7 @@ export default function GISMap() {
     if (simData && isSimEnabled) return;
     const scale = zoom >= 17 ? 1.35 : zoom >= 15 ? 1.15 : zoom >= 13 ? 1 : 0.78;
     pipeLayersRef.current.forEach((layer, id) => {
-      const feature = network?.pipes.find(p => p.properties.id === id);
+      const feature = pipeMapRef.current.get(id);
       if (!feature) return;
       const style = PIPE_STYLE[feature.properties.ui_class];
       
@@ -765,7 +730,7 @@ export default function GISMap() {
     });
 
     assetLayersRef.current.forEach((marker, id) => {
-      const feature = network?.assets.find(a => a.properties.id === id);
+      const feature = assetMapRef.current.get(id);
       if (!feature) return;
       const el = marker.getElement();
       if (el) {
@@ -849,44 +814,54 @@ export default function GISMap() {
 
   const handleRename = useCallback(async () => {
     if (!network || !network.meta.id || !editableName.trim()) return;
+    if (editableName.trim() === network.meta.name) return; // no change
     try {
       await renameNetwork(network.meta.id, editableName.trim());
-      setNetwork(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          meta: {
-            ...prev.meta,
-            name: editableName.trim()
-          }
-        };
-      });
+      setNetwork(prev => prev ? { ...prev, meta: { ...prev.meta, name: editableName.trim() } } : null);
       clearNetworkCache();
+      setRenameSuccess(true);
+      setTimeout(() => setRenameSuccess(false), 2500);
     } catch (err: any) {
       console.error(err);
-      alert(err.message || 'Failed to rename network');
     }
   }, [network, editableName]);
 
+  const handleRunSimulation = useCallback(async () => {
+    if (!network?.meta.id || simStatus === 'queued' || simStatus === 'running') return;
+    try {
+      setSimStatus('queued');
+      await triggerSimulation(network.meta.id);
+      setSimTriggerKey(k => k + 1);
+    } catch (err: any) {
+      console.warn('Simulation trigger failed:', err.message);
+      setSimStatus('failed');
+    }
+  }, [network?.meta.id, simStatus]);
+
   const searchResults = useMemo(() => {
-    if (!network || !searchQuery.trim()) return [];
+    if (!network || !searchQuery.trim()) return { items: [], total: 0 };
     const q = searchQuery.toLowerCase().trim();
     const matches: Array<{ id: string; type: string; label: string; kind: 'pipe' | 'asset'; data: any }> = [];
-    
-    // search pipes
+
+    // Search pipes
     network.pipes.forEach(p => {
-      if (p.properties.id.toLowerCase().includes(q) || (p.properties.material && p.properties.material.toLowerCase().includes(q))) {
+      const props = p.properties;
+      if (
+        props.id.toLowerCase().includes(q) ||
+        (props.material && props.material.toLowerCase().includes(q)) ||
+        (props.zone && props.zone.toLowerCase().includes(q))
+      ) {
         matches.push({
-          id: p.properties.id,
+          id: props.id,
           type: 'Pipe',
-          label: `${p.properties.ui_class} · ${p.properties.diameter_mm ? p.properties.diameter_mm + 'mm' : 'no diameter'}`,
+          label: `${props.ui_class} · ${props.diameter_mm ? props.diameter_mm + 'mm' : 'no diameter'}${props.zone ? ' · ' + props.zone : ''}`,
           kind: 'pipe',
           data: p
         });
       }
     });
 
-    // search assets
+    // Search assets
     network.assets.forEach(a => {
       if (a.properties.id.toLowerCase().includes(q) || a.properties.name.toLowerCase().includes(q)) {
         matches.push({
@@ -899,7 +874,8 @@ export default function GISMap() {
       }
     });
 
-    return matches.slice(0, 30);
+    const total = matches.length;
+    return { items: matches.slice(0, 30), total };
   }, [network, searchQuery]);
 
 
@@ -908,7 +884,7 @@ export default function GISMap() {
     []
   );
   const setAllPipes = useCallback((on: boolean) => {
-    setLayers((p) => ({ ...p, main: on, distribution: on, service: on, backfeed: on, boundary: on }));
+    setLayers((p) => ({ ...p, main: on, distribution: on, household: on, backfeed: on, boundary: on }));
   }, []);
   const setAllAssets = useCallback((on: boolean) => {
     setLayers((p) => ({ ...p, tank: on, pressure_valve: on, meter_valve: on, sensor: on }));
@@ -927,6 +903,17 @@ export default function GISMap() {
     const junctionCount = network.junctions?.length || 0;
     return { pipeCounts, assetCounts, junctionCount };
   }, [network]);
+
+  /* ── workmode dropdown: close on outside click ── */
+  useEffect(() => {
+    if (!showWorkmodes) return;
+    const close = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.aw-workmode-selector-container')) setShowWorkmodes(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showWorkmodes]);
 
   const handleSearchResultClick = (kind: 'pipe' | 'asset', item: any) => {
     setLayers((prev) => ({
@@ -958,7 +945,7 @@ export default function GISMap() {
                 </button>
                 {showWorkmodes && (
                   <div className="aw-workmode-dropdown" style={{ top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: '6px' }}>
-                    {['Network overview', 'My work mode', 'All tools', 'Asset management', 'Operation planning', 'Service analysis', 'Non-revenue water'].map((m) => (
+                    {['Network overview', 'All tools', 'Asset management', 'Operation planning', 'Service analysis', 'Non-revenue water'].map((m) => (
                       <button
                         key={m}
                         type="button"
@@ -995,6 +982,18 @@ export default function GISMap() {
           <div className="map-loading map-loading--error">
             <div className="map-loading-text">Couldn't load network data</div>
             <div className="map-loading-sub">{loadError}</div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { clearNetworkCache(); window.location.reload(); }}
+                type="button"
+              >
+                Retry
+              </button>
+              <a className="btn btn-ghost btn-sm" href="/networks">
+                Go to Networks
+              </a>
+            </div>
           </div>
         )}
 
@@ -1003,16 +1002,17 @@ export default function GISMap() {
             {/* Left Overlay Column: Name Renaming & Layer Control */}
             <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '280px', pointerEvents: 'auto' }}>
               <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-                <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#B4B4CA', fontWeight: 700, letterSpacing: '0.05em' }}>Network Name (Click to rename)</span>
+                <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#B4B4CA', fontWeight: 700, letterSpacing: '0.05em' }}>Network Name</span>
                 <input
                   type="text"
                   className="aw-map-title-input"
                   value={editableName}
                   onChange={(e) => setEditableName(e.target.value)}
                   onBlur={handleRename}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleRename(); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }}
                   style={{ width: '100%', fontSize: '0.8125rem', padding: '4px 6px', height: '26px' }}
                 />
+                {renameSuccess && <span className="aw-rename-success">✓ Renamed</span>}
               </div>
 
               <LayerControl
@@ -1031,12 +1031,34 @@ export default function GISMap() {
             {/* Right Overlay Column: Accuracy & Stats Badge */}
             <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '240px', pointerEvents: 'auto', alignItems: 'stretch' }}>
               <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-                <span style={{ fontSize: '0.75rem', color: '#B4B4CA', fontWeight: 600 }}>Accuracy</span>
+                <span style={{ fontSize: '0.75rem', color: '#B4B4CA', fontWeight: 600 }}>Simulation</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <strong style={{ fontSize: '0.75rem', color: '#ffffff' }}>{simData ? '100%' : 'N/A'}</strong>
-                  <div className="aw-accuracy-progress" style={{ width: '60px', height: '4px', background: '#35354B', borderRadius: '2px' }}>
-                    <div className="aw-accuracy-fill" style={{ width: simData ? '100%' : '0%', height: '100%', background: 'linear-gradient(90deg, #75C4E0 0%, #203DAC 100%)', borderRadius: '2px' }}></div>
-                  </div>
+                  {simData ? (
+                    <strong style={{ fontSize: '0.75rem', color: '#22c55e' }}>Ready</strong>
+                  ) : simStatus === 'none' ? (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px' }}
+                      onClick={handleRunSimulation}
+                      type="button"
+                      title="Upload an EPANET .inp file first if unavailable"
+                    >
+                      Run
+                    </button>
+                  ) : simStatus === 'failed' ? (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px', color: '#FCA5A5' }}
+                      onClick={handleRunSimulation}
+                      type="button"
+                    >
+                      Retry
+                    </button>
+                  ) : (
+                    <strong style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                      {simStatus === 'queued' ? 'Queued…' : 'Running…'}
+                    </strong>
+                  )}
                 </div>
               </div>
 
@@ -1134,12 +1156,12 @@ export default function GISMap() {
               />
             </div>
             <div className="aw-search-results-list" style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
-              {searchResults.length === 0 && searchQuery.trim() && (
+              {searchResults.items.length === 0 && searchQuery.trim() && (
                 <div style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', padding: '8px 0', textAlign: 'center' }}>
                   No assets match your search.
                 </div>
               )}
-              {searchResults.map((res) => (
+              {searchResults.items.map((res) => (
                 <button
                   key={res.id}
                   type="button"
@@ -1166,6 +1188,11 @@ export default function GISMap() {
                   <span style={{ fontSize: '0.75rem', color: '#B4B4CA' }}>{res.label}</span>
                 </button>
               ))}
+              {searchResults.total > 30 && (
+                <div style={{ fontSize: '0.6875rem', color: '#8ACDE5', textAlign: 'center', padding: '4px 0' }}>
+                  + {searchResults.total - 30} more — refine your search
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1178,19 +1205,61 @@ export default function GISMap() {
               <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
             </div>
             <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
-              <p style={{ marginBottom: '8px' }}>Pipes are dynamic colored according to pressure limits:</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#10b981' }}></span>
-                  <span>Nominal (&gt; 15 m)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#f59e0b' }}></span>
-                  <span>Warning (&lt; 15 m)</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ display: 'inline-block', width: '12px', height: '12px', borderRadius: '50%', background: '#ef4444' }}></span>
-                  <span>Critical scour velocity</span>
+              {simData ? (() => {
+                const nodeIds = Object.keys(simData.nodes);
+                const pressures = nodeIds.map(id => simData.nodes[id].pressure[simHour]);
+                const critical = pressures.filter(p => p < 10).length;
+                const warning = pressures.filter(p => p >= 10 && p < 15).length;
+                const nominal = pressures.filter(p => p >= 15).length;
+                const avg = pressures.reduce((a, b) => a + b, 0) / (pressures.length || 1);
+                const min = Math.min(...pressures);
+                const max = Math.max(...pressures);
+                return (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginBottom: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#B4B4CA' }}>Avg pressure</span>
+                        <strong style={{ color: '#fff' }}>{avg.toFixed(1)} m</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#B4B4CA' }}>Min / Max</span>
+                        <strong style={{ color: '#fff' }}>{min.toFixed(1)} / {max.toFixed(1)} m</strong>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }}></span>
+                          <span>Nominal (&gt;15 m)</span>
+                        </div>
+                        <strong style={{ color: '#22c55e' }}>{nominal}</strong>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }}></span>
+                          <span>Warning (10–15 m)</span>
+                        </div>
+                        <strong style={{ color: '#f59e0b' }}>{warning}</strong>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }}></span>
+                          <span>Critical (&lt;10 m)</span>
+                        </div>
+                        <strong style={{ color: '#ef4444' }}>{critical}</strong>
+                      </div>
+                    </div>
+                  </>
+                );
+              })() : (
+                <p style={{ color: '#8ACDE5' }}>Run the hydraulic simulation to see live pressure statistics at hour {String(simHour).padStart(2,'0')}:00.</p>
+              )}
+              <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <p style={{ color: '#B4B4CA' }}>Junction color key:</p>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ background: '#22c55e', borderRadius: '50%', width: 8, height: 8, display: 'inline-block' }}></span> &gt;15m</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ background: '#f59e0b', borderRadius: '50%', width: 8, height: 8, display: 'inline-block' }}></span> 10-15m</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><span style={{ background: '#ef4444', borderRadius: '50%', width: 8, height: 8, display: 'inline-block' }}></span> &lt;10m</span>
                 </div>
               </div>
             </div>
@@ -1235,8 +1304,36 @@ export default function GISMap() {
               <button className="aw-search-overlay-close" onClick={() => setActivePlugin(null)} type="button">✕</button>
             </div>
             <div style={{ fontSize: '0.75rem', color: '#D2D2DF', lineHeight: '1.4' }}>
-              <p>No active anomalies detected in this simulation run.</p>
-              <p style={{ marginTop: '6px', color: '#00C887' }}>✓ All demands meet structural patterns.</p>
+              {simData ? (() => {
+                const nodeIds = Object.keys(simData.nodes);
+                // Find nodes with demand spike vs average
+                const spikes: Array<{ id: string; demand: number; avg: number }> = [];
+                nodeIds.forEach(id => {
+                  const demands = simData.nodes[id].demand;
+                  const avg = demands.reduce((a, b) => a + b, 0) / (demands.length || 1);
+                  const current = demands[simHour] || 0;
+                  if (avg > 0 && current > avg * 2.5) spikes.push({ id, demand: current, avg });
+                });
+                spikes.sort((a, b) => b.demand - a.demand);
+                const top = spikes.slice(0, 5);
+                return top.length === 0 ? (
+                  <p style={{ color: '#00C887' }}>✓ No demand spikes at this hour. All nodes within 2.5× average.</p>
+                ) : (
+                  <>
+                    <p style={{ color: '#f59e0b', marginBottom: '8px' }}>⚠ {top.length} node{top.length > 1 ? 's' : ''} showing demand spike:</p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      {top.map(s => (
+                        <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(245,158,11,0.08)', borderRadius: '4px', padding: '4px 6px' }}>
+                          <span style={{ color: '#B4B4CA', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem' }}>{s.id}</span>
+                          <span style={{ color: '#f59e0b', fontWeight: 600 }}>{s.demand.toFixed(2)} L/s</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })() : (
+                <p style={{ color: '#8ACDE5' }}>Run the simulation to detect demand spikes and anomalies.</p>
+              )}
             </div>
           </div>
         )}
@@ -1248,8 +1345,23 @@ export default function GISMap() {
           </div>
         )}
         {simStatus === 'failed' && !simData && (
-          <div className="gis-sim-loading-badge gis-sim-failed">
-            Simulation failed — check EPANET file
+          <div className="gis-sim-loading-badge gis-sim-failed" style={{ gap: '10px' }}>
+            <span>Simulation failed</span>
+            <button
+              type="button"
+              style={{ background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '4px', color: '#FCA5A5', fontSize: '0.6875rem', padding: '2px 8px', cursor: 'pointer' }}
+              onClick={handleRunSimulation}
+            >
+              Retry
+            </button>
+            <a href="/networks/upload" style={{ color: '#FCA5A5', fontSize: '0.6875rem', textDecoration: 'underline' }}>
+              Upload EPANET file
+            </a>
+          </div>
+        )}
+        {showSimToast && (
+          <div className="gis-sim-toast">
+            ✓ Simulation data loaded
           </div>
         )}
 
@@ -1274,10 +1386,11 @@ export default function GISMap() {
                 )}
               </button>
               <button
-                onClick={() => setPlaySpeed((s) => (s === 1 ? 5 : s === 5 ? 10 : 1))}
+                onClick={() => setPlaySpeed((s) => (s === 0.5 ? 1 : s === 1 ? 5 : s === 5 ? 10 : 0.5))}
                 className="btn btn-ghost btn-sm"
                 type="button"
                 style={{ fontSize: '10px', fontWeight: 'bold', padding: '0 4px', height: '24px' }}
+                title="Change playback speed"
               >
                 {playSpeed}x
               </button>
@@ -1293,6 +1406,7 @@ export default function GISMap() {
                 value={simHour}
                 onChange={(e) => setSimHour(parseInt(e.target.value))}
                 className="gis-sim-slider"
+                aria-label="Simulation time scrubber"
               />
             </div>
           </div>
@@ -1304,6 +1418,9 @@ export default function GISMap() {
       )}
       {focus?.kind === 'asset' && (
         <AssetPanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
+      )}
+      {focus?.kind === 'junction' && (
+        <JunctionPanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
       )}
     </Shell>
   );
@@ -1409,9 +1526,8 @@ function pipePopupHtml(feat: PipeFeature): string {
         <div><span>Length</span><strong>${length}</strong></div>
         <div><span>Zone</span><strong>${escapeHtml(p.zone ? zoneLabel(p.zone) : '—')}</strong></div>
         <div><span>Installed</span><strong>${p.installed || '—'}</strong></div>
-        <div><span>Pressure</span><strong>${p.ui_class === 'main' ? '3.4 bar' : p.ui_class === 'backfeed' ? '— (closed)' : '2.6 bar'}</strong></div>
+        <div><span>Status</span><strong>${p.status === 'closed' ? 'Closed' : 'Open'}</strong></div>
       </div>
-      <div class="aw-pop-foot">Click again for full operational record →</div>
     </div>`;
 }
 
@@ -1446,7 +1562,6 @@ function assetPopupHtml(feat: AssetFeature): string {
           <div><span>Inflow</span><strong>${p.inflow_lps} L/s</strong></div>
           <div><span>Outflow</span><strong>${p.outflow_lps} L/s</strong></div>
         </div>
-        <div class="aw-pop-foot">Click again for full reservoir record →</div>
       </div>`;
   }
   if (p.asset === 'pressure_valve') {
@@ -1467,7 +1582,6 @@ function assetPopupHtml(feat: AssetFeature): string {
           <div><span>Drift</span><strong>${drift} bar</strong></div>
           <div><span>Range</span><strong>${p.min_bar}–${p.max_bar} bar</strong></div>
         </div>
-        <div class="aw-pop-foot">Click again for full valve record →</div>
       </div>`;
   }
   if (p.asset === 'meter_valve') {
@@ -1487,7 +1601,6 @@ function assetPopupHtml(feat: AssetFeature): string {
           <div><span>Today</span><strong>${p.consumption_m3d.toLocaleString()} m³</strong></div>
           <div><span>Trend</span><strong>${p.consumption_m3d > 700 ? '▲ rising' : '▬ steady'}</strong></div>
         </div>
-        <div class="aw-pop-foot">Click again for full meter record →</div>
       </div>`;
   }
   // sensor
@@ -1505,9 +1618,8 @@ function assetPopupHtml(feat: AssetFeature): string {
         <div><span>Flow</span><strong>${p.flow_lps} L/s</strong></div>
         <div><span>Pressure</span><strong>${p.pressure_bar} bar</strong></div>
         <div><span>Last reading</span><strong>${escapeHtml(p.last_seen)}</strong></div>
-        <div><span>On pipe</span><strong>${escapeHtml(p.pipe_id)}</strong></div>
+        <div><span>On pipe</span><strong>${escapeHtml(p.pipe_id || '—')}</strong></div>
       </div>
-      <div class="aw-pop-foot">Click again for full sensor record →</div>
     </div>`;
 }
 
@@ -1750,7 +1862,7 @@ function StatBadge({ meta }: { meta: NetworkData['meta'] }) {
       </div>
       <div className="gis-stat-row">
         <span>Service zones</span>
-        <strong>{meta.top_zones.filter(([z]) => z.length <= 6).length}</strong>
+        <strong>{meta.top_zones.length}</strong>
       </div>
     </div>
   );
@@ -1792,7 +1904,12 @@ function PipePanel({ feature, onClose, simData, simHour }: {
       <SpRow label="Material" value={p.material || '—'} />
       <SpRow label="Diameter" value={p.diameter_mm ? `${p.diameter_mm} mm` : '—'} mono />
       <SpRow label="Length" value={p.length_m ? `${p.length_m.toFixed(0)} m` : '—'} mono />
-      <SpRow label="Pressure class" value={p.diameter_mm && p.diameter_mm >= 200 ? 'PN16' : p.diameter_mm && p.diameter_mm >= 100 ? 'PN12.5' : 'PN10'} />
+      <SpRow label="Pressure class" value={
+        p.material === 'AC' || p.material === 'Steel' ? 'PN16' :
+        p.diameter_mm && p.diameter_mm >= 300 ? 'PN16' :
+        p.diameter_mm && p.diameter_mm >= 150 ? 'PN12.5' :
+        p.diameter_mm && p.diameter_mm >= 63 ? 'PN10' : 'PN6'
+      } />
 
       <div style={{ height: 14 }} />
       <SectionLabel>Operations</SectionLabel>
@@ -1815,7 +1932,7 @@ function PipePanel({ feature, onClose, simData, simHour }: {
         color={sim && Math.abs(sim.velocity[simHour]) > 1.8 ? '#ef4444' : '#22c55e'}
       />
       <SpRow label="Flow rate" value={currentFlow} mono />
-      <SpRow label="Anomaly score" value="0.04" mono />
+      {sim && <SpRow label="Velocity status" value={Math.abs(sim.velocity[simHour]) > 1.8 ? 'High — check for scour' : Math.abs(sim.velocity[simHour]) > 0.05 ? 'Nominal' : 'No flow'} color={sim && Math.abs(sim.velocity[simHour]) > 1.8 ? '#ef4444' : '#22c55e'} />}
 
       {sim && (
         <>
@@ -1853,8 +1970,7 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
   const currentDemand = sim ? sim.demand[simHour] : null;
 
   if (p.asset === 'tank') {
-    const displayLevel = currentPress !== null ? currentPress : p.level_pct;
-    const lvlColor = displayLevel > 70 ? '#22c55e' : displayLevel > 35 ? '#f59e0b' : '#ef4444';
+    const lvlColor = p.level_pct > 70 ? '#22c55e' : p.level_pct > 35 ? '#f59e0b' : '#ef4444';
     return (
       <SidePanel
         open
@@ -1864,13 +1980,12 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
         pill={{ tone: p.status === 'ok' ? 'safe' : 'warn', label: p.status === 'ok' ? 'Operating' : 'Watch' }}
       >
         <SectionLabel>Live level sensor</SectionLabel>
-        <SpRow label="Pressure Head" value={currentPress !== null ? `${currentPress.toFixed(1)} m` : `${p.level_pct}%`} mono color={lvlColor} />
-        {currentPress === null && (
-          <div className="aw-level-bar">
-            <div className="aw-level-fill" style={{ width: `${p.level_pct}%`, background: lvlColor }} />
-          </div>
-        )}
-        <SpRow label="Volume stored" value={currentPress !== null ? `${Math.round(p.capacity_m3 * currentPress / 10).toLocaleString()} m³` : `${Math.round(p.capacity_m3 * p.level_pct / 100).toLocaleString()} m³`} mono />
+        <SpRow label="Fill level" value={`${p.level_pct}%`} mono color={lvlColor} />
+        <div className="aw-level-bar">
+          <div className="aw-level-fill" style={{ width: `${p.level_pct}%`, background: lvlColor }} />
+        </div>
+        {currentPress !== null && <SpRow label="Pressure head" value={`${currentPress.toFixed(1)} m`} mono />}
+        <SpRow label="Volume stored" value={`${Math.round(p.capacity_m3 * p.level_pct / 100).toLocaleString()} m³`} mono />
         <SpRow label="Capacity" value={`${p.capacity_m3.toLocaleString()} m³`} mono />
         <div style={{ height: 14 }} />
         <SectionLabel>Flow</SectionLabel>
@@ -2043,6 +2158,69 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
   );
 }
 
+function JunctionPanel({ feature, onClose, simData, simHour }: {
+  feature: JunctionFeature;
+  onClose: () => void;
+  simData: SimulationData | null;
+  simHour: number;
+}) {
+  const p = feature.properties;
+  const sim = simData ? simData.nodes[p.id] : null;
+  const currentPress = sim ? sim.pressure[simHour] : null;
+  const currentDemand = sim ? sim.demand[simHour] : null;
+  const pressColor = currentPress === null ? undefined : currentPress < 10 ? '#ef4444' : currentPress < 15 ? '#f59e0b' : '#22c55e';
+
+  return (
+    <SidePanel
+      open
+      onClose={onClose}
+      kind="Network junction"
+      title={`Junction ${p.external_id}`}
+      pill={{ tone: 'info', label: p.node_type === 'junction' ? 'Junction' : p.node_type }}
+    >
+      <SectionLabel>Geometry</SectionLabel>
+      <SpRow label="Junction ID" value={p.external_id} mono />
+      <SpRow label="Node type" value={p.node_type} />
+      <SpRow label="Elevation" value={p.elevation_m !== undefined ? `${p.elevation_m.toFixed(1)} m` : '—'} mono />
+      <SpRow label="Base demand" value={p.demand_lps !== undefined ? `${p.demand_lps.toFixed(3)} L/s` : '—'} mono />
+
+      {sim && (
+        <>
+          <div style={{ height: 14 }} />
+          <SectionLabel>Live telemetry (hour {simHour})</SectionLabel>
+          <SpRow label="Pressure head" value={currentPress !== null ? `${currentPress.toFixed(2)} m` : '—'} mono color={pressColor} />
+          <SpRow label="Demand" value={currentDemand !== null ? `${currentDemand.toFixed(3)} L/s` : '—'} mono />
+          <div style={{ height: 14 }} />
+          <SectionLabel>Simulation Profiles</SectionLabel>
+          <SimulationChart
+            title="Pressure Head"
+            values={sim.pressure}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="m"
+          />
+          <SimulationChart
+            title="Demand"
+            values={sim.demand}
+            timesteps={simData!.timesteps}
+            currentHour={simHour}
+            unit="L/s"
+          />
+        </>
+      )}
+      {!sim && (
+        <>
+          <div style={{ height: 14 }} />
+          <SectionLabel>Simulation</SectionLabel>
+          <div style={{ fontSize: '0.75rem', color: 'hsl(var(--muted-foreground))', padding: '8px 0' }}>
+            No simulation data available for this junction. Run the hydraulic simulation to see live pressure and demand.
+          </div>
+        </>
+      )}
+    </SidePanel>
+  );
+}
+
 function Sparkline({ base }: { base: number }) {
   const points = useMemo(() => {
     const arr: number[] = [];
@@ -2125,16 +2303,17 @@ function SimulationChart({
   const graphWidth = w - paddingLeft - paddingRight;
   const graphHeight = h - paddingTop - paddingBottom;
   
+  const n = values.length;
   const points = values.map((v, i) => {
-    const x = paddingLeft + (i / (values.length - 1)) * graphWidth;
+    const x = paddingLeft + (n > 1 ? i / (n - 1) : 0) * graphWidth;
     const y = paddingTop + graphHeight - ((v - min) / range) * graphHeight;
     return [x, y] as [number, number];
   });
-  
+
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
   const areaPath = `${path} L${(paddingLeft + graphWidth).toFixed(1)},${(paddingTop + graphHeight).toFixed(1)} L${paddingLeft.toFixed(1)},${(paddingTop + graphHeight).toFixed(1)} Z`;
-  
-  const cursorX = paddingLeft + (currentHour / (values.length - 1)) * graphWidth;
+
+  const cursorX = paddingLeft + (n > 1 ? currentHour / (n - 1) : 0) * graphWidth;
   
   return (
     <div className="sim-chart-container" style={{ marginTop: 12 }}>
@@ -2151,9 +2330,9 @@ function SimulationChart({
         <text x={paddingLeft - 6} y={paddingTop + graphHeight / 2 + 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{((max + min) / 2).toFixed(1)}</text>
         <text x={paddingLeft - 6} y={paddingTop + graphHeight + 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{min.toFixed(1)}</text>
         
-        <text x={paddingLeft} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="start">00:00</text>
-        <text x={paddingLeft + graphWidth / 2} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="middle">12:00</text>
-        <text x={paddingLeft + graphWidth} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">24:00</text>
+        <text x={paddingLeft} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="start">{formatSimTime(timesteps[0] || 0)}</text>
+        <text x={paddingLeft + graphWidth / 2} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="middle">{formatSimTime(timesteps[Math.floor((n - 1) / 2)] || 0)}</text>
+        <text x={paddingLeft + graphWidth} y={h - 4} fill="hsl(var(--muted-foreground))" fontSize={9} textAnchor="end">{formatSimTime(timesteps[n - 1] || 0)}</text>
         
         <path d={areaPath} fill="rgba(11,95,255,0.08)" />
         <path d={path} fill="none" stroke="hsl(var(--primary))" strokeWidth={1.8} />

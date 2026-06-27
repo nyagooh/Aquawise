@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 
 type Props = {
   open: boolean;
@@ -10,6 +10,15 @@ type Props = {
 };
 
 export function SidePanel({ open, onClose, kind, title, pill, children }: Props) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll to top whenever the panel content changes (new selection)
+  useEffect(() => {
+    if (open && bodyRef.current) {
+      bodyRef.current.scrollTop = 0;
+    }
+  }, [title, open]);
+
   return (
     <aside className={`side-panel${open ? ' open' : ''}`}>
       <div className="sp-head">
@@ -29,7 +38,7 @@ export function SidePanel({ open, onClose, kind, title, pill, children }: Props)
         </div>
         <button className="sp-close" onClick={onClose}>✕</button>
       </div>
-      <div className="sp-body">{children}</div>
+      <div className="sp-body" ref={bodyRef}>{children}</div>
     </aside>
   );
 }
