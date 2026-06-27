@@ -111,6 +111,33 @@ def _detect_is_schematic(bbox) -> bool:
         return False
 
 
+def _length_sql(is_schematic: bool) -> str:
+    """Return the PostGIS expression for pipe length in metres.
+
+    Geographic networks use the geodesic cast (::geography) for accurate
+    ellipsoidal distances.  Schematic/projected networks store raw Cartesian
+    coordinates (e.g. UTM metres), so the planar ST_Length(geometry) gives the
+    correct metric result without the invalid-geography cast that would otherwise
+    produce garbage values.
+    """
+    return "ST_Length(geometry)" if is_schematic else "ST_Length(geometry::geography)"
+
+
+def _recompute_lengths(network_id: str, is_schematic: bool) -> float:
+    """Update per-pipe length_m and return the new total_length_km for a network."""
+    expr = _length_sql(is_schematic)
+    with connection.cursor() as cur:
+        cur.execute(
+            f"UPDATE networks_pipe SET length_m = {expr} WHERE network_id = %s",
+            [network_id],
+        )
+        cur.execute(
+            f"SELECT COALESCE(SUM({expr}), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
+            [network_id],
+        )
+        return cur.fetchone()[0]
+
+
 def _to_float(val):
     try:
         return float(val) if val is not None else None
@@ -497,13 +524,8 @@ def ingest_shapefile(self, upload_id: str):
                     from django.contrib.gis.geos import GEOSGeometry as _G
                     network.bbox = _G(row[0]).envelope
 
-                cursor.execute(
-                    "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
-                    [str(network.id)],
-                )
-                network.total_length_km = cursor.fetchone()[0]
-
             network.is_schematic = _detect_is_schematic(network.bbox)
+            network.total_length_km = _recompute_lengths(str(network.id), network.is_schematic)
             network.save()
 
             upload.network = network
@@ -820,7 +842,11 @@ def ingest_epanet(self, upload_id: str):
                 network.bbox = _G(row[0]).envelope
 
             network.is_schematic = _detect_is_schematic(network.bbox)
-            network.save(update_fields=["bbox", "is_schematic"])
+            if network.is_schematic:
+                # _apply_epanet_inp computed lengths with ::geography which gives garbage for
+                # projected (UTM) coordinates. Re-run using planar ST_Length(geometry).
+                network.total_length_km = _recompute_lengths(str(network.id), is_schematic=True)
+            network.save(update_fields=["bbox", "is_schematic", "total_length_km"])
 
         upload.status = (
             NetworkUpload.Status.COMPLETE_WITH_WARNINGS if warnings
@@ -1128,13 +1154,8 @@ def ingest_geojson(self, upload_id: str):
             if row and row[0]:
                 network.bbox = GEOSGeometry(row[0]).envelope
 
-            cursor.execute(
-                "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
-                [str(network.id)],
-            )
-            network.total_length_km = cursor.fetchone()[0]
-
         network.is_schematic = _detect_is_schematic(network.bbox)
+        network.total_length_km = _recompute_lengths(str(network.id), network.is_schematic)
         network.save()
 
         upload.status = (
@@ -1586,13 +1607,8 @@ def ingest_kml(self, upload_id: str):
                 if row and row[0]:
                     network.bbox = GEOSGeometry(row[0]).envelope
 
-                cursor.execute(
-                    "SELECT COALESCE(SUM(ST_Length(geometry::geography)), 0) / 1000.0 FROM networks_pipe WHERE network_id = %s",
-                    [str(network.id)],
-                )
-                network.total_length_km = cursor.fetchone()[0]
-
             network.is_schematic = _detect_is_schematic(network.bbox)
+            network.total_length_km = _recompute_lengths(str(network.id), network.is_schematic)
             network.save()
 
             upload.status = (
