@@ -444,6 +444,7 @@ export type SimulationStatus = 'none' | 'queued' | 'running' | 'complete' | 'fai
 export interface SimulationPollResult {
   run_id?: string;
   status: SimulationStatus;
+  has_epanet?: boolean;
   error_message?: string | null;
   data?: SimulationData;
 }
@@ -470,6 +471,7 @@ export async function pollSimulation(networkId: string): Promise<SimulationPollR
     return {
       run_id: data.run_id,
       status: 'complete',
+      has_epanet: data.has_epanet === true,
       data: {
         network_id: data.network_id,
         timesteps: data.timesteps,
@@ -484,6 +486,7 @@ export async function pollSimulation(networkId: string): Promise<SimulationPollR
   return {
     run_id: data.run_id,
     status: simStatus,
+    has_epanet: data.has_epanet === true,
     error_message: data.error_message,
   };
 }

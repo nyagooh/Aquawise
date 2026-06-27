@@ -71,6 +71,7 @@ export default function GISMap() {
   const [playSpeed, setPlaySpeed] = useState<number>(1);
   const [zoom, setZoom] = useState<number>(13);
   const [simTriggerKey, setSimTriggerKey] = useState(0);
+  const [hasEpanet, setHasEpanet] = useState<boolean>(false);
   const [showSimToast, setShowSimToast] = useState(false);
   const [renameSuccess, setRenameSuccess] = useState(false);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -425,6 +426,7 @@ export default function GISMap() {
       try {
         const result = await pollSimulation(networkId);
         if (!alive) return;
+        setHasEpanet(result.has_epanet === true);
         setSimStatus(result.status);
         if (result.status === 'complete' && result.data) {
           setSimData(prev => {
@@ -479,7 +481,7 @@ export default function GISMap() {
       const feature = pipeMapRef.current.get(id);
       const baseStyle = feature ? PIPE_STYLE[feature.properties.ui_class] : { weight: 3, opacity: 0.8 };
       
-      const isFlowing = Math.abs(flow) > 0.1;
+      const isFlowing = Math.abs(flow) > 0.0001; // WNTR returns m³/s; 0.0001 = 0.1 L/s minimum
       
       const flowLine = (layer as any)._flowLine;
       const pathEl = (layer as any)._path;
@@ -501,13 +503,15 @@ export default function GISMap() {
       }
 
       const targetColor = getVelocityColor(vel, isDark);
-      const targetWeight = getFlowWeight(flow, baseStyle.weight * scale);
-      
+      // Base pipe keeps its natural zoom-scaled weight — flow scaling only goes on the overlay
+      const targetWeight = baseStyle.weight * scale;
+
       // The pipe should be dull, and the dash overlay should be bright.
-      const targetOpacity = 0.25; 
-      
+      const targetOpacity = 0.25;
+
       const targetFlowColor = targetColor;
-      const targetFlowWeight = targetWeight;
+      // Flow overlay is always thinner than the base pipe so zoomed-out networks don't clutter
+      const targetFlowWeight = getFlowWeight(flow, baseStyle.weight * scale);
       const targetFlowOpacity = isFlowing ? 1.0 : 0.0;
       const targetFlowDashArray = isFlowing ? `8 ${pathLength.toFixed(1)}` : '0 9999';
       
@@ -608,25 +612,26 @@ export default function GISMap() {
         const press = simNode.pressure[simHour] || 0.0;
         const demand = simNode.demand[simHour] || 0.0;
         
-        marker.getTooltip()?.setContent(`Junction ${id} · ${press.toFixed(1)}m · ${demand.toFixed(1)}L/s`);
+        const demandLs = demand * 1000; // WNTR m³/s → L/s for display
+        marker.getTooltip()?.setContent(`Junction ${id} · ${press.toFixed(1)}m · ${demandLs.toFixed(1)}L/s`);
 
         // Node pressure color mapping
         const nodeColor = press < 10.0 ? '#ef4444' : press < 15.0 ? '#f59e0b' : '#22c55e';
         const outlineColor = press < 10.0 ? '#b91c1c' : press < 15.0 ? '#d97706' : '#15803d';
 
-        // Consumer Demand radius scaling
-        const radius = 3.5 + Math.min(10, Math.abs(demand) * 0.8);
-        
+        // Consumer Demand radius scaling (L/s scale)
+        const radius = 3.5 + Math.min(10, Math.abs(demandLs) * 0.8);
+
         marker.setStyle({
           fillColor: nodeColor,
           color: outlineColor,
           radius: radius
         });
 
-        // Pulsing animation based on active demand
+        // Pulsing animation based on active demand (> 0.05 L/s = 0.00005 m³/s)
         const pathEl = marker.getElement();
         if (pathEl) {
-          if (demand > 0.05) {
+          if (demand > 0.00005) {
             pathEl.classList.add('demand-pulsing');
           } else {
             pathEl.classList.remove('demand-pulsing');
@@ -641,7 +646,7 @@ export default function GISMap() {
       if (simNode) {
         const press = simNode.pressure[simHour];
         const demand = simNode.demand[simHour];
-        marker.getTooltip()?.setContent(`${id} · ${press.toFixed(1)}m · ${demand.toFixed(1)}L/s`);
+        marker.getTooltip()?.setContent(`${id} · ${press.toFixed(1)}m · ${(demand * 1000).toFixed(1)}L/s`);
 
         // Dynamically adjust tank markers and status indicators
         const el = marker.getElement();
@@ -1030,37 +1035,38 @@ export default function GISMap() {
 
             {/* Right Overlay Column: Accuracy & Stats Badge */}
             <div style={{ position: 'absolute', top: '16px', right: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '240px', pointerEvents: 'auto', alignItems: 'stretch' }}>
-              <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-                <span style={{ fontSize: '0.75rem', color: '#B4B4CA', fontWeight: 600 }}>Simulation</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {simData ? (
-                    <strong style={{ fontSize: '0.75rem', color: '#22c55e' }}>Ready</strong>
-                  ) : simStatus === 'none' ? (
-                    <button
-                      className="btn btn-primary btn-sm"
-                      style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px' }}
-                      onClick={handleRunSimulation}
-                      type="button"
-                      title="Upload an EPANET .inp file first if unavailable"
-                    >
-                      Run
-                    </button>
-                  ) : simStatus === 'failed' ? (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px', color: '#FCA5A5' }}
-                      onClick={handleRunSimulation}
-                      type="button"
-                    >
-                      Retry
-                    </button>
-                  ) : (
-                    <strong style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                      {simStatus === 'queued' ? 'Queued…' : 'Running…'}
-                    </strong>
-                  )}
+              {hasEpanet && (
+                <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#B4B4CA', fontWeight: 600 }}>Simulation</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {simData ? (
+                      <strong style={{ fontSize: '0.75rem', color: '#22c55e' }}>Ready</strong>
+                    ) : simStatus === 'none' ? (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px' }}
+                        onClick={handleRunSimulation}
+                        type="button"
+                      >
+                        Run
+                      </button>
+                    ) : simStatus === 'failed' ? (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontSize: '0.6875rem', padding: '2px 10px', height: '22px', color: '#FCA5A5' }}
+                        onClick={handleRunSimulation}
+                        type="button"
+                      >
+                        Retry
+                      </button>
+                    ) : (
+                      <strong style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        {simStatus === 'queued' ? 'Queued…' : 'Running…'}
+                      </strong>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <StatBadge meta={network.meta} />
             </div>
@@ -1325,7 +1331,7 @@ export default function GISMap() {
                       {top.map(s => (
                         <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', background: 'rgba(245,158,11,0.08)', borderRadius: '4px', padding: '4px 6px' }}>
                           <span style={{ color: '#B4B4CA', fontFamily: 'var(--font-mono)', fontSize: '0.6875rem' }}>{s.id}</span>
-                          <span style={{ color: '#f59e0b', fontWeight: 600 }}>{s.demand.toFixed(2)} L/s</span>
+                          <span style={{ color: '#f59e0b', fontWeight: 600 }}>{(s.demand * 1000).toFixed(2)} L/s</span>
                         </div>
                       ))}
                     </div>
@@ -1883,7 +1889,7 @@ function PipePanel({ feature, onClose, simData, simHour }: {
   const zoneName = p.zone ? zoneLabel(p.zone) : '—';
 
   const sim = simData ? simData.links[p.id] : null;
-  const currentFlow = sim ? `${sim.flow[simHour].toFixed(1)} L/s` : (p.diameter_mm ? `${Math.round((p.diameter_mm / 25) ** 1.6 * 0.8)} L/s` : '—');
+  const currentFlow = sim ? `${(sim.flow[simHour] * 1000).toFixed(1)} L/s` : (p.diameter_mm ? `${Math.round((p.diameter_mm / 25) ** 1.6 * 0.8)} L/s` : '—');
   const currentVel = sim ? `${sim.velocity[simHour].toFixed(2)} m/s` : '—';
   const currentStatus = sim ? sim.status[simHour] : p.status;
   const flowDir = p.node_from && p.node_to ? `${p.node_from} → ${p.node_to}` : (sim && sim.flow[simHour] < 0 ? 'Reverse flow' : 'Normal flow');
@@ -1940,7 +1946,7 @@ function PipePanel({ feature, onClose, simData, simHour }: {
           <SectionLabel>Simulation Profiles</SectionLabel>
           <SimulationChart
             title="Flow Rate Profile"
-            values={sim.flow}
+            values={sim.flow.map(v => v * 1000)}
             timesteps={simData!.timesteps}
             currentHour={simHour}
             unit="L/s"
@@ -2083,7 +2089,7 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
         <SpRow label="State" value={p.state} />
         <div style={{ height: 14 }} />
         <SectionLabel>Consumption</SectionLabel>
-        <SpRow label="Flow rate" value={currentDemand !== null ? `${currentDemand.toFixed(1)} L/s` : `${p.consumption_m3d.toLocaleString()} m³`} mono color="#0B5FFF" />
+        <SpRow label="Flow rate" value={currentDemand !== null ? `${(currentDemand * 1000).toFixed(1)} L/s` : `${p.consumption_m3d.toLocaleString()} m³`} mono color="#0B5FFF" />
         <SpRow label="7-day avg" value={`${Math.round(p.consumption_m3d * 0.92).toLocaleString()} m³`} mono />
         <div style={{ height: 14 }} />
         <SectionLabel>Identifier</SectionLabel>
@@ -2102,7 +2108,7 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
             />
             <SimulationChart
               title="Flow Profile"
-              values={sim.demand}
+              values={sim.demand.map(v => v * 1000)}
               timesteps={simData!.timesteps}
               currentHour={simHour}
               unit="L/s"
@@ -2121,7 +2127,7 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
       pill={{ tone: p.status === 'ok' ? 'safe' : 'danger', label: p.status === 'ok' ? 'Online' : 'Alert' }}
     >
       <SectionLabel>Live reading</SectionLabel>
-      <SpRow label="Flow rate" value={currentDemand !== null ? `${currentDemand.toFixed(1)} L/s` : `${p.flow_lps} L/s`} mono color="#0B5FFF" />
+      <SpRow label="Flow rate" value={currentDemand !== null ? `${(currentDemand * 1000).toFixed(1)} L/s` : `${p.flow_lps} L/s`} mono color="#0B5FFF" />
       <SpRow label="Pressure" value={currentPress !== null ? `${(currentPress * 0.1).toFixed(2)} bar` : `${p.pressure_bar} bar`} mono color="#22c55e" />
       <SpRow label="Sensor type" value={p.type} />
       <SpRow label="Last reading" value={p.last_seen} mono />
@@ -2147,7 +2153,7 @@ function AssetPanel({ feature, onClose, simData, simHour }: {
           />
           <SimulationChart
             title="Flow Profile"
-            values={sim.demand}
+            values={sim.demand.map(v => v * 1000)}
             timesteps={simData!.timesteps}
             currentHour={simHour}
             unit="L/s"
@@ -2189,7 +2195,7 @@ function JunctionPanel({ feature, onClose, simData, simHour }: {
           <div style={{ height: 14 }} />
           <SectionLabel>Live telemetry (hour {simHour})</SectionLabel>
           <SpRow label="Pressure head" value={currentPress !== null ? `${currentPress.toFixed(2)} m` : '—'} mono color={pressColor} />
-          <SpRow label="Demand" value={currentDemand !== null ? `${currentDemand.toFixed(3)} L/s` : '—'} mono />
+          <SpRow label="Demand" value={currentDemand !== null ? `${(currentDemand * 1000).toFixed(3)} L/s` : '—'} mono />
           <div style={{ height: 14 }} />
           <SectionLabel>Simulation Profiles</SectionLabel>
           <SimulationChart
@@ -2201,7 +2207,7 @@ function JunctionPanel({ feature, onClose, simData, simHour }: {
           />
           <SimulationChart
             title="Demand"
-            values={sim.demand}
+            values={sim.demand.map(v => v * 1000)}
             timesteps={simData!.timesteps}
             currentHour={simHour}
             unit="L/s"
@@ -2261,11 +2267,13 @@ function getVelocityColor(vel: number, isDark: boolean): string {
 }
 
 function getFlowWeight(flow: number, baseWeight: number): number {
+  // Returns the overlay dash weight — always thinner than the base pipe.
+  // flow in m³/s: 0.0005=0.5 L/s, 0.005=5 L/s, 0.05=50 L/s
   const f = Math.abs(flow);
-  if (f < 0.5) return baseWeight * 0.8;
-  if (f < 5.0) return baseWeight * 1.1;
-  if (f < 50.0) return baseWeight * 1.5;
-  return baseWeight * 2.2;
+  if (f < 0.0005) return Math.max(1, baseWeight * 0.45); // trickle — very thin dash
+  if (f < 0.005)  return Math.max(1, baseWeight * 0.55); // low flow
+  if (f < 0.05)   return Math.max(1, baseWeight * 0.70); // moderate
+  return Math.max(1, baseWeight * 0.85);                 // high flow — still below base
 }
 
 function formatSimTime(secs: number): string {
