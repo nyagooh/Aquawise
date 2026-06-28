@@ -376,7 +376,7 @@ async function loadFromBackend(networkId: string): Promise<NetworkData> {
     center = [0.0, 0.0];
   }
 
-  if (pipes.length === 0 && assets.length === 0) {
+  if (pipes.length === 0 && assets.length === 0 && junctions.length === 0) {
     throw new Error('Network has no pipes or nodes to display. Check the uploaded file or ingestion status.');
   }
 
