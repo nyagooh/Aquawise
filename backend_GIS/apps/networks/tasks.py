@@ -379,6 +379,17 @@ def ingest_shapefile(self, upload_id: str):
                         network.source_crs = src.crs_wkt[:50]
                     logger.info("Point layer %s fields: %s", os.path.basename(shp_path), list(src.schema["properties"].keys()))
 
+                    # Derive a fallback node type from the filename when no type field exists
+                    fname_lower = os.path.basename(shp_path).lower()
+                    if "tank" in fname_lower or "storage" in fname_lower:
+                        filename_node_type = Node.NodeType.TANK
+                    elif "reservoir" in fname_lower:
+                        filename_node_type = Node.NodeType.RESERVOIR
+                    elif "meter" in fname_lower or "dma" in fname_lower:
+                        filename_node_type = Node.NodeType.METER
+                    else:
+                        filename_node_type = None  # fall through to per-feature detection
+
                     nodes = []
                     for feat in src:
                         if not feat["geometry"]:
@@ -390,8 +401,14 @@ def ingest_shapefile(self, upload_id: str):
                         if geos.geom_type == "MultiPoint":
                             geos = geos[0]
                         props = feat["properties"] or {}
-                        node_type = _normalize_node_type(
+                        type_from_field = _normalize_node_type(
                             props.get(_find_field(props, _NODE_TYPE_FIELDS) or "") or ""
+                        )
+                        # Use per-feature field value if it's meaningful; fall back to filename hint
+                        node_type = (
+                            type_from_field
+                            if type_from_field != Node.NodeType.JUNCTION or filename_node_type is None
+                            else filename_node_type
                         )
                         elev = _to_float(props.get(_find_field(props, _ELEVATION_FIELDS) or ""))
                         ext_id_f = _find_field(props, _EXT_ID_FIELDS)
@@ -502,9 +519,14 @@ def ingest_shapefile(self, upload_id: str):
                             [str(network.id), str(network.id)],
                         )
 
-            # Network stats + bbox
-            network.total_pipes = total_pipes
-            network.total_nodes = total_nodes
+            # Network stats + bbox — when adding to existing network, recount from DB
+            if upload.network_id:
+                from django.db.models import Count
+                network.total_pipes = Pipe.objects.filter(network=network).count()
+                network.total_nodes = Node.objects.filter(network=network).count()
+            else:
+                network.total_pipes = total_pipes
+                network.total_nodes = total_nodes
             network.source_crs = network.source_crs or "EPSG:4326"
 
             with connection.cursor() as cursor:
@@ -543,7 +565,8 @@ def ingest_shapefile(self, upload_id: str):
 
     except Exception as exc:
         logger.exception("Shapefile ingestion failed for upload %s", upload_id)
-        if network:
+        # Only delete the network if we created it — never delete an existing network
+        if network and not upload.network_id:
             network.delete()
         upload.status = NetworkUpload.Status.FAILED
         upload.validation_report = {"error": str(exc), "warnings": warnings}
