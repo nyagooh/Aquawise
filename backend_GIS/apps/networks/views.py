@@ -454,6 +454,69 @@ class EpanetUploadView(APIView):
         )
 
 
+class NetworkAddDataView(APIView):
+    """Upload additional shapefile/GeoJSON/KML data into an existing network."""
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = file.name.rsplit(".", 1)[-1].lower()
+        type_map = {"zip": "shapefile", "geojson": "geojson", "json": "geojson", "kml": "kml", "kmz": "kml"}
+        if ext not in type_map:
+            return Response(
+                {"error": "Only .zip (shapefile), .geojson/.json, or .kml/.kmz files accepted"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        upload = NetworkUpload.objects.create(
+            organisation=request.user.organisation,
+            network=network,
+            file_name=file.name,
+            file_path="",
+            file_type=type_map[ext],
+        )
+
+        upload_dir = f"uploads/{request.user.organisation_id}"
+        saved_path = default_storage.save(
+            os.path.join(upload_dir, f"{upload.id}.{ext}"),
+            ContentFile(file.read()),
+        )
+        upload.file_path = _resolve_upload_path(saved_path)
+        upload.save(update_fields=["file_path"])
+
+        if ext == "zip":
+            from .tasks import ingest_shapefile
+            try:
+                ingest_shapefile.delay(str(upload.id))
+            except Exception:
+                ingest_shapefile.apply(args=[str(upload.id)])
+        elif ext in ("geojson", "json"):
+            from .tasks import ingest_geojson
+            try:
+                ingest_geojson.delay(str(upload.id))
+            except Exception:
+                ingest_geojson.apply(args=[str(upload.id)])
+        else:
+            from .tasks import ingest_kml
+            try:
+                ingest_kml.delay(str(upload.id))
+            except Exception:
+                ingest_kml.apply(args=[str(upload.id)])
+
+        return Response(
+            {"upload_id": str(upload.id), "status": upload.status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
 class NetworkUploadsListView(APIView):
     """List all uploads (shapefile + EPANET) attached to a network."""
     def get(self, request, pk):

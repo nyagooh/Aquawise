@@ -240,18 +240,18 @@ def ingest_shapefile(self, upload_id: str):
                     elif "polygon" in gt:
                         polygon_layers.append(shp_path)
 
-            if upload.network_name:
-                network_name = upload.network_name
+            if upload.network_id:
+                # Adding data to an existing network — don't create a new one
+                network = upload.network
             else:
-                network_name = _generate_untitled_name(upload.organisation)
-
-            network = WaterNetwork.objects.create(
-                organisation=upload.organisation,
-                project=upload.project,
-                upload=upload,
-                name=network_name,
-                source_crs="",
-            )
+                network_name = upload.network_name or _generate_untitled_name(upload.organisation)
+                network = WaterNetwork.objects.create(
+                    organisation=upload.organisation,
+                    project=upload.project,
+                    upload=upload,
+                    name=network_name,
+                    source_crs="",
+                )
 
             # --- Zones (polygons) ---
             for shp_path in polygon_layers:
