@@ -642,6 +642,13 @@ export function lengthByClass(meta: NetworkMeta, cls: PipeClass): number {
   return meta.length_km_by_class[cls] || 0;
 }
 
+export async function listNetworks(): Promise<Array<{ id: string; name: string }>> {
+  const res = await apiFetch('/api/v1/networks/');
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (Array.isArray(data) ? data : data.results ?? []).map((n: any) => ({ id: n.id, name: n.name || 'Untitled' }));
+}
+
 export async function renameNetwork(networkId: string, newName: string): Promise<any> {
   const res = await apiFetch(`/api/v1/networks/${networkId}/`, {
     method: 'PATCH',

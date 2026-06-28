@@ -74,6 +74,10 @@ export default function GISMap() {
   const [hasEpanet, setHasEpanet] = useState<boolean>(false);
   const [showSimToast, setShowSimToast] = useState(false);
   const [renameSuccess, setRenameSuccess] = useState(false);
+  const [editingSubName, setEditingSubName] = useState(false);
+  const [addDataStatus, setAddDataStatus] = useState<'idle' | 'uploading' | 'processing' | 'done' | 'error'>('idle');
+  const [addDataError, setAddDataError] = useState<string | null>(null);
+  const addDataInputRef = useRef<HTMLInputElement>(null);
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -131,13 +135,14 @@ export default function GISMap() {
       center: [network.meta.center[1], network.meta.center[0]],
       zoom: 13,
       preferCanvas: false, // Turn off Canvas rendering to allow SVG-based path CSS animations
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: true,
       maxBounds: L.latLngBounds([latMin - 0.1, lonMin - 0.1], [latMax + 0.1, lonMax + 0.1]),
       minZoom: 10,
       maxZoom: 19
     });
     leafletRef.current = map;
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     // Fix map off-centering by forcing Leaflet to recalculate container bounds and center on the network
     const timer = setTimeout(() => {
@@ -821,6 +826,44 @@ export default function GISMap() {
     setIs3D(prev => !prev);
   }, []);
 
+  const handleAddData = useCallback(async (file: File) => {
+    if (!network?.meta.id) return;
+    setAddDataStatus('uploading');
+    setAddDataError(null);
+    try {
+      const { getAuthHeaders } = await import('../data/network');
+      const headers = await getAuthHeaders();
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch(`/api/v1/networks/${network.meta.id}/add-data/`, {
+        method: 'POST',
+        headers: headers as Record<string, string>,
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Upload failed');
+      }
+      setAddDataStatus('processing');
+      // Reload network after a short delay to pick up the ingested data
+      setTimeout(async () => {
+        try {
+          clearNetworkCache(network.meta.id);
+          const fresh = await loadNetwork(network.meta.id);
+          setNetwork(fresh);
+          setAddDataStatus('done');
+          setTimeout(() => setAddDataStatus('idle'), 3000);
+        } catch {
+          setAddDataStatus('done');
+          setTimeout(() => setAddDataStatus('idle'), 3000);
+        }
+      }, 4000);
+    } catch (e: any) {
+      setAddDataError(e.message || 'Upload failed');
+      setAddDataStatus('error');
+    }
+  }, [network?.meta.id]);
+
   const handleRename = useCallback(async () => {
     if (!network || !network.meta.id || !editableName.trim()) return;
     if (editableName.trim() === network.meta.name) return; // no change
@@ -935,7 +978,35 @@ export default function GISMap() {
   };
 
   return (
-    <Shell active="gis" title="GIS Map" sub={network?.meta.name ? `${network.meta.name} · live operational view` : 'Loading network…'} pagePadding={false} hideRightRail>
+    <Shell
+      active="gis"
+      title="GIS Map"
+      sub={network?.meta.name
+        ? (editingSubName
+          ? <input
+              autoFocus
+              className="tb-sub tb-sub--edit"
+              value={editableName}
+              onChange={e => setEditableName(e.target.value)}
+              onBlur={() => { handleRename(); setEditingSubName(false); }}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setEditingSubName(false); }}
+              style={{ background: 'transparent', border: 'none', outline: 'none', padding: 0, font: 'inherit', color: 'inherit', width: `${Math.max(12, (editableName.length + 20))}ch` }}
+            />
+          : <span
+              className="tb-sub"
+              style={{ cursor: 'text' }}
+              title="Click to rename"
+              onClick={() => setEditingSubName(true)}
+            >
+              {editableName || network.meta.name} · live operational view
+              {renameSuccess && <span style={{ marginLeft: 8, color: '#22c55e', fontSize: '0.7rem' }}>✓</span>}
+            </span>
+        )
+        : <span className="tb-sub">Loading network…</span>
+      }
+      pagePadding={false}
+      hideRightRail
+    >
       <div className="gis-canvas gis-canvas--real" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
         
         {/* Leaflet Map with potential pseudo-3D styling */}
@@ -1008,22 +1079,8 @@ export default function GISMap() {
 
         {network && visibleStats && (
           <>
-            {/* Left Overlay Column: Name Renaming & Layer Control */}
-            <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '12px', width: '280px', pointerEvents: 'auto' }}>
-              <div className="glass-effect" style={{ border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', padding: '10px 14px', background: 'rgba(22,22,30,0.9)', display: 'flex', flexDirection: 'column', gap: '4px', boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }}>
-                <span style={{ fontSize: '0.625rem', textTransform: 'uppercase', color: '#B4B4CA', fontWeight: 700, letterSpacing: '0.05em' }}>Network Name</span>
-                <input
-                  type="text"
-                  className="aw-map-title-input"
-                  value={editableName}
-                  onChange={(e) => setEditableName(e.target.value)}
-                  onBlur={handleRename}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { (e.target as HTMLInputElement).blur(); } }}
-                  style={{ width: '100%', fontSize: '0.8125rem', padding: '4px 6px', height: '26px' }}
-                />
-                {renameSuccess && <span className="aw-rename-success">✓ Renamed</span>}
-              </div>
-
+            {/* Left Overlay Column: Layer Control + Add Layer */}
+            <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '8px', width: '280px', pointerEvents: 'auto' }}>
               <LayerControl
                 layers={layers}
                 counts={visibleStats}
@@ -1035,6 +1092,30 @@ export default function GISMap() {
                 onToggleBasemap={() => setShowBasemap((sb) => !sb)}
                 simData={simData}
               />
+
+              {/* Upload additional data to this network */}
+              <div>
+                <input
+                  ref={addDataInputRef}
+                  type="file"
+                  accept=".zip,.geojson,.json,.kml,.kmz"
+                  style={{ display: 'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAddData(f); e.target.value = ''; }}
+                />
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ width: '100%', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '6px', justifyContent: 'center', background: 'rgba(22,22,30,0.85)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px', color: addDataStatus === 'error' ? '#fca5a5' : addDataStatus === 'done' ? '#22c55e' : '#B4B4CA', pointerEvents: addDataStatus === 'uploading' || addDataStatus === 'processing' ? 'none' : 'auto', opacity: addDataStatus === 'uploading' || addDataStatus === 'processing' ? 0.6 : 1 }}
+                  onClick={() => addDataInputRef.current?.click()}
+                  type="button"
+                  title="Upload a shapefile (.zip), GeoJSON, or KML to add pipes, tanks, or other assets to this network"
+                >
+                  {addDataStatus === 'idle' && <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add data to network</>}
+                  {addDataStatus === 'uploading' && 'Uploading…'}
+                  {addDataStatus === 'processing' && 'Processing…'}
+                  {addDataStatus === 'done' && '✓ Data added'}
+                  {addDataStatus === 'error' && `✕ ${addDataError || 'Upload failed'}`}
+                </button>
+              </div>
             </div>
 
             {/* Right Overlay Column: Accuracy & Stats Badge */}
@@ -1072,7 +1153,6 @@ export default function GISMap() {
                 </div>
               )}
 
-              <StatBadge meta={network.meta} />
             </div>
           </>
         )}

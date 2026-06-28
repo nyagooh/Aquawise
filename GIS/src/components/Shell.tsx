@@ -5,7 +5,7 @@ import { Topbar } from './Topbar';
 type Props = {
   active: 'dashboard' | 'gis' | 'alerts' | 'leaks' | 'nrw' | 'sensors' | 'reports';
   title: string;
-  sub?: string;
+  sub?: ReactNode;
   children: ReactNode;
   pagePadding?: boolean;
   hideSidebar?: boolean;
