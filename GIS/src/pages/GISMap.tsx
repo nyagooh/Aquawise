@@ -637,15 +637,6 @@ export default function GISMap() {
           radius: radius
         });
 
-        // Only pulse at zoom ≥ 14 — at zoom-out the animation is visual noise
-        const pathEl = marker.getElement();
-        if (pathEl) {
-          if (demand > 0.00005 && zoom >= 14) {
-            pathEl.classList.add('demand-pulsing');
-          } else {
-            pathEl.classList.remove('demand-pulsing');
-          }
-        }
       }
     });
 
@@ -737,10 +728,6 @@ export default function GISMap() {
         color: '#475569',
         radius: 3.5
       });
-      const pathEl = marker.getElement();
-      if (pathEl) {
-        pathEl.classList.remove('demand-pulsing');
-      }
     });
 
     assetLayersRef.current.forEach((marker, id) => {

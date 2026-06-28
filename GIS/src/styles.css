@@ -4517,26 +4517,6 @@ button { font-family: inherit; }
   animation-duration: 1.2s;
 }
 
-@keyframes demand-pulse {
-  0% {
-    stroke-width: 1.5px;
-    stroke-opacity: 0.95;
-    stroke: #ef4444;
-  }
-  50% {
-    stroke-width: 10px;
-    stroke-opacity: 0.2;
-    stroke: #ef4444;
-  }
-  100% {
-    stroke-width: 1.5px;
-    stroke-opacity: 0.95;
-    stroke: #ef4444;
-  }
-}
-.demand-pulsing {
-  animation: demand-pulse 1.8s ease-in-out infinite !important;
-}
 
 /* Custom Toggle Switch */
 .aw-switch {
