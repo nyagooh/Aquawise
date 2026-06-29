@@ -293,6 +293,9 @@ def _iter_source_features(filename, raw_bytes):
 
 def convert_upload(filename: str, raw_bytes: bytes) -> dict:
     """Parse an uploaded GIS file into { pipes, assets, meta } for the map."""
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext == "inp":
+        return convert_inp(filename, raw_bytes.decode("utf-8", "replace"))
     features = []
     skipped = 0
     by_class = Counter()
@@ -522,6 +525,264 @@ def _build_payload(filename, features, asset_features, skipped, by_class, by_zon
         "age_distribution": dict(age_dist),
         "status_counts": dict(statuses),
         "service_counts": dict(services),
+        "total_length_m": round(total_length_m, 1),
+        "total_length_km": round(total_length_m / 1000.0, 2),
+        "bbox": [bbox_lon[0], bbox_lat[0], bbox_lon[1], bbox_lat[1]],
+        "center": [(bbox_lon[0] + bbox_lon[1]) / 2, (bbox_lat[0] + bbox_lat[1]) / 2],
+    }
+    return {
+        "pipes": {"type": "FeatureCollection", "features": features},
+        "assets": {"type": "FeatureCollection", "features": asset_features},
+        "meta": meta,
+    }
+
+
+# ── EPANET .inp hydraulic model parsing ──────────────────────────────────────
+
+def _parse_inp_sections(text: str):
+    """Split an EPANET .inp into {SECTION: [ [tokens...], ... ]}, dropping
+    comments (everything after ';') and blank lines."""
+    sections = defaultdict(list)
+    current = None
+    for raw in text.splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            current = line[1:-1].strip().upper()
+            continue
+        if current is None:
+            continue
+        sections[current].append(line.split())
+    return sections
+
+
+def _num(tok, default=None):
+    try:
+        return float(tok)
+    except (TypeError, ValueError):
+        return default
+
+
+def convert_inp(filename: str, text: str) -> dict:
+    """Parse an EPANET .inp into the { pipes, assets, meta } map payload.
+
+    Nodes (junctions, reservoirs, tanks) and links (pipes, pumps, valves) come
+    straight from the model — no synthesis. [COORDINATES] place nodes and
+    [VERTICES] add bend points. When coordinates fall outside lon/lat ranges we
+    flag the model as 'schematic' so the frontend renders it on the No-basemap
+    engineering canvas instead of a geographic map.
+    """
+    s = _parse_inp_sections(text)
+    if not any(k in s for k in ("JUNCTIONS", "PIPES", "RESERVOIRS", "TANKS")):
+        raise ValueError(
+            f"'{filename}' does not look like an EPANET model — no [JUNCTIONS]/[PIPES] sections found."
+        )
+
+    # node id -> raw (x, y) from [COORDINATES]
+    coords = {}
+    for row in s.get("COORDINATES", []):
+        if len(row) >= 3:
+            x, y = _num(row[1]), _num(row[2])
+            if x is not None and y is not None:
+                coords[row[0]] = (x, y)
+
+    # Detect projectability: are the raw coords already lon/lat?
+    xs = [c[0] for c in coords.values()]
+    ys = [c[1] for c in coords.values()]
+    geographic = bool(coords) and all(-180 <= x <= 180 for x in xs) and all(-90 <= y <= 90 for y in ys) \
+        and (max(xs) - min(xs) > 1e-4 or max(ys) - min(ys) > 1e-4)
+
+    def project(pt):
+        """Return (lon, lat). Geographic coords pass through; schematic coords
+        are linearly fitted into a small synthetic window so Leaflet can still
+        draw the model on the engineering canvas."""
+        if geographic:
+            return [pt[0], pt[1]]
+        # normalise schematic x/y into a ~0.08° box near the equator
+        if not xs or max(xs) == min(xs) or max(ys) == min(ys):
+            return [pt[0], pt[1]]
+        nx = (pt[0] - min(xs)) / (max(xs) - min(xs))
+        ny = (pt[1] - min(ys)) / (max(ys) - min(ys))
+        return [round(nx * 0.08, 6), round(ny * 0.08, 6)]
+
+    # node kind lookup
+    node_kind = {}
+    for row in s.get("JUNCTIONS", []):
+        if row:
+            node_kind[row[0]] = "junction"
+    elev = {row[0]: _num(row[1]) for row in s.get("JUNCTIONS", []) if len(row) >= 2}
+    for row in s.get("RESERVOIRS", []):
+        if row:
+            node_kind[row[0]] = "reservoir"
+    for row in s.get("TANKS", []):
+        if row:
+            node_kind[row[0]] = "tank"
+
+    # link vertices: link id -> list of intermediate (x,y)
+    verts = defaultdict(list)
+    for row in s.get("VERTICES", []):
+        if len(row) >= 3:
+            x, y = _num(row[1]), _num(row[2])
+            if x is not None and y is not None:
+                verts[row[0]].append((x, y))
+
+    features = []
+    by_class = Counter()
+    statuses = Counter()
+    dia_dist = Counter()
+    diameters = Counter()
+    length_by_class = defaultdict(float)
+    total_length_m = 0.0
+    bbox_lon = [180.0, -180.0]
+    bbox_lat = [90.0, -90.0]
+
+    def _line_for_link(n1, n2, lid):
+        if n1 not in coords or n2 not in coords:
+            return None
+        pts = [coords[n1], *verts.get(lid, []), coords[n2]]
+        return [project(p) for p in pts]
+
+    def _track_bbox(line):
+        for lon, lat in line:
+            bbox_lon[0] = min(bbox_lon[0], lon)
+            bbox_lon[1] = max(bbox_lon[1], lon)
+            bbox_lat[0] = min(bbox_lat[0], lat)
+            bbox_lat[1] = max(bbox_lat[1], lat)
+
+    # [PIPES]  ID Node1 Node2 Length Diam Roughness MinorLoss Status
+    for row in s.get("PIPES", []):
+        if len(row) < 3:
+            continue
+        lid, n1, n2 = row[0], row[1], row[2]
+        line = _line_for_link(n1, n2, lid)
+        if not line or len(line) < 2:
+            continue
+        length_m = _num(row[3]) if len(row) >= 4 else None
+        diameter_mm = _num(row[4]) if len(row) >= 5 else None
+        roughness = _num(row[5]) if len(row) >= 6 else None
+        raw_status = row[7].lower() if len(row) >= 8 else "open"
+        status = "closed" if raw_status in ("closed", "cv") else "open"
+        ui_cls = "backfeed" if status == "closed" else ("main" if (diameter_mm or 0) >= 250 else "distribution")
+        if length_m is None:
+            length_m = _haversine_len(line) if geographic else 0.0
+        _track_bbox(line)
+        features.append({
+            "type": "Feature", "id": lid,
+            "geometry": {"type": "LineString", "coordinates": line},
+            "properties": {
+                "id": lid, "class": "transmission" if ui_cls == "main" else "distribution",
+                "ui_class": ui_cls, "network_raw": "pipe",
+                "material": None, "diameter_mm": int(diameter_mm) if diameter_mm else None,
+                "length_m": round(length_m, 1) if length_m else None,
+                "status": status, "service": "in-service",
+                "zone": None, "installed": None,
+                "node_from": n1, "node_to": n2,
+                "remarks": f"roughness {roughness}" if roughness else None, "layer": "pipes",
+            },
+        })
+        by_class[ui_cls] += 1
+        statuses[status] += 1
+        dia_dist[diameter_bucket(diameter_mm)] += 1
+        if diameter_mm:
+            diameters[int(diameter_mm)] += 1
+        total_length_m += length_m or 0.0
+        length_by_class[ui_cls] += length_m or 0.0
+
+    # pumps + valves rendered as short link segments too (dashed via status)
+    for sect, kind in (("PUMPS", "pump"), ("VALVES", "valve")):
+        for row in s.get(sect, []):
+            if len(row) < 3:
+                continue
+            lid, n1, n2 = row[0], row[1], row[2]
+            line = _line_for_link(n1, n2, lid)
+            if not line or len(line) < 2:
+                continue
+            _track_bbox(line)
+            features.append({
+                "type": "Feature", "id": lid,
+                "geometry": {"type": "LineString", "coordinates": line},
+                "properties": {
+                    "id": lid, "class": "distribution", "ui_class": "distribution",
+                    "network_raw": kind, "material": None, "diameter_mm": None,
+                    "length_m": None, "status": "open", "service": "in-service",
+                    "zone": None, "installed": None, "node_from": n1, "node_to": n2,
+                    "remarks": kind, "layer": sect.lower(),
+                },
+            })
+            by_class["distribution"] += 1
+
+    # node-point assets: tanks/reservoirs → tank; valves → pressure_valve; pumps → meter_valve
+    asset_features = []
+    for nid, kind in node_kind.items():
+        if kind in ("tank", "reservoir") and nid in coords:
+            lon, lat = project(coords[nid])
+            asset_features.append({
+                "type": "Feature", "id": nid,
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {
+                    "asset": "tank", "id": nid,
+                    "name": f"{'Reservoir' if kind == 'reservoir' else 'Tank'} {nid}",
+                    "capacity_m3": 1000, "level_pct": 65,
+                    "inflow_lps": 10, "outflow_lps": 9,
+                    "status": "ok", "junction_degree": 0,
+                },
+            })
+
+    def _midpoint_asset(sect, asset, name, extra):
+        for i, row in enumerate(s.get(sect, [])):
+            if len(row) < 3:
+                continue
+            lid, n1, n2 = row[0], row[1], row[2]
+            if n1 not in coords or n2 not in coords:
+                continue
+            p1, p2 = project(coords[n1]), project(coords[n2])
+            mid = [(p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2]
+            props = {"asset": asset, "id": lid, "name": f"{name} {lid}", "status": "ok"}
+            props.update(extra(i, row))
+            asset_features.append({
+                "type": "Feature", "id": lid,
+                "geometry": {"type": "Point", "coordinates": mid},
+                "properties": props,
+            })
+
+    _midpoint_asset("VALVES", "pressure_valve", "Valve",
+                    lambda i, row: {"set_bar": 3.0, "live_bar": 3.0, "min_bar": 2.5, "max_bar": 3.5})
+    _midpoint_asset("PUMPS", "meter_valve", "Pump",
+                    lambda i, row: {"size_mm": 150, "state": "open", "consumption_m3d": 0})
+
+    if not features:
+        raise ValueError(
+            f"No pipe links with usable coordinates found in '{filename}'. "
+            "Ensure the model includes a [COORDINATES] section."
+        )
+
+    asset_counts = defaultdict(int)
+    for a in asset_features:
+        asset_counts[a["properties"]["asset"]] += 1
+
+    node_total = len(node_kind)
+    meta = {
+        "source": filename.rsplit(".", 1)[0].replace("_", " ").title(),
+        "model_kind": "epanet",
+        "projection": "geographic" if geographic else "schematic",
+        "feature_count": len(features),
+        "node_count": node_total,
+        "skipped": 0,
+        "asset_count": len(asset_features),
+        "asset_counts": dict(asset_counts),
+        "by_class": dict(by_class),
+        "length_km_by_class": {k: round(v / 1000.0, 2) for k, v in length_by_class.items()},
+        "length_km_by_zone": {},
+        "length_km_by_material": {},
+        "top_zones": [],
+        "zones_normalized": [],
+        "materials": [],
+        "common_diameters_mm": diameters.most_common(12),
+        "diameter_distribution": dict(dia_dist),
+        "age_distribution": {},
+        "status_counts": dict(statuses),
+        "service_counts": {},
         "total_length_m": round(total_length_m, 1),
         "total_length_km": round(total_length_m / 1000.0, 2),
         "bbox": [bbox_lon[0], bbox_lat[0], bbox_lon[1], bbox_lat[1]],

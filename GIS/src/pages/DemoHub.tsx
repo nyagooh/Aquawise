@@ -201,7 +201,7 @@ function UploadView() {
     });
   };
 
-  const SINGLE_EXTS = ['geojson', 'json', 'zip', 'kml', 'kmz'];
+  const SINGLE_EXTS = ['geojson', 'json', 'zip', 'kml', 'kmz', 'inp'];
 
   const submit = async () => {
     if (!staged.length) return;

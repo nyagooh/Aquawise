@@ -13,6 +13,18 @@ npm run dev
 
 Vite dev server runs on http://localhost:5174.
 
+## Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_API_URL` | for uploads / lead form | Base URL of the GIS backend (default `http://localhost:8000`). |
+| `VITE_GOOGLE_MAPS_API_KEY` | optional | Google Maps tile key for the GIS workspace **Map** basemap. When unset, the workspace falls back to CARTO tiles; the **No basemap** engineering-canvas mode needs no key. |
+
+Copy `.env.example` to `.env.local` and fill in values. To enable Google tiles,
+create a key at the [Google Maps Platform console](https://console.cloud.google.com/google/maps-apis)
+(Maps JavaScript API enabled), restrict it to your domains, and set
+`VITE_GOOGLE_MAPS_API_KEY`.
+
 ## Upload → render (GIS backend)
 
 The **Upload GIS Data** flow (`/demo/upload`) posts a file to the bundled GIS

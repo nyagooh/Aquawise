@@ -18,6 +18,7 @@ import {
   loadUploadedNetwork,
   type NetworkData,
   type PipeClass,
+  type PipeProps,
   type PipeFeature,
   type AssetFeature,
   type AssetKind,
@@ -31,9 +32,9 @@ import {
 import { leaks as leakData, type Leak, type LeakSeverity } from '../data';
 
 const LEAK_SEVERITY_COLOR: Record<LeakSeverity, string> = {
-  minor: '#3B82F6',
-  major: '#F59E0B',
-  critical: '#EF4444'
+  minor: '#7FAFD2',
+  major: '#D9A156',
+  critical: '#D4675E'
 };
 const LEAK_SEVERITY_LABEL: Record<LeakSeverity, string> = {
   minor: 'Minor', major: 'Major', critical: 'Critical'
@@ -46,6 +47,64 @@ const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
   '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a> · Kisumu water demo data';
+// Google tiles — real imagery without a proxy. `lyrs=s` is pure satellite with
+// NO labels/roads (clean backdrop for the network); `lyrs=m` is the street map.
+const GOOGLE_KEY = (import.meta as { env?: { VITE_GOOGLE_MAPS_API_KEY?: string } }).env?.VITE_GOOGLE_MAPS_API_KEY || '';
+const TILE_GOOGLE_STREETS = 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
+const TILE_GOOGLE_SATELLITE = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+const TILE_GOOGLE_ATTR = 'Imagery &copy; <a href="https://www.google.com/maps">Google</a> · Kisumu water demo data';
+
+/** Basemap mode — street map, label-free satellite, or bare engineering canvas. */
+type Basemap = 'streets' | 'satellite' | 'none';
+
+/** Build the active basemap tile layer for the current mode + theme. */
+function makeTileLayer(basemap: Basemap, dark: boolean): L.TileLayer | null {
+  if (basemap === 'none') return null;
+  if (basemap === 'satellite') {
+    return L.tileLayer(TILE_GOOGLE_SATELLITE, { attribution: TILE_GOOGLE_ATTR, subdomains: '0123', maxZoom: 20 });
+  }
+  // streets
+  return L.tileLayer(TILE_GOOGLE_STREETS, { attribution: TILE_GOOGLE_ATTR, subdomains: '0123', maxZoom: 20 });
+}
+
+/* ── Workspace toolbar + simulation model ── */
+type ToolMode = 'select' | 'pan' | 'measure' | 'search' | 'fit' | 'simulate';
+type SimState =
+  | 'idle'        // Ready to run — no results yet
+  | 'running'
+  | 'success'
+  | 'warning'
+  | 'failed'
+  | 'outdated';
+
+const SIM_LABEL: Record<SimState, string> = {
+  idle: 'Ready to run',
+  running: 'Running…',
+  success: 'Simulation successful',
+  warning: 'Simulation with warnings',
+  failed: 'Simulation failed',
+  outdated: 'Simulation outdated'
+};
+
+/** Link colour-by options. The hydraulic ones need simulation results. */
+const LINK_SYMBOLOGY = [
+  { key: 'class', label: 'Asset class', needsSim: false },
+  { key: 'diameter', label: 'Diameter', needsSim: false },
+  { key: 'status', label: 'Status', needsSim: false },
+  { key: 'flow', label: 'Flow', needsSim: true },
+  { key: 'velocity', label: 'Velocity', needsSim: true },
+  { key: 'headloss', label: 'Unit headloss', needsSim: true }
+] as const;
+type LinkSymbology = (typeof LINK_SYMBOLOGY)[number]['key'];
+
+const NODE_SYMBOLOGY = [
+  { key: 'asset', label: 'Asset kind', needsSim: false },
+  { key: 'elevation', label: 'Elevation', needsSim: false },
+  { key: 'pressure', label: 'Pressure', needsSim: true },
+  { key: 'head', label: 'Head', needsSim: true },
+  { key: 'demand', label: 'Demand', needsSim: true }
+] as const;
+type NodeSymbology = (typeof NODE_SYMBOLOGY)[number]['key'];
 
 type Focus =
   | { kind: 'pipe'; feature: PipeFeature }
@@ -78,6 +137,11 @@ export default function GISMap() {
   const [layers, setLayers] = useState<LayerVis>(DEFAULT_LAYERS);
   const [showLeaks, setShowLeaks] = useState(true);
   const [focus, setFocus] = useState<Focus>(null);
+  const [basemap, setBasemap] = useState<Basemap>('satellite');
+  const [sim, setSim] = useState<SimState>('idle');
+  const [linkBy, setLinkBy] = useState<LinkSymbology>('class');
+  const [nodeBy, setNodeBy] = useState<NodeSymbology>('asset');
+  const hasResults = sim === 'success' || sim === 'warning' || sim === 'outdated';
 
   const mapRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<L.Map | null>(null);
@@ -86,6 +150,11 @@ export default function GISMap() {
   const layerGroupsRef = useRef<Partial<Record<PipeClass | AssetKind, L.LayerGroup>>>({});
   const leakGroupRef = useRef<L.LayerGroup | null>(null);
   const focusOutlineRef = useRef<L.Layer | null>(null);
+  // Read inside Leaflet event handlers (which close over init-time values).
+  const linkByRef = useRef<LinkSymbology>(linkBy);
+  const simHasResultsRef = useRef<boolean>(hasResults);
+  linkByRef.current = linkBy;
+  simHasResultsRef.current = hasResults;
 
   /* ── 1. fetch network — a user-uploaded network takes priority over the
         bundled Kisumu demo dataset ── */
@@ -105,6 +174,12 @@ export default function GISMap() {
     return () => { alive = false; };
   }, []);
 
+  /* Schematic EPANET models have no geographic coordinates — render them on the
+     bare engineering canvas rather than over satellite imagery. */
+  useEffect(() => {
+    if (network?.meta.projection === 'schematic') setBasemap('none');
+  }, [network]);
+
   /* ── 2. initialise map once we have data ── */
   useEffect(() => {
     if (!mapRef.current || !network || leafletRef.current) return;
@@ -114,22 +189,20 @@ export default function GISMap() {
       center: [network.meta.center[1], network.meta.center[0]],
       zoom: 13,
       preferCanvas: true,
-      zoomControl: true,
+      zoomControl: false,
       attributionControl: true,
       maxBounds: L.latLngBounds([latMin - 0.1, lonMin - 0.1], [latMax + 0.1, lonMax + 0.1]),
       minZoom: 10,
       maxZoom: 19
     });
     leafletRef.current = map;
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
     // Larger click tolerance — household lines are hairline, so a 6 px buffer
     // makes them clickable without forcing the operator to pixel-hunt.
     rendererRef.current = L.canvas({ padding: 0.4, tolerance: 6 });
 
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTR,
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
+    const tile = makeTileLayer(basemap, mode === 'dark');
+    if (tile) { tile.addTo(map); tileRef.current = tile; }
 
     /* layer groups */
     const groups: Partial<Record<PipeClass | AssetKind, L.LayerGroup>> = {};
@@ -181,11 +254,8 @@ export default function GISMap() {
         weight: style.hoverWeight,
         opacity: 1
       }));
-      line.on('mouseout', () => line.setStyle({
-        color: style.color,
-        weight: style.weight,
-        opacity: style.opacity
-      }));
+      line.on('mouseout', () => line.setStyle(baseLineStyle(feat, linkByRef.current, simHasResultsRef.current)));
+      (line as L.Polyline & { _awFeat?: PipeFeature })._awFeat = feat;
       line.addTo(group);
     });
 
@@ -259,17 +329,14 @@ export default function GISMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [network]);
 
-  /* ── 3. swap tiles on theme change without recreating map ── */
+  /* ── 3. swap tiles on theme / basemap change without recreating map ── */
   useEffect(() => {
     const map = leafletRef.current;
     if (!map) return;
-    if (tileRef.current) map.removeLayer(tileRef.current);
-    tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-      attribution: TILE_ATTR,
-      subdomains: 'abcd',
-      maxZoom: 19
-    }).addTo(map);
-  }, [mode]);
+    if (tileRef.current) { map.removeLayer(tileRef.current); tileRef.current = null; }
+    const tile = makeTileLayer(basemap, mode === 'dark');
+    if (tile) { tile.addTo(map); tileRef.current = tile; }
+  }, [mode, basemap]);
 
   /* ── 4. layer toggles ── */
   useEffect(() => {
@@ -295,6 +362,19 @@ export default function GISMap() {
     if (showLeaks && !has) grp.addTo(map);
     if (!showLeaks && has) map.removeLayer(grp);
   }, [showLeaks]);
+
+  /* ── 4c. recolour links when symbology / results change ── */
+  useEffect(() => {
+    const groups = layerGroupsRef.current;
+    PIPE_KEYS.forEach((k) => {
+      const g = groups[k];
+      if (!g) return;
+      g.eachLayer((layer) => {
+        const feat = (layer as L.Polyline & { _awFeat?: PipeFeature })._awFeat;
+        if (feat) (layer as L.Polyline).setStyle(baseLineStyle(feat, linkBy, hasResults));
+      });
+    });
+  }, [linkBy, hasResults]);
 
   /* ── 5. focus outline (selected pipe highlight) ── */
   useEffect(() => {
@@ -358,6 +438,27 @@ export default function GISMap() {
     setSearchParams(next, { replace: true });
   }, [network, searchParams, setSearchParams]);
 
+  const fitView = useCallback(() => {
+    const map = leafletRef.current;
+    if (!map || !network) return;
+    const [lonMin, latMin, lonMax, latMax] = network.meta.bbox;
+    map.flyToBounds(L.latLngBounds([latMin, lonMin], [latMax, lonMax]), { duration: 0.6, padding: [48, 48] });
+  }, [network]);
+
+  // Simulate is a UX stand-in: it drives the status strip + unlocks the
+  // hydraulic colour-by options. Real hydraulics land in a later phase.
+  const runSimulate = useCallback(() => {
+    setSim('running');
+    const t = setTimeout(() => setSim('success'), 1100);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Editing the network invalidates any prior run.
+  useEffect(() => {
+    setSim((s) => (s === 'success' || s === 'warning' ? 'outdated' : s));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network]);
+
   const toggleLayer = useCallback(
     (k: PipeClass | AssetKind) => setLayers((p) => ({ ...p, [k]: !p[k] })),
     []
@@ -384,7 +485,15 @@ export default function GISMap() {
 
   return (
     <Shell active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" pagePadding={false} hideRightRail>
-      <div className="gis-canvas gis-canvas--real">
+      <div className="gis-workspace">
+      <WorkspaceToolbar
+        basemap={basemap}
+        onBasemap={setBasemap}
+        onFit={fitView}
+        sim={sim}
+        onSimulate={runSimulate}
+      />
+      <div className={`gis-canvas gis-canvas--real${basemap === 'none' ? ' gis-canvas--nomap' : ' gis-canvas--sat'}`}>
         <div ref={mapRef} className="gis-leaflet" />
 
         {!network && !loadError && (
@@ -413,10 +522,16 @@ export default function GISMap() {
               showLeaks={showLeaks}
               leakCount={leakData.length}
               onToggleLeaks={() => setShowLeaks((x) => !x)}
+              linkBy={linkBy}
+              nodeBy={nodeBy}
+              onLinkBy={setLinkBy}
+              onNodeBy={setNodeBy}
+              hasResults={hasResults}
             />
-            <StatBadge meta={network.meta} />
           </>
         )}
+      </div>
+      <SimulationStrip sim={sim} onRun={runSimulate} linkBy={linkBy} nodeBy={nodeBy} hasResults={hasResults} />
       </div>
 
       {focus?.kind === 'pipe' && (
@@ -430,6 +545,64 @@ export default function GISMap() {
       )}
     </Shell>
   );
+}
+
+/* ─────────────────────────────────────────
+   Symbology — colour links by the selected
+   property. Class is the default; diameter and
+   status are data-backed; flow/velocity/headloss
+   come from synthesized simulation results.
+   ───────────────────────────────────────── */
+
+// Soft professional ramp: slate → pale blue → teal → amber → coral.
+// Viridis — perceptually-uniform sequential scale, the data-viz standard.
+const RAMP = ['#440154', '#3B528B', '#21918C', '#5EC962', '#FDE725'];
+function rampColor(t: number): string {
+  const clamped = Math.max(0, Math.min(1, t));
+  const idx = Math.min(RAMP.length - 2, Math.floor(clamped * (RAMP.length - 1)));
+  return RAMP[idx + (clamped * (RAMP.length - 1) - idx > 0.5 ? 1 : 0)];
+}
+
+/** Deterministic pseudo-flow for a pipe so "simulate" produces stable results. */
+function simFlow(p: PipeProps): number {
+  const dia = p.diameter_mm || 80;
+  const base = (dia / 25) ** 1.6 * 0.8;
+  let h = 0;
+  for (const ch of p.id) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  return base * (0.7 + (h % 100) / 100 * 0.9);
+}
+
+/** Resolve the resting style for a pipe under the active symbology. */
+function baseLineStyle(
+  feat: PipeFeature,
+  linkBy: LinkSymbology,
+  hasResults: boolean
+): L.PolylineOptions {
+  const p = feat.properties;
+  const style = PIPE_STYLE[p.ui_class];
+  const dashArray = p.status === 'closed' ? '8 5' : style.dashArray;
+  let color = style.color;
+  if (linkBy === 'diameter') {
+    const d = p.diameter_mm || 0;
+    color = rampColor((d - 25) / (400 - 25));
+  } else if (linkBy === 'status') {
+    color = p.status === 'closed' ? '#D4675E' : p.service === 'out-of-service' ? '#D9A156' : '#4FA877';
+  } else if (hasResults && (linkBy === 'flow' || linkBy === 'velocity' || linkBy === 'headloss')) {
+    const flow = simFlow(p);
+    const dia = p.diameter_mm || 80;
+    const velocity = flow / (Math.PI * (dia / 2000) ** 2) / 1000;
+    const headloss = (velocity ** 1.85) * (100 / dia);
+    const metric = linkBy === 'flow' ? flow / 60 : linkBy === 'velocity' ? velocity / 2.5 : headloss / 12;
+    color = rampColor(metric);
+  }
+  return {
+    color,
+    weight: style.weight,
+    opacity: style.opacity,
+    dashArray,
+    lineCap: 'round',
+    lineJoin: 'round'
+  };
 }
 
 /* ─────────────────────────────────────────
@@ -458,25 +631,33 @@ function assetIcon(feat: AssetFeature): L.DivIcon {
     });
   }
   if (kind === 'pressure_valve') {
+    // Standard hydraulic valve bowtie.
     return L.divIcon({
       className: 'aw-marker',
       html: `<div class="aw-asset-marker aw-prv" style="--ac:${palette.color};--sc:${statusColor}">
-        <svg viewBox="0 0 24 24" width="22" height="22"><polygon points="12,3 21,20 3,20" fill="var(--ac)" stroke="white" stroke-width="2"/></svg>
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <polygon points="3,5 3,19 12,12" fill="var(--ac)" stroke="white" stroke-width="2"/>
+          <polygon points="21,5 21,19 12,12" fill="var(--ac)" stroke="white" stroke-width="2"/>
+        </svg>
         <span class="aw-status-dot" style="background:${statusColor}"></span>
       </div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
     });
   }
   if (kind === 'meter_valve') {
+    // Pump / bulk meter — circle with drive wedge.
     return L.divIcon({
       className: 'aw-marker',
       html: `<div class="aw-asset-marker aw-mv" style="--ac:${palette.color};--sc:${statusColor}">
-        <svg viewBox="0 0 24 24" width="22" height="22"><rect x="4" y="4" width="16" height="16" rx="3" transform="rotate(45 12 12)" fill="var(--ac)" stroke="white" stroke-width="2"/></svg>
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <circle cx="10" cy="14" r="7" fill="var(--ac)" stroke="white" stroke-width="2"/>
+          <polygon points="10,14 19,5 19,14" fill="var(--ac)" stroke="white" stroke-width="2"/>
+        </svg>
         <span class="aw-status-dot" style="background:${statusColor}"></span>
       </div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
     });
   }
   return L.divIcon({
@@ -700,7 +881,12 @@ function LayerControl({
   meta,
   showLeaks,
   leakCount,
-  onToggleLeaks
+  onToggleLeaks,
+  linkBy,
+  nodeBy,
+  onLinkBy,
+  onNodeBy,
+  hasResults
 }: {
   layers: LayerVis;
   counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number> };
@@ -711,6 +897,11 @@ function LayerControl({
   showLeaks: boolean;
   leakCount: number;
   onToggleLeaks: () => void;
+  linkBy: LinkSymbology;
+  nodeBy: NodeSymbology;
+  onLinkBy: (k: LinkSymbology) => void;
+  onNodeBy: (k: NodeSymbology) => void;
+  hasResults: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const visiblePipeCount = PIPE_KEYS.reduce((sum, k) => sum + (layers[k] ? counts.pipeCounts[k] : 0), 0);
@@ -785,6 +976,35 @@ function LayerControl({
               onClick={onToggleLeaks}
             />
           </div>
+          <div className="gis-lc-section">
+            <div className="gis-lc-section-head"><span>Link symbology</span></div>
+            <select
+              className="gis-symbology-select"
+              value={linkBy}
+              onChange={(e) => onLinkBy(e.target.value as LinkSymbology)}
+            >
+              {LINK_SYMBOLOGY.map((o) => (
+                <option key={o.key} value={o.key} disabled={o.needsSim && !hasResults}>
+                  {o.label}{o.needsSim && !hasResults ? ' · run simulation' : ''}
+                </option>
+              ))}
+            </select>
+            <RampLegend linkBy={linkBy} hasResults={hasResults} />
+          </div>
+          <div className="gis-lc-section">
+            <div className="gis-lc-section-head"><span>Node symbology</span></div>
+            <select
+              className="gis-symbology-select"
+              value={nodeBy}
+              onChange={(e) => onNodeBy(e.target.value as NodeSymbology)}
+            >
+              {NODE_SYMBOLOGY.map((o) => (
+                <option key={o.key} value={o.key} disabled={o.needsSim && !hasResults}>
+                  {o.label}{o.needsSim && !hasResults ? ' · run simulation' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="gis-lc-section gis-lc-status">
             <div className="gis-lc-section-head"><span>Status</span></div>
             <div className="gis-lc-status-row">
@@ -803,12 +1023,39 @@ function LayerControl({
   );
 }
 
+const RAMP_RANGES: Partial<Record<LinkSymbology, { lo: string; hi: string }>> = {
+  diameter: { lo: '25 mm', hi: '≥400 mm' },
+  flow: { lo: '0 L/s', hi: '60 L/s' },
+  velocity: { lo: '0 m/s', hi: '2.5 m/s' },
+  headloss: { lo: '0 m/km', hi: '12 m/km' }
+};
+
+/** EPANET-style gradient legend for the active scaled link symbology. */
+function RampLegend({ linkBy, hasResults }: { linkBy: LinkSymbology; hasResults: boolean }) {
+  const range = RAMP_RANGES[linkBy];
+  if (!range) return null;
+  const needsSim = linkBy !== 'diameter';
+  if (needsSim && !hasResults) return null;
+  return (
+    <div className="gis-ramp-legend">
+      <div className="gis-ramp-bar" style={{ background: `linear-gradient(90deg, ${RAMP.join(',')})` }} />
+      <div className="gis-ramp-labels"><span>{range.lo}</span><span>{range.hi}</span></div>
+    </div>
+  );
+}
+
 function LayerToggle({ label, count, on, swatch, onClick }: {
   label: string; count: number; on: boolean; swatch: React.ReactNode; onClick: () => void;
 }) {
+  // Labelled legend row (GIS/EPANET style): checkbox · symbol · name · count.
   return (
-    <button className={`gis-layer-toggle${on ? ' on' : ''}`} onClick={onClick} type="button">
-      <span className="gis-lt-check">{on ? '✓' : ''}</span>
+    <button
+      className={`gis-layer-toggle${on ? ' on' : ''}`}
+      onClick={onClick}
+      type="button"
+      aria-pressed={on}
+    >
+      <span className="gis-lt-check" aria-hidden="true">{on ? '✓' : ''}</span>
       <span className="gis-lt-swatch">{swatch}</span>
       <span className="gis-lt-label">{label}</span>
       <span className="gis-lt-count">{count.toLocaleString()}</span>
@@ -831,66 +1078,122 @@ function PipeSwatch({ cls }: { cls: PipeClass }) {
 }
 
 function AssetSwatch({ kind }: { kind: AssetKind }) {
-  const palette = ASSET_STYLE[kind];
+  const c = ASSET_STYLE[kind].color;
   if (kind === 'tank') {
-    // Mini level-gauge mirrors the actual tank marker on the map.
+    // Reservoir / tank — cylinder with a waterline.
     return (
-      <span
-        className="gis-asset-swatch tank"
-        style={{ borderColor: palette.color, color: palette.color }}
-        aria-label="Reservoir level sensor"
-      >
-        <span className="gis-asset-swatch-tank-fill" />
-      </span>
+      <svg width={22} height={22} viewBox="0 0 22 22">
+        <rect x={5} y={3} width={12} height={16} rx={2} fill={c} stroke="#fff" strokeWidth={1.6} />
+        <rect x={5} y={11} width={12} height={8} rx={2} fill="#fff" opacity={0.3} />
+        <line x1={5} y1={11} x2={17} y2={11} stroke="#fff" strokeWidth={1.4} opacity={0.8} />
+      </svg>
     );
   }
   if (kind === 'pressure_valve') {
+    // Valve (PRV) — standard hydraulic bowtie.
     return (
-      <svg width={14} height={14} viewBox="0 0 14 14">
-        <polygon points="7,2 13,12 1,12" fill={palette.color} />
+      <svg width={22} height={22} viewBox="0 0 22 22">
+        <polygon points="3,4 3,18 11,11" fill={c} stroke="#fff" strokeWidth={1.6} strokeLinejoin="round" />
+        <polygon points="19,4 19,18 11,11" fill={c} stroke="#fff" strokeWidth={1.6} strokeLinejoin="round" />
       </svg>
     );
   }
   if (kind === 'meter_valve') {
+    // Pump / bulk meter — circle with drive wedge.
     return (
-      <svg width={14} height={14} viewBox="0 0 14 14">
-        <rect x={3} y={3} width={8} height={8} rx={1.5} transform="rotate(45 7 7)" fill={palette.color} />
+      <svg width={22} height={22} viewBox="0 0 22 22">
+        <circle cx={10} cy={12} r={7} fill={c} stroke="#fff" strokeWidth={1.6} />
+        <polygon points="10,12 19,3 19,12" fill={c} stroke="#fff" strokeWidth={1.6} strokeLinejoin="round" />
       </svg>
     );
   }
+  // Sensor — telemetry node with broadcast arcs.
   return (
-    <span
-      className="gis-asset-swatch sensor"
-      style={{ background: palette.color, boxShadow: `0 0 0 3px ${palette.color}33` }}
-    />
+    <svg width={22} height={22} viewBox="0 0 22 22" fill="none" stroke={c} strokeWidth={2.2} strokeLinecap="round">
+      <circle cx={11} cy={15} r={2.6} fill={c} stroke="none" />
+      <path d="M6.5 10.5a6 6 0 0 1 9 0" opacity={0.85} />
+      <path d="M4 7.5a9.5 9.5 0 0 1 14 0" opacity={0.5} />
+    </svg>
   );
 }
 
 /* Legend was merged into LayerControl — see status block + per-row swatches. */
 
 /* ─────────────────────────────────────────
-   Network stats badge (top-right)
+   Workspace toolbar (top) + simulation strip (bottom)
    ───────────────────────────────────────── */
 
-function StatBadge({ meta }: { meta: NetworkData['meta'] }) {
+const BASEMAP_TABS: Array<{ key: Basemap; label: string; title: string }> = [
+  { key: 'satellite', label: 'Satellite', title: 'Aerial imagery — no labels' },
+  { key: 'none', label: 'No basemap', title: 'Engineering canvas — model only' }
+];
+
+function WorkspaceToolbar({ basemap, onBasemap, onFit, sim, onSimulate }: {
+  basemap: Basemap;
+  onBasemap: (b: Basemap) => void;
+  onFit: () => void;
+  sim: SimState;
+  onSimulate: () => void;
+}) {
   return (
-    <div className="gis-stat-badge">
-      <div className="gis-stat-row">
-        <span>Live network</span>
-        <strong>Kisumu</strong>
+    <div className="gis-toolbar">
+      <div className="gis-basemap-tabs" role="tablist" aria-label="Basemap">
+        {BASEMAP_TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`gis-basemap-tab${basemap === t.key ? ' active' : ''}`}
+            onClick={() => onBasemap(t.key)}
+            title={t.title}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
-      <div className="gis-stat-row">
-        <span>Pipe segments</span>
-        <strong>{meta.feature_count.toLocaleString()}</strong>
+      <button type="button" className="gis-tool" onClick={onFit} title="Fit view" aria-label="Fit view">
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" />
+        </svg>
+      </button>
+      <div className="gis-toolbar-spacer" />
+      <button
+        type="button"
+        className={`gis-simulate-btn sim-${sim}`}
+        onClick={onSimulate}
+        disabled={sim === 'running'}
+        title="Run hydraulic simulation"
+      >
+        <span className="gis-sim-dot" />
+        {sim === 'running' ? 'Running…' : 'Run simulation'}
+      </button>
+    </div>
+  );
+}
+
+function SimulationStrip({ sim, onRun, linkBy, nodeBy, hasResults }: {
+  sim: SimState;
+  onRun: () => void;
+  linkBy: LinkSymbology;
+  nodeBy: NodeSymbology;
+  hasResults: boolean;
+}) {
+  const linkLabel = LINK_SYMBOLOGY.find((o) => o.key === linkBy)?.label ?? '—';
+  const nodeLabel = NODE_SYMBOLOGY.find((o) => o.key === nodeBy)?.label ?? '—';
+  return (
+    <div className={`gis-sim-strip sim-${sim}`}>
+      <div className="gis-sim-state">
+        <span className="gis-sim-dot" />
+        <strong>{SIM_LABEL[sim]}</strong>
       </div>
-      <div className="gis-stat-row">
-        <span>Total length</span>
-        <strong>{(meta.total_length_m / 1000).toFixed(1)} km</strong>
+      <div className="gis-sim-fields">
+        <div><span>Headloss formula</span><strong>Hazen-Williams</strong></div>
+        <div><span>Demand multiplier</span><strong>1.0×</strong></div>
+        <div><span>Links by</span><strong>{linkLabel}</strong></div>
+        <div><span>Nodes by</span><strong>{nodeLabel}</strong></div>
+        <div><span>Results</span><strong>{hasResults ? 'Available' : 'None'}</strong></div>
       </div>
-      <div className="gis-stat-row">
-        <span>Service zones</span>
-        <strong>{meta.top_zones.filter(([z]) => z.length <= 6).length}</strong>
-      </div>
+      <button type="button" className="gis-sim-run" onClick={onRun} disabled={sim === 'running'}>
+        {sim === 'running' ? 'Running…' : hasResults ? 'Re-run' : 'Run simulation'}
+      </button>
     </div>
   );
 }

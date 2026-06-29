@@ -103,6 +103,11 @@ export interface AssetFeature {
 
 export interface NetworkMeta {
   source: string;
+  /** Set by the EPANET .inp parser. Absent for GIS uploads / the bundled demo. */
+  model_kind?: 'epanet';
+  /** 'schematic' when .inp coordinates don't project to lon/lat. */
+  projection?: 'geographic' | 'schematic';
+  node_count?: number;
   feature_count: number;
   asset_count: number;
   asset_counts: Partial<Record<AssetKind, number>>;
@@ -309,50 +314,57 @@ export const PIPE_STYLE: Record<PipeClass, {
   shortLabel: string;
   description: string;
 }> = {
+  // Distinct categorical data palette (Tableau-style), full opacity, tuned to
+  // read over label-free satellite imagery: blue trunk, cyan distribution,
+  // light service, amber closed, pink DMA.
+  // Bold, high-visibility engineering palette tuned for dark satellite imagery
+  // — water-utility GIS convention: red trunk mains, blue distribution, light
+  // service, gold closed/isolated, magenta DMA boundary. Heavy weights + full
+  // opacity + white casing (see baseLineStyle) keep every class legible.
   main: {
-    color: '#1E40AF',          // deep cobalt — trunk authority
-    hoverColor: '#3B82F6',
-    weight: 5,
-    hoverWeight: 7,
-    opacity: 0.98,
+    color: '#1FA2FF',          // shiny blue — transmission trunk
+    hoverColor: '#7CC8FF',
+    weight: 5.5,
+    hoverWeight: 7.5,
+    opacity: 1,
     label: 'Transmission main',
     shortLabel: 'Mains',
     description: 'Primary supply trunk · highest priority'
   },
   distribution: {
-    color: '#14B8A6',          // teal — clearly distinct from mains' cobalt
-    hoverColor: '#5EEAD4',
-    weight: 2.2,
-    hoverWeight: 4,
-    opacity: 0.88,
+    color: '#1FA2FF',          // shiny blue — distribution backbone
+    hoverColor: '#7CC8FF',
+    weight: 3,
+    hoverWeight: 5,
+    opacity: 1,
     label: 'Distribution main',
     shortLabel: 'Distribution',
     description: 'Neighbourhood feeder · zone backbone'
   },
   household: {
-    color: '#64748B',          // mid slate — visible on both light and dark basemaps
-    hoverColor: '#0EA5E9',
-    weight: 1.6,
-    hoverWeight: 3,
-    opacity: 0.85,
-    label: 'Household connection',
-    shortLabel: 'Households',
+    color: '#1FA2FF',          // shiny blue — service lines
+    hoverColor: '#7CC8FF',
+    weight: 1.8,
+    hoverWeight: 3.2,
+    opacity: 0.95,
+    label: 'Service connection',
+    shortLabel: 'Service',
     description: 'Service line to customer property'
   },
   backfeed: {
-    color: '#F97316',          // saturated orange — flags isolation
-    hoverColor: '#FB923C',
-    weight: 2.8,
-    hoverWeight: 4.5,
+    color: '#1FA2FF',          // shiny blue — closed / isolated (dashed)
+    hoverColor: '#7CC8FF',
+    weight: 3,
+    hoverWeight: 5,
     dashArray: '8 5',
-    opacity: 0.95,
+    opacity: 1,
     label: 'Backfeed / closed',
     shortLabel: 'Backfeed',
     description: 'Reversible supply path · currently closed'
   },
   boundary: {
-    color: '#A855F7',          // saturated purple — clearly visible on both basemaps
-    hoverColor: '#D8B4FE',
+    color: '#1FA2FF',          // shiny blue — DMA outline (dashed)
+    hoverColor: '#7CC8FF',
     weight: 3,
     hoverWeight: 4.5,
     dashArray: '6 4',
@@ -373,29 +385,29 @@ export const ASSET_STYLE: Record<AssetKind, {
   description: string;
 }> = {
   tank: {
-    color: '#1D4ED8',
+    color: '#1FA2FF',          // shiny blue — reservoir / tank node
     ring: '#BFDBFE',
-    label: 'Reservoir · level sensor',
-    shortLabel: 'Level sensors',
+    label: 'Reservoir / tank',
+    shortLabel: 'Reservoirs',
     description: 'Reservoir level-sensor telemetry'
   },
   pressure_valve: {
-    color: '#10B981',
-    ring: '#A7F3D0',
-    label: 'Pressure valve',
-    shortLabel: 'PRVs',
+    color: '#1FA2FF',          // shiny blue — pressure valve
+    ring: '#BFE5FF',
+    label: 'Valve (PRV)',
+    shortLabel: 'Valves',
     description: 'Pressure-reducing valve · live drift'
   },
   meter_valve: {
-    color: '#F97316',
-    ring: '#FED7AA',
-    label: 'Meter / bulk valve',
+    color: '#1FA2FF',          // shiny blue — bulk meter / pump
+    ring: '#BFE5FF',
+    label: 'Meter / pump',
     shortLabel: 'Meters',
     description: 'Consumption-metered valve assembly'
   },
   sensor: {
-    color: '#EF4444',
-    ring: '#FECACA',
+    color: '#1FA2FF',          // shiny blue — sensor node (telemetry)
+    ring: '#BFE5FF',
     label: 'Flow + pressure sensor',
     shortLabel: 'Sensors',
     description: 'Live flow & pressure telemetry node'
@@ -405,9 +417,9 @@ export const ASSET_STYLE: Record<AssetKind, {
 export const ASSET_ORDER: AssetKind[] = ['tank', 'pressure_valve', 'meter_valve', 'sensor'];
 
 export const STATUS_COLOR: Record<AssetStatus, string> = {
-  ok: '#22C55E',
-  warn: '#F59E0B',
-  alert: '#EF4444'
+  ok: '#4FA877',     // muted green — healthy
+  warn: '#D9A156',   // amber — watch
+  alert: '#D4675E'   // coral — critical
 };
 
 export const MATERIAL_TINT: Record<string, string> = {
