@@ -5009,3 +5009,7 @@ button { font-family: inherit; }
 /* ── Satellite canvas filter ────────────────────────── */
 .gis-canvas--sat .leaflet-container { filter: none; }
 
+/* Dark overlay on satellite tiles only — tile pane sits below the SVG overlay pane
+   so pipes/junctions remain fully bright while the imagery is dimmed for legibility */
+.gis-leaflet--sat .leaflet-tile-pane { filter: brightness(0.5); }
+

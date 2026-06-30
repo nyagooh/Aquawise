@@ -1101,7 +1101,7 @@ const [linkBy, setLinkBy] = useState<LinkSymbology>('class');
       <div className={`gis-canvas gis-canvas--real${basemap === 'none' ? ' gis-canvas--nomap' : ' gis-canvas--sat'}`}>
         
         {/* Leaflet Map with potential pseudo-3D styling */}
-        <div ref={mapRef} className={`gis-leaflet${basemap === 'none' ? ' gis-leaflet--blank' : ''}${is3D ? ' perspective-3d' : ''}`} style={{ width: '100%', height: '100%' }} />
+        <div ref={mapRef} className={`gis-leaflet${basemap === 'none' ? ' gis-leaflet--blank' : ''}${basemap === 'satellite' ? ' gis-leaflet--sat' : ''}${is3D ? ' perspective-3d' : ''}`} style={{ width: '100%', height: '100%' }} />
 
         {/* Top-Center Integrated Status Bar */}
         {network && (
