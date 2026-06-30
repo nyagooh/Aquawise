@@ -3,6 +3,7 @@ import {
   AbsoluteFill,
   Audio,
   Easing,
+  Img,
   interpolate,
   Sequence,
   spring,
@@ -26,17 +27,15 @@ const fade = (frame: number, duration: number) =>
     extrapolateRight: 'clamp',
   });
 
-const AquaLogo: React.FC<{light?: boolean; compact?: boolean}> = ({light, compact}) => (
-  <div className={`logo ${compact ? 'logo-compact' : ''}`}>
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="15" fill={light ? '#fff' : BLUE} />
-      <path d="M12 50 32 14 52 50" fill="none" stroke={light ? BLUE : '#fff'} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" />
-      <path d="M21 50 32 14 43 50" fill="none" opacity=".5" stroke={light ? BLUE : '#fff'} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" />
-      <path d="M29 50 32 14 35 50" fill="none" opacity=".25" stroke={light ? BLUE : '#fff'} strokeLinecap="round" strokeLinejoin="round" strokeWidth="3.5" />
-    </svg>
-    {!compact && <span>AquaWise</span>}
-  </div>
-);
+const LOGO_MARK = staticFile('audio/Aquawise-mark-blue.png');
+const LOGO_LOCKUP = staticFile('audio/Aquawise-lockup-blue.png');
+
+// Brand logo — uses the supplied PNGs: the square mark for compact spots, the
+// full lockup (mark + wordmark) everywhere else.
+const AquaLogo: React.FC<{light?: boolean; compact?: boolean}> = ({compact}) =>
+  compact
+    ? <Img src={LOGO_MARK} className="logo-mark" alt="AquaWise"/>
+    : <Img src={LOGO_LOCKUP} className="logo-lockup" alt="AquaWise"/>;
 
 const Caption: React.FC<{children: React.ReactNode; dark?: boolean}> = ({children, dark}) => {
   const frame = useCurrentFrame();
