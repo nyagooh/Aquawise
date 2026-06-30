@@ -19,8 +19,8 @@
 
 /* ════════ Real AquaWise app UI (trailer recreations) ════════ */
 .app-stage{position:absolute;left:90px;right:90px;top:120px;bottom:104px;transform-origin:center}
-.float-card{position:absolute;right:150px;top:300px;z-index:30}
-.float-card.wide{right:140px;top:250px}
+.float-card{position:absolute;right:130px;top:210px;z-index:30;height:660px;width:380px}
+.float-card.wide{right:130px;top:250px;height:520px}
 .lens-eyebrow,.sim-eyebrow span{color:#7fd0ff;font-weight:800;letter-spacing:3px}
 .lens-eyebrow{position:absolute;left:120px;top:90px;font-size:20px;z-index:30}
 .sim-eyebrow{position:absolute;left:120px;top:70px;z-index:30}

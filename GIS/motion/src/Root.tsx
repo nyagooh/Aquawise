@@ -1,7 +1,11 @@
 import React from 'react';
 import {Composition} from 'remotion';
+import {loadFont} from '@remotion/google-fonts/Inter';
 import {AquaWiseTrailer} from './Trailer';
+import './app-styles.css';
 import './styles.css';
+
+loadFont();
 
 export const MotionRoot: React.FC = () => (
   <>

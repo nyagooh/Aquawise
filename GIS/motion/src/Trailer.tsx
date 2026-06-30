@@ -11,7 +11,7 @@ import {
   useVideoConfig,
 } from 'remotion';
 
-import {AppFrame, DashboardView, MapWorkspace, AssetCard, LeakBoard} from './AppUI';
+import {AppFrame, DashboardView, GISWorkspace, AssetPanel, LeakPanel} from './AppUI';
 
 const BLUE = '#2563EB';
 const FLOW = '#1FA2FF';
@@ -147,11 +147,11 @@ const AssetJourney: React.FC = () => {
     <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 330)}}>
       <div className="app-stage flush" style={{opacity: enter, transform: `scale(${(0.92 + enter * 0.08) * zoom})`}}>
         <AppFrame active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" flush>
-          <MapWorkspace dash={frame * 4}/>
+          <GISWorkspace dash={frame * 4}/>
         </AppFrame>
       </div>
       <div className="float-card" style={{opacity: card, transform: `translateX(${80 - card * 80}px)`}}>
-        <AssetCard/>
+        <AssetPanel/>
       </div>
       {frame > 60 && frame < 150 && <div className="lens-eyebrow" style={{opacity: interpolate(frame,[60,90,140,150],[0,1,1,0])}}>ASSET MANAGEMENT</div>}
       {frame > 215 && <Caption>Know what you own — down to a single valve.</Caption>}
@@ -170,11 +170,11 @@ const NRWDetection: React.FC = () => {
     <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 330)}}>
       <div className="app-stage flush" style={{opacity: enter, transform: `scale(${(0.92 + enter * 0.08) * zoom}) translateY(${(zoom - 1) * -60}px)`}}>
         <AppFrame active="leaks" title="Leak Intelligence" sub="Anomaly detection · expected vs measured flow" flush>
-          <MapWorkspace dash={frame * 5} leak leakPulse={leakPulse}/>
+          <GISWorkspace dash={frame * 5} leak leakPulse={leakPulse}/>
         </AppFrame>
       </div>
       <div className="float-card wide" style={{opacity: board, transform: `translateY(${80 - board * 80}px)`}}>
-        <LeakBoard/>
+        <LeakPanel/>
       </div>
       <div className="word-swap" key={phrases}>{phrases}</div>
       {frame > 240 && <Caption>See exactly where water — and revenue — disappears.</Caption>}
@@ -193,7 +193,7 @@ const Simulate:React.FC=()=>{
     <div className="sim-eyebrow"><span>HYDRAULIC MODEL</span><h1>Decide with the model — not a guess.</h1></div>
     <div className="app-stage flush sim" style={{opacity: enter, transform: `scale(${0.9 + enter * 0.1})`}}>
       <AppFrame active="gis" title="GIS Map · Simulation" sub="Hazen-Williams · pressure-driven hydraulic run" flush>
-        <MapWorkspace dash={frame * (3 + wave * 6)} sim={sim}/>
+        <GISWorkspace dash={frame * (3 + wave * 6)} sim={sim}/>
       </AppFrame>
       <div className="sim-wave" style={{opacity: sim === 'Running…' ? 0.9 : 0, transform: `scale(${0.2 + wave * 2.4})`}}/>
       <div className="ui-cursor" style={{left: `${78 - click * 6}%`, top: `${20 - click * 2}%`, transform: `scale(${1 - click * 0.15})`}}/>
