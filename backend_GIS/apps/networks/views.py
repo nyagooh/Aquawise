@@ -13,6 +13,22 @@ from rest_framework.views import APIView
 from .models import Asset, NetworkUpload, Node, Pipe, WaterNetwork, Zone
 
 
+def _resolve_upload_path(file_path: str) -> str:
+    """Convert a stored file_path to an absolute local filesystem path.
+
+    Stored paths may be relative (when using default local storage) or
+    already absolute (legacy). Tries default_storage.path() first; if
+    the storage backend doesn't support it (e.g. S3), returns file_path
+    unchanged so callers can use default_storage.open() instead.
+    """
+    if os.path.isabs(file_path):
+        return file_path
+    try:
+        return default_storage.path(file_path)
+    except (ValueError, NotImplementedError):
+        return file_path
+
+
 class NetworkListView(APIView):
     def get(self, request):
         networks = WaterNetwork.objects.filter(
@@ -26,6 +42,7 @@ class NetworkListView(APIView):
                 "total_nodes": n.total_nodes,
                 "total_length_km": n.total_length_km,
                 "source_crs": n.source_crs,
+                "is_schematic": n.is_schematic,
                 "bbox": json.loads(n.bbox.geojson) if n.bbox else None,
                 "created_at": n.created_at,
             }
@@ -41,27 +58,39 @@ class NetworkUploadView(APIView):
         if not file:
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("zip", "inp", "net"):
+        if ext not in ("zip", "inp", "geojson", "json", "kml", "kmz"):
             return Response(
-                {"error": "Only .zip (shapefile), .inp, or .net (EPANET) files accepted"},
+                {"error": "Only .zip (shapefile), .inp (EPANET), .geojson/.json, or .kml/.kmz files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        file_type = "shapefile" if ext == "zip" else f"epanet_{ext}"
+        if ext == "zip":
+            file_type = "shapefile"
+        elif ext == "inp":
+            file_type = "epanet_inp"
+        elif ext in ("geojson", "json"):
+            file_type = "geojson"
+        else:
+            file_type = "kml"
+
+        name = request.POST.get("name", "").strip()
+
         upload = NetworkUpload.objects.create(
             organisation=request.user.organisation,
             file_name=file.name,
+            network_name=name,
             file_path="",
             file_type=file_type,
         )
 
-        # Save file to media/uploads/<org_id>/<upload_id>.<ext>
         upload_dir = f"uploads/{request.user.organisation_id}"
         saved_path = default_storage.save(
             os.path.join(upload_dir, f"{upload.id}.{ext}"),
             ContentFile(file.read()),
         )
-        upload.file_path = default_storage.path(saved_path)
+        # Store the absolute path so Celery workers (which may have a different
+        # working directory) can locate the file directly.
+        upload.file_path = _resolve_upload_path(saved_path)
         upload.save(update_fields=["file_path"])
 
         if ext == "zip":
@@ -70,6 +99,24 @@ class NetworkUploadView(APIView):
                 ingest_shapefile.delay(str(upload.id))
             except Exception:
                 ingest_shapefile.apply(args=[str(upload.id)])
+        elif ext == "inp":
+            from .tasks import ingest_epanet
+            try:
+                ingest_epanet.delay(str(upload.id))
+            except Exception:
+                ingest_epanet.apply(args=[str(upload.id)])
+        elif ext in ("geojson", "json"):
+            from .tasks import ingest_geojson
+            try:
+                ingest_geojson.delay(str(upload.id))
+            except Exception:
+                ingest_geojson.apply(args=[str(upload.id)])
+        elif ext in ("kml", "kmz"):
+            from .tasks import ingest_kml
+            try:
+                ingest_kml.delay(str(upload.id))
+            except Exception:
+                ingest_kml.apply(args=[str(upload.id)])
 
         return Response({"upload_id": str(upload.id), "status": upload.status}, status=status.HTTP_202_ACCEPTED)
 
@@ -80,16 +127,7 @@ class WaterNetworkDetailView(APIView):
             network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
         except WaterNetwork.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response({
-            "id": str(network.id),
-            "name": network.name,
-            "source_crs": network.source_crs,
-            "total_pipes": network.total_pipes,
-            "total_nodes": network.total_nodes,
-            "total_length_km": network.total_length_km,
-            "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
-            "created_at": network.created_at,
-        })
+        return Response(_network_detail(network))
 
     def delete(self, request, pk):
         try:
@@ -98,6 +136,34 @@ class WaterNetworkDetailView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
         network.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        name = request.data.get("name", "").strip()
+        if not name:
+            return Response({"error": "Name cannot be empty"}, status=status.HTTP_400_BAD_REQUEST)
+
+        network.name = name
+        network.save(update_fields=["name"])
+        return Response(_network_detail(network))
+
+
+def _network_detail(network: WaterNetwork) -> dict:
+    return {
+        "id": str(network.id),
+        "name": network.name,
+        "source_crs": network.source_crs,
+        "is_schematic": network.is_schematic,
+        "total_pipes": network.total_pipes,
+        "total_nodes": network.total_nodes,
+        "total_length_km": network.total_length_km,
+        "bbox": json.loads(network.bbox.geojson) if network.bbox else None,
+        "created_at": network.created_at,
+    }
 
 
 class NetworkValidationReportView(APIView):
@@ -257,8 +323,9 @@ class AssetListView(APIView):
                 "name": asset.name,
                 "asset_type": asset.asset_type,
                 "status": asset.status,
+                **(asset.attributes or {}),
             })
-            for asset in qs.only("id", "geometry", "name", "asset_type", "status").iterator(chunk_size=500)
+            for asset in qs.iterator(chunk_size=500)
         ]
         return Response({"type": "FeatureCollection", "features": features})
 
@@ -339,7 +406,7 @@ class NetworkStatsView(APIView):
 
 
 class EpanetUploadView(APIView):
-    """Attach an EPANET .inp or .net file to an existing network."""
+    """Attach an EPANET .inp file to an existing network."""
     parser_classes = [MultiPartParser]
 
     def post(self, request, pk):
@@ -353,9 +420,9 @@ class EpanetUploadView(APIView):
             return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
 
         ext = file.name.rsplit(".", 1)[-1].lower()
-        if ext not in ("inp", "net"):
+        if ext != "inp":
             return Response(
-                {"error": "Only .inp or .net EPANET files accepted"},
+                {"error": "Only .inp EPANET files accepted"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -372,7 +439,7 @@ class EpanetUploadView(APIView):
             os.path.join(upload_dir, f"{upload.id}.{ext}"),
             ContentFile(file.read()),
         )
-        upload.file_path = default_storage.path(saved_path)
+        upload.file_path = _resolve_upload_path(saved_path)
         upload.save(update_fields=["file_path"])
 
         from .tasks import ingest_epanet
@@ -380,6 +447,69 @@ class EpanetUploadView(APIView):
             ingest_epanet.delay(str(upload.id))
         except Exception:
             ingest_epanet.apply(args=[str(upload.id)])
+
+        return Response(
+            {"upload_id": str(upload.id), "status": upload.status},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class NetworkAddDataView(APIView):
+    """Upload additional shapefile/GeoJSON/KML data into an existing network."""
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"error": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ext = file.name.rsplit(".", 1)[-1].lower()
+        type_map = {"zip": "shapefile", "geojson": "geojson", "json": "geojson", "kml": "kml", "kmz": "kml"}
+        if ext not in type_map:
+            return Response(
+                {"error": "Only .zip (shapefile), .geojson/.json, or .kml/.kmz files accepted"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        upload = NetworkUpload.objects.create(
+            organisation=request.user.organisation,
+            network=network,
+            file_name=file.name,
+            file_path="",
+            file_type=type_map[ext],
+        )
+
+        upload_dir = f"uploads/{request.user.organisation_id}"
+        saved_path = default_storage.save(
+            os.path.join(upload_dir, f"{upload.id}.{ext}"),
+            ContentFile(file.read()),
+        )
+        upload.file_path = _resolve_upload_path(saved_path)
+        upload.save(update_fields=["file_path"])
+
+        if ext == "zip":
+            from .tasks import ingest_shapefile
+            try:
+                ingest_shapefile.delay(str(upload.id))
+            except Exception:
+                ingest_shapefile.apply(args=[str(upload.id)])
+        elif ext in ("geojson", "json"):
+            from .tasks import ingest_geojson
+            try:
+                ingest_geojson.delay(str(upload.id))
+            except Exception:
+                ingest_geojson.apply(args=[str(upload.id)])
+        else:
+            from .tasks import ingest_kml
+            try:
+                ingest_kml.delay(str(upload.id))
+            except Exception:
+                ingest_kml.apply(args=[str(upload.id)])
 
         return Response(
             {"upload_id": str(upload.id), "status": upload.status},
@@ -396,19 +526,17 @@ class NetworkUploadsListView(APIView):
             return Response(status=status.HTTP_404_NOT_FOUND)
 
         uploads = NetworkUpload.objects.filter(network=network).order_by("-uploaded_at")
-        # Also include the original shapefile upload (linked via WaterNetwork.upload)
+        data = []
         if network.upload_id:
             shp = network.upload
-            data = [{
+            data.append({
                 "id": str(shp.id),
                 "file_name": shp.file_name,
                 "file_type": shp.file_type,
                 "status": shp.status,
                 "uploaded_at": shp.uploaded_at,
                 "validation_report": shp.validation_report or {},
-            }]
-        else:
-            data = []
+            })
 
         for u in uploads:
             data.append({
@@ -421,3 +549,55 @@ class NetworkUploadsListView(APIView):
             })
 
         return Response(data)
+
+
+class NetworkSimulationView(APIView):
+    """Async EPANET hydraulic simulation.
+
+    GET  → returns latest SimulationRun status + result (if complete).
+    POST → triggers a new async simulation run.
+    """
+
+    def get(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        has_epanet = NetworkUpload.objects.filter(
+            network=network,
+            file_type__in=["epanet_inp", "epanet"],
+            status__in=[NetworkUpload.Status.COMPLETE, NetworkUpload.Status.COMPLETE_WITH_WARNINGS],
+        ).exists()
+
+        run = (
+            network.simulation_runs
+            .order_by("-created_at")
+            .first()
+        )
+
+        if not run:
+            return Response({"status": "none", "has_epanet": has_epanet}, status=status.HTTP_200_OK)
+
+        data = {
+            "run_id": str(run.id),
+            "status": run.status,
+            "has_epanet": has_epanet,
+            "error_message": run.error_message or None,
+            "created_at": run.created_at,
+            "completed_at": run.completed_at,
+        }
+
+        if run.status == "complete" and run.result:
+            data.update(run.result)
+
+        return Response(data)
+
+    def post(self, request, pk):
+        try:
+            network = WaterNetwork.objects.get(pk=pk, organisation=request.user.organisation)
+        except WaterNetwork.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
+        from apps.hydraulics.views import _trigger_run
+        return _trigger_run(request, network)

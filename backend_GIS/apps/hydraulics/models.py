@@ -19,6 +19,7 @@ class SimulationRun(models.Model):
     error_message = models.TextField(blank=True)
     wntr_version = models.CharField(max_length=20, blank=True)
     parameters = models.JSONField(default=dict, blank=True)
+    result = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
