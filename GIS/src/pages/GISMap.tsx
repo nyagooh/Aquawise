@@ -27,9 +27,100 @@ import {
 } from '../data/network';
 
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a>';
+const TILE_DARK  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_ATTR  = '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a>';
+const TILE_GOOGLE_SATELLITE = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
+const TILE_GOOGLE_ATTR = 'Imagery &copy; <a href="https://www.google.com/maps">Google</a>';
+
+/** Basemap mode — street map, satellite imagery, or bare engineering canvas. */
+type Basemap = 'satellite' | 'streets' | 'none';
+
+/** Build the active tile layer for the current basemap + theme. Returns null for 'none'.
+ *  In 3D mode the CSS perspective transform reveals tiles beyond Leaflet's viewport bounds,
+ *  so we double the buffer to avoid blank edges at the top of the tilted view. */
+function makeTileLayer(basemap: Basemap, dark: boolean, is3D = false): L.TileLayer | null {
+  const buf = is3D ? 12 : 6;
+  if (basemap === 'none') return null;
+  if (basemap === 'satellite') {
+    return L.tileLayer(TILE_GOOGLE_SATELLITE, {
+      attribution: TILE_GOOGLE_ATTR,
+      subdomains: '0123',
+      maxZoom: 20,
+      keepBuffer: buf,
+      updateWhenIdle: false,
+    });
+  }
+  return L.tileLayer(dark ? TILE_DARK : TILE_LIGHT, {
+    attribution: TILE_ATTR,
+    subdomains: 'abcd',
+    maxZoom: 19,
+    keepBuffer: buf,
+    updateWhenIdle: false,
+  });
+}
+
+/* ── Link / node colour-by options ── */
+const LINK_SYMBOLOGY = [
+  { key: 'class',    label: 'Asset class',    needsSim: false },
+  { key: 'diameter', label: 'Diameter',       needsSim: false },
+  { key: 'status',   label: 'Status',         needsSim: false },
+  { key: 'flow',     label: 'Flow',           needsSim: true  },
+  { key: 'velocity', label: 'Velocity',       needsSim: true  },
+  { key: 'headloss', label: 'Unit headloss',  needsSim: true  }
+] as const;
+type LinkSymbology = (typeof LINK_SYMBOLOGY)[number]['key'];
+
+const NODE_SYMBOLOGY = [
+  { key: 'asset',    label: 'Asset kind', needsSim: false },
+  { key: 'elevation',label: 'Elevation',  needsSim: false },
+  { key: 'pressure', label: 'Pressure',   needsSim: true  },
+  { key: 'head',     label: 'Head',       needsSim: true  },
+  { key: 'demand',   label: 'Demand',     needsSim: true  }
+] as const;
+type NodeSymbology = (typeof NODE_SYMBOLOGY)[number]['key'];
+
+/* Viridis ramp — perceptually-uniform sequential scale. */
+const RAMP = ['#440154', '#3B528B', '#21918C', '#5EC962', '#FDE725'];
+const RAMP_RANGES: Partial<Record<LinkSymbology, { lo: string; hi: string }>> = {
+  diameter: { lo: '25 mm', hi: '≥400 mm' },
+  flow:     { lo: '0 L/s', hi: '60 L/s'  },
+  velocity: { lo: '0 m/s', hi: '2.5 m/s' },
+  headloss: { lo: '0 m/km', hi: '12 m/km' }
+};
+
+function rampColor(t: number): string {
+  const clamped = Math.max(0, Math.min(1, t));
+  const idx = Math.min(RAMP.length - 2, Math.floor(clamped * (RAMP.length - 1)));
+  return RAMP[idx + (clamped * (RAMP.length - 1) - idx > 0.5 ? 1 : 0)];
+}
+
+function simFlowEstimate(id: string, diameter_mm: number | null | undefined): number {
+  const dia = diameter_mm || 80;
+  const base = (dia / 25) ** 1.6 * 0.8;
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  return base * (0.7 + (h % 100) / 100 * 0.9);
+}
+
+function baseLineStyle(feat: PipeFeature, linkBy: LinkSymbology, hasResults: boolean): L.PolylineOptions {
+  const p = feat.properties;
+  const style = PIPE_STYLE[p.ui_class];
+  const dashArray = p.status === 'closed' ? '8 5' : style.dashArray;
+  let color = style.color;
+  if (linkBy === 'diameter') {
+    color = rampColor(((p.diameter_mm || 0) - 25) / (400 - 25));
+  } else if (linkBy === 'status') {
+    color = p.status === 'closed' ? '#D4675E' : p.service === 'out-of-service' ? '#D9A156' : '#4FA877';
+  } else if (hasResults && (linkBy === 'flow' || linkBy === 'velocity' || linkBy === 'headloss')) {
+    const flow = simFlowEstimate(p.id, p.diameter_mm);
+    const dia  = p.diameter_mm || 80;
+    const vel  = flow / (Math.PI * (dia / 2000) ** 2) / 1000;
+    const hl   = (vel ** 1.85) * (100 / dia);
+    const metric = linkBy === 'flow' ? flow / 60 : linkBy === 'velocity' ? vel / 2.5 : hl / 12;
+    color = rampColor(metric);
+  }
+  return { color, weight: style.weight, opacity: style.opacity, dashArray, lineCap: 'round', lineJoin: 'round' };
+}
 
 type Focus =
   | { kind: 'pipe'; feature: PipeFeature }
@@ -63,7 +154,9 @@ export default function GISMap() {
   const [layers, setLayers] = useState<LayerVis>(DEFAULT_LAYERS);
   const [focus, setFocus] = useState<Focus>(null);
   const [isSchematic, setIsSchematic] = useState<boolean>(false);
-  const [showBasemap, setShowBasemap] = useState<boolean>(true);
+  const [basemap, setBasemap] = useState<Basemap>('satellite');
+const [linkBy, setLinkBy] = useState<LinkSymbology>('class');
+  const [nodeBy, setNodeBy] = useState<NodeSymbology>('asset');
   const [simData, setSimData] = useState<SimulationData | null>(null);
   const [simStatus, setSimStatus] = useState<SimulationStatus>('none');
   const [simHour, setSimHour] = useState<number>(0);
@@ -89,6 +182,8 @@ export default function GISMap() {
   const [isSimEnabled, setIsSimEnabled] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const hasResults = simData !== null && isSimEnabled;
+
   const pipeLayersRef = useRef<Map<string, L.Polyline>>(new Map());
   const assetLayersRef = useRef<Map<string, L.Marker>>(new Map());
   const junctionLayersRef = useRef<Map<string, L.CircleMarker>>(new Map());
@@ -113,7 +208,9 @@ export default function GISMap() {
           setEditableName(data.meta.name || 'Untitled Network');
           const schematic = data.meta.is_schematic === true;
           setIsSchematic(schematic);
-          setShowBasemap(!schematic);
+          // Schematic INP has no real coordinates → bare canvas.
+          // Geo-referenced INP (or the shapefile network) → satellite by default.
+          setBasemap(schematic ? 'none' : 'satellite');
           // Build O(1) lookup maps for hot animation loops
           pipeMapRef.current = new Map(data.pipes.map(p => [p.properties.id, p]));
           assetMapRef.current = new Map(data.assets.map(a => [a.properties.id, a]));
@@ -142,7 +239,11 @@ export default function GISMap() {
       maxZoom: 19
     });
     leafletRef.current = map;
-    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    // Zoom control is rendered in React outside the map div so it stays flat in 3D view
+
+    // Seed the basemap tile immediately — effect 3 fires before the map exists on first load
+    const initTile = makeTileLayer(basemap, mode === 'dark', is3D);
+    if (initTile) { initTile.addTo(map); tileRef.current = initTile; }
 
     // Fix map off-centering by forcing Leaflet to recalculate container bounds and center on the network
     const timer = setTimeout(() => {
@@ -326,18 +427,10 @@ export default function GISMap() {
   useEffect(() => {
     const map = leafletRef.current;
     if (!map) return;
-    if (tileRef.current) {
-      map.removeLayer(tileRef.current);
-      tileRef.current = null;
-    }
-    if (showBasemap) {
-      tileRef.current = L.tileLayer(mode === 'dark' ? TILE_DARK : TILE_LIGHT, {
-        attribution: TILE_ATTR,
-        subdomains: 'abcd',
-        maxZoom: 19
-      }).addTo(map);
-    }
-  }, [mode, showBasemap]);
+    if (tileRef.current) { map.removeLayer(tileRef.current); tileRef.current = null; }
+    const tile = makeTileLayer(basemap, mode === 'dark', is3D);
+    if (tile) { tile.addTo(map); tileRef.current = tile; }
+  }, [mode, basemap, is3D]);
 
   /* ── 4. layer toggles ── */
   useEffect(() => {
@@ -692,12 +785,9 @@ export default function GISMap() {
       // Clear simulation cache
       delete (layer as any)._cachedStyle;
 
-      layer.setStyle({
-        color: style.color,
-        weight: style.weight * scale,
-        opacity: style.opacity,
-        dashArray: style.dashArray
-      });
+      // Apply linkBy-aware static style when sim is not driving colors
+      const bStyle = baseLineStyle(feature, linkBy, false);
+      layer.setStyle({ ...bStyle, weight: (bStyle.weight || style.weight) * scale });
 
       const pathEl = (layer as any)._path;
       if (pathEl) {
@@ -758,7 +848,7 @@ export default function GISMap() {
         }
       }
     });
-  }, [simData, network, zoom, isSimEnabled]);
+  }, [simData, network, zoom, isSimEnabled, linkBy]);
 
   /* ── 11. workmode changes sync with visible layers ── */
   useEffect(() => {
@@ -819,12 +909,17 @@ export default function GISMap() {
     setAddDataError(null);
     try {
       const { getAuthHeaders } = await import('../data/network');
-      const headers = await getAuthHeaders();
+      const authHeaders = await getAuthHeaders() as Record<string, string>;
+      // Strip Content-Type so the browser sets multipart/form-data with the correct boundary
+      const uploadHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(authHeaders)) {
+        if (k.toLowerCase() !== 'content-type') uploadHeaders[k] = v;
+      }
       const form = new FormData();
       form.append('file', file);
       const res = await fetch(`/api/v1/networks/${network.meta.id}/add-data/`, {
         method: 'POST',
-        headers: headers as Record<string, string>,
+        headers: uploadHeaders,
         body: form,
       });
       if (!res.ok) {
@@ -994,10 +1089,19 @@ export default function GISMap() {
       pagePadding={false}
       hideRightRail
     >
-      <div className="gis-canvas gis-canvas--real" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+      <div className="gis-workspace">
+      <WorkspaceToolbar
+        basemap={basemap}
+        onBasemap={setBasemap}
+        onFit={handleResetView}
+        hasEpanet={hasEpanet}
+        simStatus={simStatus}
+        onSimulate={handleRunSimulation}
+      />
+      <div className={`gis-canvas gis-canvas--real${basemap === 'none' ? ' gis-canvas--nomap' : ' gis-canvas--sat'}`}>
         
         {/* Leaflet Map with potential pseudo-3D styling */}
-        <div ref={mapRef} className={`gis-leaflet${!showBasemap ? ' gis-leaflet--blank' : ''}${is3D ? ' perspective-3d' : ''}`} style={{ width: '100%', height: '100%' }} />
+        <div ref={mapRef} className={`gis-leaflet${basemap === 'none' ? ' gis-leaflet--blank' : ''}${is3D ? ' perspective-3d' : ''}`} style={{ width: '100%', height: '100%' }} />
 
         {/* Top-Center Integrated Status Bar */}
         {network && (
@@ -1075,13 +1179,16 @@ export default function GISMap() {
                 onAllPipes={setAllPipes}
                 onAllAssets={setAllAssets}
                 meta={network.meta}
-                showBasemap={showBasemap}
-                onToggleBasemap={() => setShowBasemap((sb) => !sb)}
                 simData={simData}
+linkBy={linkBy}
+                nodeBy={nodeBy}
+                onLinkBy={setLinkBy}
+                onNodeBy={setNodeBy}
+                hasResults={hasResults}
               />
 
               {/* Upload additional data to this network */}
-              <div>
+              <div style={{ marginTop: '8px' }}>
                 <input
                   ref={addDataInputRef}
                   type="file"
@@ -1188,8 +1295,22 @@ export default function GISMap() {
           </button>
         </div>
 
-        {/* Display Controls on right stack (aligned on the bottom right baseline) */}
-        <div className="aw-display-controls" style={{ right: '16px', bottom: '16px' }}>
+        {/* Zoom buttons — bottom-right, outside perspective-3d div so they stay flat in 3D view */}
+        <div className="aw-zoom-controls">
+          <button className="aw-control-btn" title="Zoom in" onClick={() => leafletRef.current?.zoomIn()} type="button">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="14" height="14">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+          <button className="aw-control-btn" title="Zoom out" onClick={() => leafletRef.current?.zoomOut()} type="button">
+            <svg fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="14" height="14">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Display Controls — top-right, outside the perspective-3d div so buttons stay flat in 3D view */}
+        <div className="aw-display-controls">
           <button className="aw-control-btn" title="Restore orientation to north" onClick={handleResetOrientation} type="button">
             <svg fill="currentColor" height="14" viewBox="0 0 14 14" width="14" xmlns="http://www.w3.org/2000/svg">
               <g fill="currentColor"><path d="m7.00008 0 2.99992 6h-6z" /><path d="m6.99992 14-2.99992-6h6z" opacity="0.7" /></g>
@@ -1205,7 +1326,12 @@ export default function GISMap() {
               <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l-7 4a2 2 0 002 0l7-4a2 2 0 001-1.73z" />
             </svg>
           </button>
-          <button className="aw-control-btn" title="Change map background" onClick={() => setShowBasemap(!showBasemap)} type="button">
+          <button
+            className={`aw-control-btn${basemap === 'satellite' ? ' active' : ''}`}
+            title="Cycle basemap (satellite → streets → none)"
+            onClick={() => setBasemap((b) => b === 'satellite' ? 'streets' : b === 'streets' ? 'none' : 'satellite')}
+            type="button"
+          >
             <svg fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24" width="14" height="14">
               <circle cx="12" cy="12" r="10" /><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20" />
             </svg>
@@ -1489,6 +1615,16 @@ export default function GISMap() {
           </div>
         )}
       </div>
+      <SimulationStrip
+        simStatus={simStatus}
+        simData={simData}
+        hasEpanet={hasEpanet}
+        onRun={handleRunSimulation}
+        linkBy={linkBy}
+        nodeBy={nodeBy}
+        hasResults={hasResults}
+      />
+      </div>{/* /gis-workspace */}
 
       {focus?.kind === 'pipe' && (
         <PipePanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
@@ -1500,6 +1636,112 @@ export default function GISMap() {
         <JunctionPanel feature={focus.feature} onClose={() => setFocus(null)} simData={simData} simHour={simHour} />
       )}
     </Shell>
+  );
+}
+
+/* ─────────────────────────────────────────
+   Workspace toolbar (top bar)
+   ───────────────────────────────────────── */
+
+const BASEMAP_TABS: Array<{ key: Basemap; label: string; title: string }> = [
+  { key: 'satellite', label: 'Satellite',  title: 'Aerial imagery' },
+  { key: 'streets',   label: 'Streets',    title: 'Street map' },
+  { key: 'none',      label: 'No basemap', title: 'Engineering canvas — model only' }
+];
+
+function WorkspaceToolbar({
+  basemap, onBasemap, onFit, hasEpanet, simStatus, onSimulate
+}: {
+  basemap: Basemap;
+  onBasemap: (b: Basemap) => void;
+  onFit: () => void;
+  hasEpanet: boolean;
+  simStatus: SimulationStatus;
+  onSimulate: () => void;
+}) {
+  const running = simStatus === 'queued' || simStatus === 'running';
+  return (
+    <div className="gis-toolbar">
+      <div className="gis-basemap-tabs" role="tablist" aria-label="Basemap">
+        {BASEMAP_TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`gis-basemap-tab${basemap === t.key ? ' active' : ''}`}
+            onClick={() => onBasemap(t.key)}
+            title={t.title}
+            type="button"
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="gis-tool" onClick={onFit} title="Fit view to network" aria-label="Fit view">
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 9V4h5 M20 9V4h-5 M4 15v5h5 M20 15v5h-5" />
+        </svg>
+      </button>
+      <div className="gis-toolbar-spacer" />
+      {hasEpanet && (
+        <button
+          type="button"
+          className={`gis-simulate-btn${running ? ' sim-running' : ''}`}
+          onClick={onSimulate}
+          disabled={running}
+          title="Run EPANET hydraulic simulation"
+        >
+          <span className="gis-sim-dot" />
+          {running ? 'Running…' : 'Run simulation'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   Simulation strip (bottom bar)
+   ───────────────────────────────────────── */
+
+const SIM_STATUS_LABEL: Partial<Record<SimulationStatus, string>> = {
+  none:     'Ready to run',
+  queued:   'Queued…',
+  running:  'Running…',
+  complete: 'Simulation ready',
+  failed:   'Simulation failed'
+};
+
+function SimulationStrip({
+  simStatus, simData, hasEpanet, onRun, linkBy, nodeBy, hasResults
+}: {
+  simStatus: SimulationStatus;
+  simData: SimulationData | null;
+  hasEpanet: boolean;
+  onRun: () => void;
+  linkBy: LinkSymbology;
+  nodeBy: NodeSymbology;
+  hasResults: boolean;
+}) {
+  if (!hasEpanet) return null;
+  const running = simStatus === 'queued' || simStatus === 'running';
+  const label = SIM_STATUS_LABEL[simStatus] ?? simStatus;
+  const linkLabel = LINK_SYMBOLOGY.find((o) => o.key === linkBy)?.label ?? '—';
+  const nodeLabel = NODE_SYMBOLOGY.find((o) => o.key === nodeBy)?.label ?? '—';
+  const stripCls = simData ? 'sim-success' : simStatus === 'failed' ? 'sim-failed' : running ? 'sim-running' : 'sim-idle';
+  return (
+    <div className={`gis-sim-strip ${stripCls}`}>
+      <div className="gis-sim-state">
+        <span className="gis-sim-dot" />
+        <strong>{label}</strong>
+      </div>
+      <div className="gis-sim-fields">
+        <div><span>Formula</span><strong>Hazen-Williams</strong></div>
+        <div><span>Links by</span><strong>{linkLabel}</strong></div>
+        <div><span>Nodes by</span><strong>{nodeLabel}</strong></div>
+        <div><span>Results</span><strong>{hasResults ? 'Available' : 'None'}</strong></div>
+      </div>
+      <button type="button" className="gis-sim-run" onClick={onRun} disabled={running}>
+        {running ? 'Running…' : simData ? 'Re-run' : 'Run simulation'}
+      </button>
+    </div>
   );
 }
 
@@ -1712,6 +1954,18 @@ function escapeHtml(s: string): string {
    Floating layer control (top-left)
    ───────────────────────────────────────── */
 
+function RampLegend({ linkBy, hasResults }: { linkBy: LinkSymbology; hasResults: boolean }) {
+  const range = RAMP_RANGES[linkBy];
+  if (!range) return null;
+  if (linkBy !== 'diameter' && !hasResults) return null;
+  return (
+    <div className="gis-ramp-legend">
+      <div className="gis-ramp-bar" style={{ background: `linear-gradient(90deg, ${RAMP.join(',')})` }} />
+      <div className="gis-ramp-labels"><span>{range.lo}</span><span>{range.hi}</span></div>
+    </div>
+  );
+}
+
 function LayerControl({
   layers,
   counts,
@@ -1719,9 +1973,12 @@ function LayerControl({
   onAllPipes,
   onAllAssets,
   meta,
-  showBasemap,
-  onToggleBasemap,
-  simData
+  simData,
+  linkBy,
+  nodeBy,
+  onLinkBy,
+  onNodeBy,
+  hasResults
 }: {
   layers: LayerVis;
   counts: { pipeCounts: Record<PipeClass, number>; assetCounts: Record<AssetKind, number>; junctionCount: number };
@@ -1729,9 +1986,12 @@ function LayerControl({
   onAllPipes: (on: boolean) => void;
   onAllAssets: (on: boolean) => void;
   meta: NetworkData['meta'];
-  showBasemap: boolean;
-  onToggleBasemap: () => void;
   simData: SimulationData | null;
+  linkBy: LinkSymbology;
+  nodeBy: NodeSymbology;
+  onLinkBy: (k: LinkSymbology) => void;
+  onNodeBy: (k: NodeSymbology) => void;
+  hasResults: boolean;
 }) {
   const [expanded, setExpanded] = useState(true);
   const visiblePipeCount = PIPE_KEYS.reduce((sum, k) => sum + (layers[k] ? counts.pipeCounts[k] : 0), 0);
@@ -1798,19 +2058,33 @@ function LayerControl({
             ))}
           </div>
           <div className="gis-lc-section">
-            <div className="gis-lc-section-head">
-              <span>Basemap</span>
-            </div>
-            <LayerToggle
-              label="Map Imagery"
-              on={showBasemap}
-              swatch={
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ color: 'hsl(var(--primary))' }}>
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                </svg>
-              }
-              onClick={onToggleBasemap}
-            />
+            <div className="gis-lc-section-head"><span>Link symbology</span></div>
+            <select
+              className="gis-symbology-select"
+              value={linkBy}
+              onChange={(e) => onLinkBy(e.target.value as LinkSymbology)}
+            >
+              {LINK_SYMBOLOGY.map((o) => (
+                <option key={o.key} value={o.key} disabled={o.needsSim && !hasResults}>
+                  {o.label}{o.needsSim && !hasResults ? ' · run simulation' : ''}
+                </option>
+              ))}
+            </select>
+            <RampLegend linkBy={linkBy} hasResults={hasResults} />
+          </div>
+          <div className="gis-lc-section">
+            <div className="gis-lc-section-head"><span>Node symbology</span></div>
+            <select
+              className="gis-symbology-select"
+              value={nodeBy}
+              onChange={(e) => onNodeBy(e.target.value as NodeSymbology)}
+            >
+              {NODE_SYMBOLOGY.map((o) => (
+                <option key={o.key} value={o.key} disabled={o.needsSim && !hasResults}>
+                  {o.label}{o.needsSim && !hasResults ? ' · run simulation' : ''}
+                </option>
+              ))}
+            </select>
           </div>
           {simData && simData.controls.length > 0 && (
             <div className="gis-lc-section" style={{ borderTop: '1px solid hsl(var(--border))', paddingTop: '10px' }}>

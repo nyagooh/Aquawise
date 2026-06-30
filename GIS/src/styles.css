@@ -4251,6 +4251,15 @@ button { font-family: inherit; }
   gap: 8px;
   z-index: 1000;
 }
+.aw-zoom-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+}
 .aw-control-btn {
   width: 32px;
   height: 32px;
@@ -4803,3 +4812,200 @@ button { font-family: inherit; }
   margin-top: 2px;
   animation: toast-fade 0.2s ease;
 }
+
+/* ── GIS workspace layout ───────────────────────────── */
+.gis-workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Workspace toolbar (top bar) ────────────────────── */
+.gis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+  height: 42px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.gis-toolbar-spacer { flex: 1; }
+
+.gis-basemap-tabs {
+  display: flex;
+  gap: 2px;
+  background: hsl(var(--card-muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.gis-basemap-tab {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.gis-basemap-tab:hover { background: hsl(var(--border)); color: hsl(var(--foreground)); }
+.gis-basemap-tab.active {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.gis-tool {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.gis-tool:hover { background: hsl(var(--border)); color: hsl(var(--foreground)); }
+
+.gis-simulate-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.gis-simulate-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.gis-simulate-btn.sim-running { background: hsl(var(--card-muted)); border-color: hsl(var(--border)); color: hsl(var(--muted-foreground)); }
+
+/* ── Simulation dot indicator ───────────────────────── */
+.gis-sim-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.gis-simulate-btn .gis-sim-dot { background: hsl(var(--primary-foreground)); }
+.gis-simulate-btn.sim-running .gis-sim-dot { background: #f59e0b; animation: pulse 1s infinite; }
+
+/* ── Simulation strip (bottom bar) ─────────────────── */
+.gis-sim-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 14px;
+  background: hsl(var(--card));
+  border-top: 1px solid hsl(var(--border));
+  height: 40px;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  overflow: hidden;
+}
+.gis-sim-strip.sim-success { border-top-color: #22c55e33; }
+.gis-sim-strip.sim-failed  { border-top-color: #ef444433; }
+.gis-sim-strip.sim-running { border-top-color: #f59e0b33; }
+
+.gis-sim-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+.gis-sim-strip.sim-success .gis-sim-dot { background: #22c55e; }
+.gis-sim-strip.sim-failed  .gis-sim-dot { background: #ef4444; }
+.gis-sim-strip.sim-running .gis-sim-dot { background: #f59e0b; animation: pulse 1s infinite; }
+.gis-sim-strip.sim-idle    .gis-sim-dot { background: hsl(var(--muted-foreground)); }
+
+.gis-sim-fields {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  overflow: hidden;
+}
+.gis-sim-fields > div {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.gis-sim-fields span { color: hsl(var(--muted-foreground)); }
+.gis-sim-fields strong { color: hsl(var(--foreground)); }
+
+.gis-sim-run {
+  padding: 3px 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid hsl(var(--primary));
+  background: transparent;
+  color: hsl(var(--primary));
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.gis-sim-run:hover { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.gis-sim-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Ramp legend ────────────────────────────────────── */
+.gis-ramp-legend { margin-top: 6px; }
+.gis-ramp-bar {
+  height: 6px;
+  border-radius: 3px;
+  width: 100%;
+}
+.gis-ramp-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6875rem;
+  color: hsl(var(--muted-foreground));
+  margin-top: 2px;
+}
+
+/* ── Symbology select ───────────────────────────────── */
+.gis-symbology-select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px;
+  font-size: 0.75rem;
+  border-radius: 5px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card-muted));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+}
+
+/* Leaflet native zoom control is disabled; zoom is handled by React buttons in aw-display-controls */
+
+/* ── Canvas fill in workspace flex column ───────────── */
+.gis-workspace .gis-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Satellite canvas filter ────────────────────────── */
+.gis-canvas--sat .leaflet-container { filter: none; }
+
