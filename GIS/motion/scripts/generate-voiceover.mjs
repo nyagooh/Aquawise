@@ -6,22 +6,23 @@ const outputDirectory = resolve('public/audio');
 await mkdir(outputDirectory, {recursive: true});
 
 const lines = [
-  'Every utility loses water it cannot see, and the cost runs into millions.',
-  'AquaWise turns your entire water network into one living, connected system.',
-  'Manage every asset, every pipe, valve, pump, reservoir and meter, in one place.',
-  'See it all live, from the whole network down to a single valve.',
-  'The moment pressure drifts or a sensor flags, AquaWise alerts you first.',
-  'Compare expected flow with reality, and pinpoint non-revenue water before it drains revenue.',
-  'Then AquaWise AI recommends the fix, and proves it on the hydraulic model before a crew ever moves.',
-  'AquaWise. Less water lost. More revenue kept. See it. Simulate it. Act.',
+  'Every day, water moves through thousands of connected assets. AquaWise makes every part of that network visible.',
+  'Bring asset records, GIS data, maintenance information, and hydraulic models together — instantly.',
+  'Manage every pipe, valve, pump, tank, meter, and connection from one intelligent platform.',
+  'See asset condition, pressure, maintenance, and flow — from the entire network down to one critical asset.',
+  'Compare expected and measured flow. Detect anomalies faster. Locate risk and uncover potential non-revenue water.',
+  'Run hydraulic simulations, test interventions, understand their impact, and choose the right action before teams enter the field.',
+  'Act sooner. Extend asset life. Improve operations. Protect water — and protect revenue.',
+  'AquaWise. Manage every asset. Understand every flow. Reduce non-revenue water. See it. Simulate it. Act.',
 ];
 
+// Positive, energetic, persuasive Kenyan-English female voice (advertisement style).
 const tts = new EdgeTTS({
   voice: 'en-KE-AsiliaNeural',
   lang: 'en-KE',
   outputFormat: 'audio-24khz-96kbitrate-mono-mp3',
-  pitch: '-4%',
-  rate: '-6%',
+  pitch: '+1%',
+  rate: '+7%',
   volume: '+0%',
   timeout: 30000,
 });
