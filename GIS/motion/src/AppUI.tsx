@@ -154,88 +154,123 @@ const ClassRow: React.FC<{label: string; km: string; pct: number; color: string}
   </div>
 );
 
+// Individually exported cards so the trailer can spotlight each one.
+export {KPIS};
+
+export const KpiCard: React.FC<{k: typeof KPIS[number]}> = ({k}) => (
+  <button className={`ops-kpi tone-${k.tone}`} disabled>
+    <div className="ops-kpi-label">{k.label}</div>
+    <div className="ops-kpi-value">{k.value}<span className="ops-kpi-unit">{k.unit}</span></div>
+    <div className="ops-kpi-sub">{k.sub}</div>
+  </button>
+);
+
+export const CompositionCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Network composition</div><div className="ops-card-sub">By pipe class · % of total length</div></div></div>
+    <div className="ops-class-bars">{CLASS_BARS.map((b) => <ClassRow key={b.label} {...b}/>)}</div>
+  </div>
+);
+export const MaterialsCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Materials in use</div><div className="ops-card-sub">5 pipe materials</div></div></div>
+    <div className="ops-class-bars">{MATERIALS.map((m) => <ClassRow key={m.name} label={m.name} {...m}/>)}</div>
+  </div>
+);
+export const AgeCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Age distribution</div><div className="ops-card-sub">Install date · oldest on the left</div></div></div>
+    <div className="ops-age-grid">
+      {AGES.map((a) => (
+        <div key={a.bucket} className="ops-age-cell">
+          <div className="ops-age-bar"><div className="ops-age-fill" style={{height: `${a.pct}%`, background: a.color}}/></div>
+          <div className="ops-age-label"><span>{a.bucket}</span><strong>{a.count}</strong></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+export const ZonesCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Service zones</div><div className="ops-card-sub">Ranked by pipe-length coverage</div></div><button className="btn btn-ghost btn-sm" disabled>Open map →</button></div>
+    <table className="ops-zone-table">
+      <thead><tr><th>Zone</th><th style={{textAlign: 'right'}}>Pipes</th><th style={{textAlign: 'right'}}>Length</th><th>Share of network</th><th style={{textAlign: 'right'}}>Status</th></tr></thead>
+      <tbody>
+        {ZONES.map((z) => (
+          <tr key={z.code}>
+            <td><strong>{z.label}</strong><div className="ops-zone-code">{z.code}</div></td>
+            <td className="mono" style={{textAlign: 'right'}}>{z.pipes}</td>
+            <td className="mono" style={{textAlign: 'right'}}>{z.km} km</td>
+            <td><div className="ops-zone-share"><div className="ops-zone-share-fill" style={{width: `${z.pct}%`}}/><span>{z.pct}%</span></div></td>
+            <td style={{textAlign: 'right'}}><span className={`pill ${z.risk ? 'warn' : 'safe'}`}><span className="dot"/>{z.risk ? 'Watch' : 'Healthy'}</span></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+export const AlertsCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Live alerts</div><div className="ops-card-sub">5 open · auto-generated from telemetry</div></div><button className="btn btn-ghost btn-sm" disabled>All →</button></div>
+    <div className="ops-alert-list">
+      {ALERTS.map((a) => (
+        <div key={a.title} className={`ops-alert sev-${a.sev}`}>
+          <span className="ops-alert-dot"/>
+          <div className="ops-alert-body"><div className="ops-alert-title">{a.title}</div><div className="ops-alert-detail">{a.detail}</div></div>
+          <div className="ops-alert-time">{a.time}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+export const ReservoirCard: React.FC = () => (
+  <div className="ops-card">
+    <div className="ops-card-head"><div><div className="ops-card-title">Reservoir watch</div><div className="ops-card-sub">Live fill levels · inflow / outflow · hours to empty</div></div><button className="btn btn-ghost btn-sm" disabled>Inspect on map →</button></div>
+    <div className="ops-reservoir-grid">
+      {RES.map((r) => (
+        <div key={r.id} className="ops-reservoir">
+          <div className="ops-reservoir-head">
+            <div><div className="ops-reservoir-name">{r.name}</div><div className="ops-reservoir-id">{r.id} · {r.cap}</div></div>
+            <span className={`pill ${r.tone}`}><span className="dot"/>{r.s}</span>
+          </div>
+          <div className="ops-reservoir-gauge"><div className="ops-reservoir-gauge-fill" style={{height: `${r.lvl}%`, background: r.color}}/><span className="ops-reservoir-gauge-value">{r.lvl}%</span></div>
+          <div className="ops-reservoir-meta"><span>In <strong>12 L/s</strong></span><span>Out <strong>14 L/s</strong></span><span>To empty <strong>{r.lvl < 35 ? '11h' : '—'}</strong></span></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 export const DashboardView: React.FC = () => (
   <>
-    <section className="ops-kpi-band">
-      {KPIS.map((k) => (
-        <button key={k.label} className={`ops-kpi tone-${k.tone}`} disabled>
-          <div className="ops-kpi-label">{k.label}</div>
-          <div className="ops-kpi-value">{k.value}<span className="ops-kpi-unit">{k.unit}</span></div>
-          <div className="ops-kpi-sub">{k.sub}</div>
-        </button>
-      ))}
-    </section>
-
-    <section className="ops-row ops-row-3">
-      <div className="ops-card">
-        <div className="ops-card-head"><div><div className="ops-card-title">Network composition</div><div className="ops-card-sub">By pipe class · % of total length</div></div></div>
-        <div className="ops-class-bars">{CLASS_BARS.map((b) => <ClassRow key={b.label} {...b}/>)}</div>
-      </div>
-      <div className="ops-card">
-        <div className="ops-card-head"><div><div className="ops-card-title">Materials in use</div><div className="ops-card-sub">5 pipe materials</div></div></div>
-        <div className="ops-class-bars">{MATERIALS.map((m) => <ClassRow key={m.name} label={m.name} {...m}/>)}</div>
-      </div>
-      <div className="ops-card">
-        <div className="ops-card-head"><div><div className="ops-card-title">Age distribution</div><div className="ops-card-sub">Install date · oldest on the left</div></div></div>
-        <div className="ops-age-grid">
-          {AGES.map((a) => (
-            <div key={a.bucket} className="ops-age-cell">
-              <div className="ops-age-bar"><div className="ops-age-fill" style={{height: `${a.pct}%`, background: a.color}}/></div>
-              <div className="ops-age-label"><span>{a.bucket}</span><strong>{a.count}</strong></div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <section className="ops-row ops-row-2">
-      <div className="ops-card">
-        <div className="ops-card-head"><div><div className="ops-card-title">Service zones</div><div className="ops-card-sub">Ranked by pipe-length coverage</div></div><button className="btn btn-ghost btn-sm" disabled>Open map →</button></div>
-        <table className="ops-zone-table">
-          <thead><tr><th>Zone</th><th style={{textAlign: 'right'}}>Pipes</th><th style={{textAlign: 'right'}}>Length</th><th>Share of network</th><th style={{textAlign: 'right'}}>Status</th></tr></thead>
-          <tbody>
-            {ZONES.map((z) => (
-              <tr key={z.code}>
-                <td><strong>{z.label}</strong><div className="ops-zone-code">{z.code}</div></td>
-                <td className="mono" style={{textAlign: 'right'}}>{z.pipes}</td>
-                <td className="mono" style={{textAlign: 'right'}}>{z.km} km</td>
-                <td><div className="ops-zone-share"><div className="ops-zone-share-fill" style={{width: `${z.pct}%`}}/><span>{z.pct}%</span></div></td>
-                <td style={{textAlign: 'right'}}><span className={`pill ${z.risk ? 'warn' : 'safe'}`}><span className="dot"/>{z.risk ? 'Watch' : 'Healthy'}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="ops-card">
-        <div className="ops-card-head"><div><div className="ops-card-title">Live alerts</div><div className="ops-card-sub">5 open · auto-generated from telemetry</div></div><button className="btn btn-ghost btn-sm" disabled>All →</button></div>
-        <div className="ops-alert-list">
-          {ALERTS.map((a) => (
-            <div key={a.title} className={`ops-alert sev-${a.sev}`}>
-              <span className="ops-alert-dot"/>
-              <div className="ops-alert-body"><div className="ops-alert-title">{a.title}</div><div className="ops-alert-detail">{a.detail}</div></div>
-              <div className="ops-alert-time">{a.time}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-
-    <section className="ops-card">
-      <div className="ops-card-head"><div><div className="ops-card-title">Reservoir watch</div><div className="ops-card-sub">Live fill levels · inflow / outflow · hours to empty</div></div><button className="btn btn-ghost btn-sm" disabled>Inspect on map →</button></div>
-      <div className="ops-reservoir-grid">
-        {RES.map((r) => (
-          <div key={r.id} className="ops-reservoir">
-            <div className="ops-reservoir-head">
-              <div><div className="ops-reservoir-name">{r.name}</div><div className="ops-reservoir-id">{r.id} · {r.cap}</div></div>
-              <span className={`pill ${r.tone}`}><span className="dot"/>{r.s}</span>
-            </div>
-            <div className="ops-reservoir-gauge"><div className="ops-reservoir-gauge-fill" style={{height: `${r.lvl}%`, background: r.color}}/><span className="ops-reservoir-gauge-value">{r.lvl}%</span></div>
-            <div className="ops-reservoir-meta"><span>In <strong>12 L/s</strong></span><span>Out <strong>14 L/s</strong></span><span>To empty <strong>{r.lvl < 35 ? '11h' : '—'}</strong></span></div>
-          </div>
-        ))}
-      </div>
-    </section>
+    <section className="ops-kpi-band">{KPIS.map((k) => <KpiCard key={k.label} k={k}/>)}</section>
+    <section className="ops-row ops-row-3"><CompositionCard/><MaterialsCard/><AgeCard/></section>
+    <section className="ops-row ops-row-2"><ZonesCard/><AlertsCard/></section>
+    <ReservoirCard/>
   </>
+);
+
+/* ── AquaWise AI co-pilot recommendation card ── */
+export const AICard: React.FC<{applied?: boolean}> = ({applied}) => (
+  <div className="ai-card">
+    <div className="ai-card-head">
+      <div className="ai-spark">
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/><circle cx={12} cy={12} r={3}/></svg>
+      </div>
+      <div><div className="ai-title">AquaWise AI · Recommended action</div><div className="ai-sub">Validated on the hydraulic model</div></div>
+      <span className="ai-conf">94% confidence</span>
+    </div>
+    <div className="ai-rec">Throttle <b>PV-204</b> to 2.6 bar &amp; reroute supply via <b>DMA-3</b></div>
+    <div className="ai-impacts">
+      <div><small>Pressure restored</small><strong>+0.6 bar</strong></div>
+      <div><small>NRW impact</small><strong style={{color: '#16a34a'}}>−8%</strong></div>
+      <div><small>Customers protected</small><strong>1,240</strong></div>
+    </div>
+    <div className="ai-foot">
+      <span className="ai-badge"><span className="dot"/>Hydraulic model validated</span>
+      <button className={`ai-apply${applied ? ' done' : ''}`}>{applied ? '✓ Intervention queued' : 'Apply intervention'}</button>
+    </div>
+  </div>
 );
 
 /* ── GIS map workspace, matching pages/GISMap.tsx ── */

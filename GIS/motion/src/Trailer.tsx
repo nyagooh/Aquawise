@@ -11,259 +11,238 @@ import {
   useCurrentFrame,
   useVideoConfig,
 } from 'remotion';
+import {
+  AppFrame, DashboardView, GISWorkspace, AssetPanel, LeakPanel, AICard,
+  KPIS, KpiCard, CompositionCard, MaterialsCard, AgeCard, ReservoirCard, AlertsCard, FLOW, CORAL,
+} from './AppUI';
 
-import {AppFrame, DashboardView, GISWorkspace, AssetPanel, LeakPanel} from './AppUI';
-
-const BLUE = '#2563EB';
-const FLOW = '#1FA2FF';
-const NAVY = '#0B1020';
-const CORAL = '#D4675E';
-const AMBER = '#D9A156';
-const GREEN = '#4FA877';
-
+const fps = 30;
 const fade = (frame: number, duration: number) =>
-  interpolate(frame, [0, 18, duration - 18, duration], [0, 1, 1, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  interpolate(frame, [0, 16, duration - 16, duration], [0, 1, 1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+const sp = (frame: number, delay = 0, cfg: {damping?: number; stiffness?: number} = {}) =>
+  spring({frame: frame - delay, fps, config: {damping: 20, stiffness: 80, ...cfg}});
 
 const LOGO_MARK = staticFile('audio/Aquawise-mark-blue.png');
 const LOGO_LOCKUP = staticFile('audio/Aquawise-lockup-blue.png');
 
-// Brand logo — uses the supplied PNGs: the square mark for compact spots, the
-// full lockup (mark + wordmark) everywhere else.
-const AquaLogo: React.FC<{light?: boolean; compact?: boolean}> = ({compact}) =>
-  compact
-    ? <Img src={LOGO_MARK} className="logo-mark" alt="AquaWise"/>
-    : <Img src={LOGO_LOCKUP} className="logo-lockup" alt="AquaWise"/>;
-
 const Caption: React.FC<{children: React.ReactNode; dark?: boolean}> = ({children, dark}) => {
   const frame = useCurrentFrame();
-  const progress = spring({frame, fps: 30, config: {damping: 18, stiffness: 120}});
+  const p = sp(frame, 0, {damping: 18, stiffness: 120});
   return (
-    <div className={`caption ${dark ? 'caption-dark' : ''}`} style={{opacity: progress, transform: `translateY(${24 - progress * 24}px)`}}>
+    <div className={`caption ${dark ? 'caption-dark' : ''}`} style={{opacity: p, transform: `translateX(-50%) translateY(${20 - p * 20}px)`}}>
       <span>{children}</span>
     </div>
   );
 };
 
-const GridNetwork: React.FC<{alert?: boolean; stable?: boolean; zoom?: number}> = ({alert, stable, zoom = 1}) => {
+/* ── 1 · Hook — mark reveal ── */
+const Hook: React.FC = () => {
   const frame = useCurrentFrame();
-  const dash = -frame * 4;
-  const nodes = [
-    [160, 260], [370, 170], [585, 290], [800, 160], [1040, 255], [1290, 155], [1510, 280],
-    [280, 520], [520, 490], [740, 590], [980, 465], [1240, 565], [1470, 505], [1690, 650],
-    [410, 790], [690, 770], [920, 850], [1190, 765], [1450, 840],
-  ];
-  const links = [[0,1],[1,2],[2,3],[3,4],[4,5],[5,6],[0,7],[7,8],[8,2],[8,9],[9,10],[10,4],[10,11],[11,12],[12,6],[12,13],[7,14],[14,15],[15,9],[15,16],[16,17],[17,11],[17,18],[18,13]];
+  const pulse = sp(frame, 8, {damping: 14, stiffness: 90});
+  const out = interpolate(frame, [130, 180], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   return (
-    <svg className="network" viewBox="0 0 1920 1080" style={{transform: `scale(${zoom})`}}>
-      <defs>
-        <filter id="glow"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-      </defs>
-      {links.map(([a,b], index) => (
-        <line key={index} x1={nodes[a][0]} y1={nodes[a][1]} x2={nodes[b][0]} y2={nodes[b][1]} stroke={alert && index === 12 ? CORAL : stable ? FLOW : '#24436f'} strokeWidth={alert && index === 12 ? 10 : 6} opacity={stable ? .85 : .55}/>
-      ))}
-      {links.slice(0, 18).map(([a,b], index) => (
-        <line key={`flow-${index}`} x1={nodes[a][0]} y1={nodes[a][1]} x2={nodes[b][0]} y2={nodes[b][1]} stroke={FLOW} strokeWidth="4" strokeDasharray="2 30" strokeDashoffset={dash - index * 13} strokeLinecap="round" opacity={stable ? 1 : .75} filter="url(#glow)"/>
-      ))}
-      {nodes.map(([x,y], index) => <circle key={index} cx={x} cy={y} r={index % 5 === 0 ? 13 : 8} fill={alert && index === 11 ? CORAL : FLOW} stroke="#dff4ff" strokeWidth="4" opacity={.95}/>) }
-      {alert && <circle className="pulse-ring" cx="1240" cy="565" r={34 + Math.sin(frame / 5) * 7} fill="none" stroke={CORAL} strokeWidth="7" opacity=".8"/>}
-    </svg>
-  );
-};
-
-const HiddenNetwork: React.FC = () => {
-  const frame = useCurrentFrame();
-  const {fps} = useVideoConfig();
-  const pulse = spring({frame: frame - 12, fps, config: {damping: 14, stiffness: 90}});
-  const dive = interpolate(frame, [70, 170], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
-  return (
-    <AbsoluteFill className="scene white" style={{opacity: fade(frame, 210)}}>
-      <div className="water-orbit" style={{transform: `translate(-50%,-50%) scale(${.25 + pulse * 1.1 + dive * 10})`, opacity: 1 - dive * .7}} />
-      <div className="opening-mark" style={{opacity: 1 - dive, transform: `translate(-50%,-50%) scale(${.85 + pulse * .15})`}}>
-        <AquaLogo compact />
+    <AbsoluteFill className="scene white" style={{opacity: fade(frame, 180)}}>
+      <div className="water-orbit" style={{transform: `translate(-50%,-50%) scale(${0.3 + pulse * 1.1})`, opacity: 0.9 * out}}/>
+      <div className="opening-mark" style={{opacity: out, transform: `translate(-50%,-50%) scale(${0.85 + pulse * 0.15})`}}>
+        <Img src={LOGO_MARK} className="logo-mark" alt="AquaWise"/>
       </div>
-      <div className="network-dive" style={{opacity: dive, transform: `scale(${.7 + dive * .3})`}}><GridNetwork stable /></div>
-      {frame > 92 && <Caption dark>Every asset carries water—and risk.</Caption>}
+      {frame > 70 && <Caption dark>Every utility loses water it can&apos;t see.</Caption>}
     </AbsoluteFill>
   );
 };
 
-const ProblemCard: React.FC<{label: string; icon: string; x: number; y: number; delay: number}> = ({label, icon, x, y, delay}) => {
+/* ── 2 · The living network — dashboard establishes ── */
+const Living: React.FC = () => {
   const frame = useCurrentFrame();
-  const p = spring({frame: frame - delay, fps: 30, config: {damping: 16, stiffness: 105}});
-  return <div className="problem-card" style={{left: x, top: y, opacity: p, transform: `translateY(${50 - p * 50}px) rotate(${(1-p) * (x % 2 ? 5 : -5)}deg)`}}><b>{icon}</b><span>{label}</span></div>;
-};
-
-const NRWProblem: React.FC = () => {
-  const frame = useCurrentFrame();
-  const words = frame < 95 ? ['DISCONNECTED', 'ASSETS'] : frame < 190 ? ['HIDDEN', 'LOSSES'] : ['RISING', 'NRW'];
+  const p = sp(frame, 16);
+  const tilt = interpolate(frame, [30, 140, 210], [1, 0.3, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
   return (
-    <AbsoluteFill className="scene pale" style={{opacity: fade(frame, 300)}}>
-      <div className="kinetic-title"><span>{words[0]}</span><strong>{words[1]}</strong></div>
-      <ProblemCard label="GIS network" icon="⌁" x={160} y={180} delay={15}/>
-      <ProblemCard label="Asset register" icon="▦" x={1340} y={170} delay={30}/>
-      <ProblemCard label="Maintenance" icon="⌕" x={230} y={700} delay={48}/>
-      <ProblemCard label="Hydraulic model" icon="◇" x={1380} y={720} delay={65}/>
-      <div className="loss-flow">
-        <div className="flow-main" />
-        <div className="flow-leak" style={{height: interpolate(frame, [100, 260], [0, 230], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}} />
-        <span style={{opacity: interpolate(frame, [150, 195], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}}>treated water</span>
-        <em style={{opacity: interpolate(frame, [190, 240], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'})}}>revenue lost</em>
+    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 210)}}>
+      <div className="brand-intro"><Img src={LOGO_LOCKUP} className="logo-lockup" alt="AquaWise"/><span>Your whole network, alive.</span></div>
+      <div className="app-stage" style={{opacity: p, transform: `perspective(2200px) rotateX(${tilt * 8}deg) rotateY(${-tilt * 9}deg) scale(${0.8 + p * 0.18}) translateY(${60 - p * 60}px)`}}>
+        <AppFrame active="dashboard" title="Operations Dashboard" sub="Kisumu Water Network · 3,233 segments · 716 km"><DashboardView/></AppFrame>
       </div>
-      {frame > 205 && <Caption dark>Disconnected assets. Hidden losses. Rising NRW.</Caption>}
+      {frame > 120 && <Caption>One living system for the entire network.</Caption>}
     </AbsoluteFill>
   );
 };
 
-const Introduce: React.FC = () => {
+/* ── 3 · Asset management — every card individually ── */
+const AssetManagement: React.FC = () => {
   const frame = useCurrentFrame();
-  const p = spring({frame: frame - 20, fps: 30, config: {damping: 20, stiffness: 80}});
-  // Settle the tilt back to flat so the real dashboard reads clearly.
-  const tilt = interpolate(frame, [40, 150, 250], [1, 0.25, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
-  const chips = interpolate(frame, [10, 70], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  // Phase A (0-170): KPI cards pop in one by one.  Phase B (170-510): big cards cycle centre stage.
+  const cards = [<CompositionCard key="c"/>, <MaterialsCard key="m"/>, <AgeCard key="a"/>, <ReservoirCard key="r"/>];
+  const phase = 85;
+  const idx = Math.min(cards.length - 1, Math.max(0, Math.floor((frame - 175) / phase)));
+  const local = frame - 175 - idx * phase;
+  const cin = sp(local, 0, {damping: 18, stiffness: 90});
+  const cout = interpolate(local, [phase - 16, phase], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  const showCards = frame >= 170;
+  return (
+    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 510)}}>
+      <div className="beat-eyebrow">ASSET MANAGEMENT</div>
+      {!showCards && (
+        <div className="kpi-spot-grid">
+          {KPIS.map((k, i) => {
+            const e = sp(frame, 14 + i * 13);
+            return <div key={k.label} style={{opacity: e, transform: `translateY(${30 - e * 30}px) scale(${0.9 + e * 0.1})`}}><KpiCard k={k}/></div>;
+          })}
+        </div>
+      )}
+      {showCards && (
+        <div className="spot" style={{width: 860, opacity: cin * cout, transform: `translate(-50%,-50%) translateY(${40 - cin * 40}px) scale(${0.97 + cin * 0.05})`}}>
+          {cards[idx]}
+        </div>
+      )}
+      {frame > 40 && <Caption>Manage every asset — pipe, valve, pump, reservoir, meter.</Caption>}
+    </AbsoluteFill>
+  );
+};
+
+/* ── 4 · See the network — GIS map + asset panel ── */
+const SeeNetwork: React.FC = () => {
+  const frame = useCurrentFrame();
+  const enter = sp(frame, 8);
+  const zoom = interpolate(frame, [30, 280], [1, 1.12], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
+  const panel = sp(frame, 150, {damping: 18, stiffness: 95});
   return (
     <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 300)}}>
-      <div className="brand-intro"><AquaLogo light/><span>Meet AquaWise — your whole network, alive.</span></div>
-      <div className="upload-chips" style={{opacity: chips}}><span>GIS</span><span>Asset register</span><span>EPANET model</span><b>Unified ✓</b></div>
-      <div className="app-stage" style={{transform: `perspective(2200px) rotateX(${tilt*8}deg) rotateY(${-tilt*9}deg) scale(${.78+p*.2}) translateY(${70-p*70}px)`, opacity: p}}>
-        <AppFrame active="dashboard" title="Operations Dashboard" sub="Kisumu Water Network · 3,233 segments · 716 km">
-          <DashboardView/>
-        </AppFrame>
-      </div>
-      {frame > 200 && <Caption>One living view of every asset you own.</Caption>}
-    </AbsoluteFill>
-  );
-};
-
-const AssetJourney: React.FC = () => {
-  const frame = useCurrentFrame();
-  const enter = spring({frame: frame - 10, fps: 30, config: {damping: 20, stiffness: 80}});
-  const zoom = interpolate(frame, [40, 200], [1, 1.12], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
-  const card = spring({frame: frame - 150, fps: 30, config: {damping: 17, stiffness: 95}});
-  return (
-    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 330)}}>
       <div className="app-stage flush" style={{opacity: enter, transform: `scale(${(0.92 + enter * 0.08) * zoom})`}}>
-        <AppFrame active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" flush>
-          <GISWorkspace dash={frame * 4}/>
-        </AppFrame>
+        <AppFrame active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" flush><GISWorkspace dash={frame * 4}/></AppFrame>
       </div>
-      <div className="float-card" style={{opacity: card, transform: `translateX(${80 - card * 80}px)`}}>
-        <AssetPanel/>
-      </div>
-      {frame > 60 && frame < 150 && <div className="lens-eyebrow" style={{opacity: interpolate(frame,[60,90,140,150],[0,1,1,0])}}>ASSET MANAGEMENT</div>}
-      {frame > 215 && <Caption>Know what you own — down to a single valve.</Caption>}
+      <div className="float-card" style={{opacity: panel, transform: `translateX(${80 - panel * 80}px)`}}><AssetPanel/></div>
+      {frame > 60 && <Caption>See it all live — down to a single valve.</Caption>}
     </AbsoluteFill>
   );
 };
 
-const NRWDetection: React.FC = () => {
+/* ── 5 · Alerts ── */
+const Alerts: React.FC = () => {
   const frame = useCurrentFrame();
-  const enter = spring({frame: frame - 8, fps: 30, config: {damping: 20, stiffness: 80}});
-  const zoom = interpolate(frame, [120, 300], [1, 1.25], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
-  const board = spring({frame: frame - 175, fps: 30, config: {damping: 18, stiffness: 90}});
-  const leakPulse = (frame % 36) / 36;
-  const phrases = frame < 100 ? 'Detect the difference.' : frame < 200 ? 'Locate the leak.' : 'Protect the revenue.';
+  const enter = sp(frame, 10, {damping: 18, stiffness: 90});
+  const ping = (frame % 30) / 30;
   return (
-    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 330)}}>
-      <div className="app-stage flush" style={{opacity: enter, transform: `scale(${(0.92 + enter * 0.08) * zoom}) translateY(${(zoom - 1) * -60}px)`}}>
-        <AppFrame active="leaks" title="Leak Intelligence" sub="Anomaly detection · expected vs measured flow" flush>
-          <GISWorkspace dash={frame * 5} leak leakPulse={leakPulse}/>
-        </AppFrame>
+    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 240)}}>
+      <div className="beat-eyebrow">REAL-TIME ALERTS</div>
+      <div className="spot" style={{width: 760, opacity: enter, transform: `translate(-50%,-50%) translateY(${40 - enter * 40}px) scale(${0.95 + enter * 0.05})`}}>
+        <AlertsCard/>
       </div>
-      <div className="float-card wide" style={{opacity: board, transform: `translateY(${80 - board * 80}px)`}}>
-        <LeakPanel/>
+      <div style={{position: 'absolute', left: '50%', top: '50%', marginLeft: 300, marginTop: -150, zIndex: 25}}>
+        <span style={{display: 'block', width: 70, height: 70, borderRadius: '50%', border: `4px solid ${CORAL}`, transform: `scale(${1 + ping})`, opacity: 1 - ping}}/>
       </div>
-      <div className="word-swap" key={phrases}>{phrases}</div>
-      {frame > 240 && <Caption>See exactly where water — and revenue — disappears.</Caption>}
+      {frame > 50 && <Caption>The moment something drifts — you know first.</Caption>}
     </AbsoluteFill>
   );
 };
 
-const Simulate:React.FC=()=>{
-  const frame=useCurrentFrame();
-  const enter = spring({frame: frame - 8, fps: 30, config: {damping: 20, stiffness: 80}});
-  // Cursor glides to the Run-simulation button (~frame 70) then the state machine runs.
-  const click = spring({frame: frame - 70, fps: 30, config: {damping: 12, stiffness: 150}});
-  const sim = frame < 95 ? 'Ready to run' : frame < 185 ? 'Running…' : 'Simulation successful';
-  const wave = interpolate(frame, [95, 185], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  return <AbsoluteFill className="scene navy" style={{opacity:fade(frame,360)}}>
-    <div className="sim-eyebrow"><span>HYDRAULIC MODEL</span><h1>Decide with the model — not a guess.</h1></div>
-    <div className="app-stage flush sim" style={{opacity: enter, transform: `scale(${0.9 + enter * 0.1})`}}>
-      <AppFrame active="gis" title="GIS Map · Simulation" sub="Hazen-Williams · pressure-driven hydraulic run" flush>
-        <GISWorkspace dash={frame * (3 + wave * 6)} sim={sim}/>
-      </AppFrame>
-      <div className="sim-wave" style={{opacity: sim === 'Running…' ? 0.9 : 0, transform: `scale(${0.2 + wave * 2.4})`}}/>
-      <div className="ui-cursor" style={{left: `${78 - click * 6}%`, top: `${20 - click * 2}%`, transform: `scale(${1 - click * 0.15})`}}/>
-    </div>
-    {frame>270&&<Caption>Test the fix before a crew ever leaves the depot.</Caption>}
-  </AbsoluteFill>;
+/* ── 6 · Non-revenue water ── */
+const NRW: React.FC = () => {
+  const frame = useCurrentFrame();
+  const enter = sp(frame, 8);
+  const zoom = interpolate(frame, [110, 300], [1, 1.22], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.inOut(Easing.cubic)});
+  const mini = sp(frame, 150, {damping: 18, stiffness: 90});
+  const leakPulse = (frame % 36) / 36;
+  const measured = interpolate(frame, [60, 150], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  return (
+    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 300)}}>
+      <div className="app-stage flush" style={{opacity: enter, transform: `scale(${(0.92 + enter * 0.08) * zoom}) translateY(${(zoom - 1) * -60}px)`}}>
+        <AppFrame active="nrw" title="Non-Revenue Water" sub="Expected vs measured flow · loss localisation" flush><GISWorkspace dash={frame * 5} leak leakPulse={leakPulse}/></AppFrame>
+      </div>
+      <div className="nrw-mini" style={{opacity: mini, transform: `translateY(${60 - mini * 60}px)`}}>
+        <div className="lg"><span><i style={{background: FLOW}}/>Expected flow</span><span><i style={{background: CORAL}}/>Measured flow</span></div>
+        <svg viewBox="0 0 480 150" style={{width: '100%'}}>
+          <path d="M6 120 C90 110 110 60 170 72 S300 110 360 66 470 40 474 52" fill="none" stroke={FLOW} strokeWidth="7"/>
+          <path d="M6 120 C90 110 110 60 170 72 S300 130 360 126 470 120 474 132" fill="none" stroke={CORAL} strokeWidth="7" strokeDasharray="14 10" strokeDashoffset={(1 - measured) * 600} opacity={measured}/>
+        </svg>
+        <div style={{display: 'flex', justifyContent: 'space-between', marginTop: 12}}>
+          <div><div style={{color: '#94a3b8', fontSize: 13}}>Flow variance</div><strong style={{fontSize: 22, color: CORAL}}>Investigate</strong></div>
+          <div style={{textAlign: 'right'}}><div style={{color: '#94a3b8', fontSize: 13}}>Estimated NRW</div><strong style={{fontSize: 22}}>22.5%</strong></div>
+        </div>
+      </div>
+      {frame > 60 && <Caption>Pinpoint non-revenue water before it drains revenue.</Caption>}
+    </AbsoluteFill>
+  );
 };
 
-const Action:React.FC=()=>{
-  const frame=useCurrentFrame();
-  const p=spring({frame:frame-20,fps:30,config:{damping:17,stiffness:95}});
-  const stable=frame>125;
-  return <AbsoluteFill className="scene navy" style={{opacity:fade(frame,240)}}>
-    <div className="action-copy"><span>PRIORITIZED OPERATIONS</span><h1>Insight becomes action.</h1><p>Every intervention updates the asset history and strengthens the next decision.</p></div>
-    <div className="action-queue" style={{opacity:p,transform:`translateX(${120-p*120}px)`}}>
-      {[['PV-204','Isolate pressure zone','Assigned',CORAL],['P-1184','Inspect suspected leak','In progress',AMBER],['FM-032','Validate bulk flow','Scheduled',FLOW]].map(([id,task,status,color],i)=><div key={id} style={{transform:`translateY(${(1-p)*(i+1)*35}px)`}}><i style={{background:color}}/><b>{id}</b><span>{task}</span><em>{status}</em></div>)}
-    </div>
-    <div className="action-network" style={{opacity:interpolate(frame,[80,150],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'})}}><GridNetwork stable={stable} zoom={.62}/></div>
-    {frame>165&&<Caption>Better asset decisions. Lower water loss.</Caption>}
-  </AbsoluteFill>;
+/* ── 7 · AI co-pilot + hydraulic model (centerpiece) ── */
+const AIAdvisor: React.FC = () => {
+  const frame = useCurrentFrame();
+  const enter = sp(frame, 8);
+  const cardIn = sp(frame, 40, {damping: 18, stiffness: 80});
+  const sim = frame < 150 ? 'Ready to run' : frame < 250 ? 'Running…' : 'Simulation successful';
+  const wave = interpolate(frame, [150, 250], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  const applied = frame > 320;
+  return (
+    <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 420)}}>
+      <div className="beat-eyebrow">AI CO-PILOT</div>
+      <div className="app-stage flush" style={{opacity: enter, transform: `scale(${0.9 + enter * 0.1})`, top: 150}}>
+        <AppFrame active="gis" title="GIS Map · Simulation" sub="AquaWise AI · validated on the hydraulic model" flush><GISWorkspace dash={frame * (3 + wave * 7)} sim={sim}/></AppFrame>
+        <div className="sim-wave" style={{opacity: sim === 'Running…' ? 0.9 : 0, transform: `scale(${0.2 + wave * 2.4})`}}/>
+      </div>
+      <div style={{position: 'absolute', right: 130, top: 250, zIndex: 30, opacity: cardIn, transform: `translateY(${70 - cardIn * 70}px)`}}>
+        <AICard applied={applied}/>
+      </div>
+      {frame > 70 && <Caption>AI recommends the fix — proven on the hydraulic model first.</Caption>}
+    </AbsoluteFill>
+  );
 };
 
-const Lockup:React.FC=()=>{
-  const frame=useCurrentFrame();
-  const {fps}=useVideoConfig();
-  const p=spring({frame:frame-18,fps,config:{damping:18,stiffness:75}});
-  const invert=interpolate(frame,[125,175],[0,1],{extrapolateLeft:'clamp',extrapolateRight:'clamp'});
-  return <AbsoluteFill className="scene lockup" style={{background:`rgb(${255-(244*invert)},${255-(239*invert)},${255-(223*invert)})`}}>
-    <div className="halo" style={{transform:`translate(-50%,-50%) scale(${.7+p*.5})`,opacity:.65-invert*.3}}/>
-    <div className="lockup-logo" style={{opacity:p,transform:`translate(-50%,-50%) scale(${.8+p*.2})`,color:invert>.5?'#fff':NAVY}}><AquaLogo light={invert<.5}/><p>Manage every asset. Understand every flow.<br/>Reduce non-revenue water.</p><strong>See it. Simulate it. Act.</strong></div>
-  </AbsoluteFill>;
+/* ── 8 · Outcome + lockup ── */
+const Lockup: React.FC = () => {
+  const frame = useCurrentFrame();
+  const p = sp(frame, 16, {damping: 18, stiffness: 75});
+  return (
+    <AbsoluteFill className="scene lockup" style={{background: '#f4f7fc'}}>
+      <div className="halo" style={{transform: `translate(-50%,-50%) scale(${0.7 + p * 0.5})`, opacity: 0.6}}/>
+      <div className="lockup-logo" style={{opacity: p, transform: `translate(-50%,-50%) scale(${0.85 + p * 0.15})`}}>
+        <Img src={LOGO_LOCKUP} className="logo-lockup" alt="AquaWise"/>
+        <p>Manage every asset. See the whole network.<br/>Let AI and the hydraulic model guide every decision.</p>
+        <strong>See it. Simulate it. Act.</strong>
+      </div>
+    </AbsoluteFill>
+  );
 };
 
-// Premium grade — film grain, vignette, cinematic letterbox and a slow light
-// sweep, layered on top so every scene reads like a high-end product ad.
 const FilmGrade: React.FC = () => {
   const frame = useCurrentFrame();
   const sweep = interpolate(frame % 240, [0, 240], [-30, 130]);
-  const grainShift = (frame * 53) % 100;
+  const g = (frame * 53) % 100;
   return (
     <AbsoluteFill className="film-grade" style={{pointerEvents: 'none'}}>
-      <div className="film-vignette" />
-      <div className="film-sweep" style={{transform: `translateX(${sweep}%) skewX(-18deg)`}} />
-      <div className="film-grain" style={{backgroundPosition: `${grainShift}px ${(grainShift * 1.7) % 100}px`}} />
-      <div className="film-bar film-bar-top" />
-      <div className="film-bar film-bar-bottom" />
+      <div className="film-vignette"/>
+      <div className="film-sweep" style={{transform: `translateX(${sweep}%) skewX(-18deg)`}}/>
+      <div className="film-grain" style={{backgroundPosition: `${g}px ${(g * 1.7) % 100}px`}}/>
+      <div className="film-bar film-bar-top"/>
+      <div className="film-bar film-bar-bottom"/>
     </AbsoluteFill>
   );
 };
 
-export const AquaWiseTrailer:React.FC<{withAudio?: boolean}>=({withAudio = true})=> (
+const VO: React.FC<{from: number; n: string}> = ({from, n}) => (
+  <Sequence from={from}><Audio src={staticFile(`audio/voiceover-${n}.mp3`)} volume={1}/></Sequence>
+);
+
+export const AquaWiseTrailer: React.FC<{withAudio?: boolean}> = ({withAudio = true}) => (
   <AbsoluteFill className="trailer">
     {withAudio && <>
       <Audio src={staticFile('audio/ambient.wav')} volume={0.34}/>
-      <Sequence from={18}><Audio src={staticFile('audio/voiceover-01.mp3')} volume={1}/></Sequence>
-      <Sequence from={225}><Audio src={staticFile('audio/voiceover-02.mp3')} volume={1}/></Sequence>
-      <Sequence from={525}><Audio src={staticFile('audio/voiceover-03.mp3')} volume={1}/></Sequence>
-      <Sequence from={825}><Audio src={staticFile('audio/voiceover-04.mp3')} volume={1}/></Sequence>
-      <Sequence from={1155}><Audio src={staticFile('audio/voiceover-05.mp3')} volume={1}/></Sequence>
-      <Sequence from={1485}><Audio src={staticFile('audio/voiceover-06.mp3')} volume={1}/></Sequence>
-      <Sequence from={1840}><Audio src={staticFile('audio/voiceover-07.mp3')} volume={1}/></Sequence>
-      <Sequence from={2080}><Audio src={staticFile('audio/voiceover-08.mp3')} volume={1}/></Sequence>
+      <VO from={6} n="01"/>
+      <VO from={186} n="02"/>
+      <VO from={396} n="03"/>
+      <VO from={906} n="04"/>
+      <VO from={1206} n="05"/>
+      <VO from={1446} n="06"/>
+      <VO from={1746} n="07"/>
+      <VO from={2166} n="08"/>
     </>}
-    <Sequence from={0} durationInFrames={210}><HiddenNetwork/></Sequence>
-    <Sequence from={210} durationInFrames={300}><NRWProblem/></Sequence>
-    <Sequence from={510} durationInFrames={300}><Introduce/></Sequence>
-    <Sequence from={810} durationInFrames={330}><AssetJourney/></Sequence>
-    <Sequence from={1140} durationInFrames={330}><NRWDetection/></Sequence>
-    <Sequence from={1470} durationInFrames={360}><Simulate/></Sequence>
-    <Sequence from={1830} durationInFrames={240}><Action/></Sequence>
-    <Sequence from={2070} durationInFrames={180}><Lockup/></Sequence>
+    <Sequence from={0} durationInFrames={180}><Hook/></Sequence>
+    <Sequence from={180} durationInFrames={210}><Living/></Sequence>
+    <Sequence from={390} durationInFrames={510}><AssetManagement/></Sequence>
+    <Sequence from={900} durationInFrames={300}><SeeNetwork/></Sequence>
+    <Sequence from={1200} durationInFrames={240}><Alerts/></Sequence>
+    <Sequence from={1440} durationInFrames={300}><NRW/></Sequence>
+    <Sequence from={1740} durationInFrames={420}><AIAdvisor/></Sequence>
+    <Sequence from={2160} durationInFrames={240}><Lockup/></Sequence>
     <FilmGrade/>
   </AbsoluteFill>
 );

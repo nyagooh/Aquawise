@@ -9,7 +9,7 @@ import {resolve} from 'node:path';
  * scene boundaries. Mixed low so the voiceover always sits on top.
  */
 const sampleRate = 44100;
-const durationSeconds = 75;
+const durationSeconds = 80;
 const sampleCount = sampleRate * durationSeconds;
 const data = Buffer.alloc(sampleCount * 2);
 
@@ -26,7 +26,7 @@ const CH = {
 };
 const PROG = [CH.Am, CH.F, CH.C, CH.G];
 
-const sceneHits = [0, 7, 17, 27, 38, 49, 61, 69];
+const sceneHits = [0, 6, 13, 30, 40, 48, 58, 72];
 
 let noiseState = 1729;
 const random = () => {

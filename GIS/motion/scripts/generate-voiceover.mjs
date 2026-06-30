@@ -6,14 +6,14 @@ const outputDirectory = resolve('public/audio');
 await mkdir(outputDirectory, {recursive: true});
 
 const lines = [
-  'Every day, water moves through thousands of connected assets. But utilities cannot manage what they cannot see.',
-  'Records are fragmented. Conditions change. Leaks remain hidden. And treated water becomes non-revenue water.',
-  'AquaWise brings every pipe, valve, pump, tank, and meter into one intelligent asset-management platform.',
-  'Track condition, maintenance, pressure, and flow, from the entire network down to a single asset.',
-  'Compare expected flow with what the network is reporting. Detect anomalies, locate risk, and see where water is disappearing.',
-  'Run hydraulic simulations before making changes. Understand the impact, and prioritize the right intervention.',
-  'So teams act sooner, infrastructure lasts longer, and utilities protect both water and revenue.',
-  'AquaWise. Manage every asset. Understand every flow. Reduce non-revenue water.',
+  'Every utility loses water it cannot see, and the cost runs into millions.',
+  'AquaWise turns your entire water network into one living, connected system.',
+  'Manage every asset, every pipe, valve, pump, reservoir and meter, in one place.',
+  'See it all live, from the whole network down to a single valve.',
+  'The moment pressure drifts or a sensor flags, AquaWise alerts you first.',
+  'Compare expected flow with reality, and pinpoint non-revenue water before it drains revenue.',
+  'Then AquaWise AI recommends the fix, and proves it on the hydraulic model before a crew ever moves.',
+  'AquaWise. Less water lost. More revenue kept. See it. Simulate it. Act.',
 ];
 
 const tts = new EdgeTTS({
