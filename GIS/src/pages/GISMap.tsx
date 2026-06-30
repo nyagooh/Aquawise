@@ -1038,6 +1038,25 @@ const [linkBy, setLinkBy] = useState<LinkSymbology>('class');
     return { pipeCounts, assetCounts, junctionCount };
   }, [network]);
 
+  /* ── hide layers that have no features in this network ── */
+  useEffect(() => {
+    if (!visibleStats) return;
+    const { pipeCounts, assetCounts, junctionCount } = visibleStats;
+    setLayers(prev => ({
+      ...prev,
+      main:           pipeCounts.main           > 0 ? prev.main           : false,
+      distribution:   pipeCounts.distribution   > 0 ? prev.distribution   : false,
+      household:      pipeCounts.household       > 0 ? prev.household      : false,
+      backfeed:       pipeCounts.backfeed        > 0 ? prev.backfeed       : false,
+      boundary:       pipeCounts.boundary        > 0 ? prev.boundary       : false,
+      tank:           assetCounts.tank           > 0 ? prev.tank           : false,
+      pressure_valve: assetCounts.pressure_valve > 0 ? prev.pressure_valve : false,
+      meter_valve:    assetCounts.meter_valve    > 0 ? prev.meter_valve    : false,
+      sensor:         assetCounts.sensor         > 0 ? prev.sensor         : false,
+      junction:       junctionCount              > 0 ? prev.junction       : false,
+    }));
+  }, [visibleStats]);
+
   /* ── workmode dropdown: close on outside click ── */
   useEffect(() => {
     if (!showWorkmodes) return;
