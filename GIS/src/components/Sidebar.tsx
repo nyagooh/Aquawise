@@ -1,6 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { alerts as allAlerts, leaks as allLeaks } from '../data';
 import { useTheme } from '../theme';
+import { useEffect, useState } from 'react';
+import { getAuthHeaders, clearNetworkCache } from '../data/network';
+import { clearStoredToken } from '../data/auth';
 
 export type Active = 'dashboard' | 'gis' | 'alerts' | 'leaks' | 'nrw' | 'sensors' | 'reports';
 
@@ -26,8 +29,37 @@ const ITEMS: Array<{ key: Active; label: string; href: string }> = [
 
 export function Sidebar({ active, collapsed, onToggle }: { active: Active; collapsed?: boolean; onToggle?: () => void }) {
   const { mode, toggle } = useTheme();
+  const navigate = useNavigate();
   const activeAlertCount = allAlerts.filter(a => a.status === 'active').length;
   const openLeakCount = allLeaks.filter(l => l.status === 'reported' || l.status === 'dispatched').length;
+
+  const [userProfile, setUserProfile] = useState<{ username: string; role: string } | null>(null);
+
+  function handleLogout() {
+    clearStoredToken();
+    clearNetworkCache();
+    localStorage.removeItem('activeNetworkId');
+    navigate('/login');
+  }
+
+  useEffect(() => {
+    let alive = true;
+    getAuthHeaders()
+      .then(async (headers) => {
+        const res = await fetch('/api/v1/auth/me/', { headers });
+        if (res.ok) {
+          const profile = await res.json();
+          if (profile && alive) {
+            setUserProfile({
+              username: profile.username || 'admin',
+              role: profile.role || 'Admin'
+            });
+          }
+        }
+      })
+      .catch(() => { /* ignore fallback */ });
+    return () => { alive = false; };
+  }, []);
   return (
     <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
       <Link to="/" className="sb-brand" style={{ color: 'inherit' }}>
@@ -78,11 +110,28 @@ export function Sidebar({ active, collapsed, onToggle }: { active: Active; colla
           <span className="sb-text">{mode === 'dark' ? 'Light mode' : 'Dark mode'}</span>
         </button>
         <div className="sb-user">
-          <div className="sb-avatar">DM</div>
-          <div className="sb-user-meta sb-text">
-            <span className="sb-user-name">Demo User</span>
-            <span className="sb-user-sub">Read-only sandbox</span>
+          <div className="sb-avatar" style={{ textTransform: 'uppercase' }}>
+            {userProfile ? userProfile.username.substring(0, 2) : 'AW'}
           </div>
+          <div className="sb-user-meta sb-text">
+            <span className="sb-user-name" style={{ textTransform: 'capitalize' }}>
+              {userProfile ? userProfile.username : 'User'}
+            </span>
+            <span className="sb-user-sub">
+              {userProfile ? `${userProfile.role} profile` : ''}
+            </span>
+          </div>
+          <button
+            className="sb-logout-btn"
+            onClick={handleLogout}
+            title="Sign out"
+          >
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1={21} y1={12} x2={9} y2={12} />
+            </svg>
+          </button>
         </div>
       </div>
     </aside>

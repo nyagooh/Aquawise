@@ -23,7 +23,7 @@ function useReveal() {
 export default function Landing() {
   const { mode, toggle } = useTheme();
   const navigate = useNavigate();
-  const openDemo = useCallback(() => navigate('/demo'), [navigate]);
+  const openDemo = useCallback(() => navigate('/networks'), [navigate]);
   useReveal();
 
   return (

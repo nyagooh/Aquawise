@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { zones, sensors, pipes } from '../data';
 
 type Props = {
   title: string;
-  sub?: string;
+  sub?: React.ReactNode;
   onToggleNav?: () => void;
 };
 
