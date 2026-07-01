@@ -36,7 +36,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [x] `GET /api/v1/auth/me/` — returns authenticated user profile (id, username, email, role, organisation) *(added — was not in original plan)*
 - [x] Multi-tenant `Organisation` + `Project` + `CustomUser` (role-based) models
 - [x] All migrations applied — 26+ migrations across 6 apps
-- [x] Dev data seeded (KIWASCO org, admin user, Kisumu project)
+- [x] Dev data seeded (Riverton org, admin user, Riverton project)
 - [x] DRF router wired with versioned URL includes at `/api/v1/` *(added — was not in original plan)*
 - [ ] `ruff` linting configured
 
@@ -91,10 +91,10 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 #### 1.5 Tests & Docs ⬜
 - [ ] Pytest suite for upload, validation, and API endpoints
-- [ ] Kisumu water supply network used as integration test fixture
+- [ ] Riverton water supply network used as integration test fixture
 - [x] OpenAPI schema auto-generated via DRF spectacular (`/api/docs/`)
 
-**Phase 1 success criteria:** ✅ Upload the Kisumu shapefile, get back a clean GeoJSON response with pipes coloured by material, and a validation report listing roughness gaps.
+**Phase 1 success criteria:** ✅ Upload the Riverton shapefile, get back a clean GeoJSON response with pipes coloured by material, and a validation report listing roughness gaps.
 
 ---
 
@@ -158,7 +158,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 - [ ] Endpoint to apply material-based roughness defaults before simulation
 - [ ] Flag nodes with missing demand data
 
-**Phase 3 success criteria:** Engineer uploads Kisumu .inp → triggers simulation → sees pressure heat map on the network map within 2 minutes.
+**Phase 3 success criteria:** Engineer uploads Riverton .inp → triggers simulation → sees pressure heat map on the network map within 2 minutes.
 
 ---
 
@@ -242,7 +242,7 @@ Each phase ends with a working API that the frontend can consume — no phase is
 
 | Milestone | Status | Target | Deliverable |
 |-----------|--------|--------|-------------|
-| M1 | ✅ Done | Week 2 | Upload Kisumu shapefile → GeoJSON pipes API + enhanced stats + EPANET ingestion |
+| M1 | ✅ Done | Week 2 | Upload Riverton shapefile → GeoJSON pipes API + enhanced stats + EPANET ingestion |
 | M2 | ⬜ Not started | Week 4 | Full spatial query API + asset management |
 | M3 | ⬜ Not started | Week 6 | EPANET simulation via wntr → pressure choropleth |
 | M4 | ⬜ Not started | Week 8 | Live WebSocket sensor dashboard |

@@ -1,5 +1,5 @@
 /**
- * GISMap — real Kisumu water supply network.
+ * GISMap — real Riverton water supply network.
  *
  * Renders 4,951 pipe segments from the converted shapefile across five
  * operational layers (mains, distribution, service, backfeed, zone boundary)
@@ -46,13 +46,13 @@ const LEAK_STATUS_LABEL: Record<Leak['status'], string> = {
 const TILE_LIGHT = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 const TILE_DARK = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 const TILE_ATTR =
-  '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a> · Kisumu water demo data';
+  '&copy; <a href="https://www.openstreetmap.org/">OSM</a> · <a href="https://carto.com/">CARTO</a> · water demo data';
 // Google tiles — real imagery without a proxy. `lyrs=s` is pure satellite with
 // NO labels/roads (clean backdrop for the network); `lyrs=m` is the street map.
 const GOOGLE_KEY = (import.meta as { env?: { VITE_GOOGLE_MAPS_API_KEY?: string } }).env?.VITE_GOOGLE_MAPS_API_KEY || '';
 const TILE_GOOGLE_STREETS = 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
 const TILE_GOOGLE_SATELLITE = 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}';
-const TILE_GOOGLE_ATTR = 'Imagery &copy; <a href="https://www.google.com/maps">Google</a> · Kisumu water demo data';
+const TILE_GOOGLE_ATTR = 'Imagery &copy; <a href="https://www.google.com/maps">Google</a> · water demo data';
 
 /** Basemap mode — street map, label-free satellite, or bare engineering canvas. */
 type Basemap = 'streets' | 'satellite' | 'none';
@@ -157,7 +157,7 @@ export default function GISMap() {
   simHasResultsRef.current = hasResults;
 
   /* ── 1. fetch network — a user-uploaded network takes priority over the
-        bundled Kisumu demo dataset ── */
+        bundled Riverton demo dataset ── */
   useEffect(() => {
     let alive = true;
     const uploaded = loadUploadedNetwork();
@@ -484,7 +484,7 @@ export default function GISMap() {
   }, [network]);
 
   return (
-    <Shell active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" pagePadding={false} hideRightRail>
+    <Shell active="gis" title="GIS Map" sub="Water Supply Network · live operational view" pagePadding={false} hideRightRail>
       <div className="gis-workspace">
       <WorkspaceToolbar
         basemap={basemap}
@@ -499,7 +499,7 @@ export default function GISMap() {
         {!network && !loadError && (
           <div className="map-loading">
             <div className="map-loading-spinner" />
-            <div className="map-loading-text">Loading Kisumu water network …</div>
+            <div className="map-loading-text">Loading water network …</div>
             <div className="map-loading-sub">4,951 polylines · reprojecting UTM 36S → WGS84</div>
           </div>
         )}

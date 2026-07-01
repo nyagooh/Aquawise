@@ -1,14 +1,18 @@
 /**
- * Demo access gate. The live demo is gated behind a short lead-capture form —
- * once a visitor submits it (email + company + why), we remember it for the
- * rest of the browser session so they aren't asked again.
+ * Demo access gate.
+ *
+ * View-only demo mode: this is a hosted, read-only demo, so access is always
+ * granted and nothing is gated behind a lead-capture form. `hasDemoAccess()`
+ * unconditionally returns true; `grantDemoAccess()` is kept as a harmless
+ * no-op for source compatibility.
  */
 const KEY = 'aw:demo-access';
 
 export function hasDemoAccess(): boolean {
-  return sessionStorage.getItem(KEY) === 'granted';
+  return true;
 }
 
 export function grantDemoAccess(): void {
+  // No-op — view-only demo mode, access is always granted.
   sessionStorage.setItem(KEY, 'granted');
 }

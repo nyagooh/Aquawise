@@ -2134,7 +2134,7 @@ button { font-family: inherit; }
 }
 
 /* ============================================================
-   Real Kisumu network map — controls, legend, asset markers
+   Real Riverton network map — controls, legend, asset markers
    ============================================================ */
 .gis-canvas--real .leaflet-control-zoom {
   margin-left: var(--s4) !important;

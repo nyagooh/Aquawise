@@ -1,5 +1,5 @@
 """
-Development seed script — loads the Kisumu shapefile as a test network.
+Development seed script — loads the Riverton shapefile as a test network.
 
 Usage:
     python manage.py shell < scripts/seed_dev.py
@@ -14,8 +14,8 @@ django.setup()
 from apps.core.models import Organisation, CustomUser, Project
 
 org, _ = Organisation.objects.get_or_create(
-    slug="kiwasco-kisumu",
-    defaults={"name": "KIWASCO — Kisumu Water & Sewerage", "country": "Kenya", "city": "Kisumu", "timezone": "Africa/Nairobi"},
+    slug="riverton-riverton",
+    defaults={"name": "Riverton — Riverton Water & Sanitation Co.", "country": "Kenya", "city": "Riverton", "timezone": "Africa/Nairobi"},
 )
 print(f"Organisation: {org}")
 
@@ -32,10 +32,10 @@ else:
 
 project, _ = Project.objects.get_or_create(
     organisation=org,
-    name="Kisumu Water Network 2024",
+    name="Riverton Water Network 2024",
     defaults={"description": "4,947 pipe segments, 790 km, imported from shapefile", "created_by": user},
 )
 print(f"Project: {project}")
 print("\nDev data seeded. Next steps:")
-print("  1. Upload the Kisumu shapefile to /api/v1/networks/upload/")
+print("  1. Upload the Riverton shapefile to /api/v1/networks/upload/")
 print("  2. Check validation report at /api/v1/networks/<id>/validate/")

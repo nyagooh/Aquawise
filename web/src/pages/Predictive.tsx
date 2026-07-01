@@ -62,7 +62,7 @@ export default function Predictive() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'var(--s4)' }}>
         <Insight tone="danger" title="Nitrate spike predicted" body="Nairobi Water nitrate likely to remain above WHO 50 mg/L for the next 4–7 days. Recommend immediate investigation." />
-        <Insight tone="warning" title="E. coli clearance expected" body="Kisumu Water E. coli predicted to return to 0 CFU/100 mL within 3 days after Free Chlorine residual is restored above 0.2 mg/L." />
+        <Insight tone="warning" title="E. coli clearance expected" body="Riverton Water E. coli predicted to return to 0 CFU/100 mL within 3 days after Free Chlorine residual is restored above 0.2 mg/L." />
         <Insight tone="safe" title="Network stable" body="5 of 8 utilities forecast to remain within all WHO thresholds for the full 14-day period." />
         <Insight tone="info" title="Seasonal pattern detected" body="Model identifies PET (evapotranspiration) as the top seasonal predictor for nitrate levels across the Tana basin." />
       </div>

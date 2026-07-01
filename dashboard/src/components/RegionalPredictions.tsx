@@ -50,7 +50,7 @@ export default function RegionalPredictions({ selectedRegion }: Props) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Water Quality Predictions</h2>
-          <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">7-day contamination forecast · Kisumu region</p>
+          <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">7-day contamination forecast · Riverton region</p>
         </div>
         <span className="text-sm font-medium text-txt-muted dark:text-txt-dark-muted bg-surface-subtle dark:bg-surface-subtle-dark px-3 py-1.5 rounded-lg">{regions.length} {regions.length === 1 ? 'area' : 'areas'}</span>
       </div>

@@ -61,7 +61,7 @@ Vercel hosts the **frontend** (this `GIS/` folder). When importing the repo:
 | Output Directory  | `dist`               |
 
 `vercel.json` already rewrites all routes to `index.html` for client-side
-routing. The bundled Kisumu demo (map, dashboard, sensors) works with **no
+routing. The bundled Riverton demo (map, dashboard, sensors) works with **no
 backend** — its data is static in `public/data/`.
 
 The **file upload** and **demo-request / Book a Walkthrough** features call the

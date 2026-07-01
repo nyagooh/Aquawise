@@ -68,7 +68,7 @@ const Unify: React.FC = () => {
     <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 300)}}>
       <div className="brand-intro"><Img src={LOGO_LOCKUP} className="logo-lockup" alt="AquaWise"/><span>One platform for the whole network.</span></div>
       <div className="upload-chips" style={{opacity: chips}}><span>Asset records</span><span>GIS data</span><span>Maintenance</span><span>Hydraulic models</span><b>Unified ✓</b></div>
-      <AppStage frame={frame}><AppFrame active="dashboard" title="Operations Dashboard" sub="Kisumu Water Network · 3,233 segments · 716 km"><DashboardView/></AppFrame></AppStage>
+      <AppStage frame={frame}><AppFrame active="dashboard" title="Operations Dashboard" sub="Riverton Water Network · 3,233 segments · 716 km"><DashboardView/></AppFrame></AppStage>
       {frame > 110 && <Caption>Bring it all together — instantly.</Caption>}
     </AbsoluteFill>
   );
@@ -109,7 +109,7 @@ const SeeNetwork: React.FC = () => {
   const panel = sp(frame, 150, {damping: 18, stiffness: 95});
   return (
     <AbsoluteFill className="scene navy" style={{opacity: fade(frame, 330)}}>
-      <AppStage frame={frame} flush><AppFrame active="gis" title="GIS Map" sub="Kisumu Water Supply Network · live operational view" flush><GISWorkspace dash={frame * 4}/></AppFrame></AppStage>
+      <AppStage frame={frame} flush><AppFrame active="gis" title="GIS Map" sub="Riverton Water Supply Network · live operational view" flush><GISWorkspace dash={frame * 4}/></AppFrame></AppStage>
       <div className="float-card" style={{opacity: panel, transform: `translateX(${80 - panel * 80}px)`}}><AssetPanel/></div>
       {frame > 60 && <Caption>From the whole network down to one critical asset.</Caption>}
     </AbsoluteFill>

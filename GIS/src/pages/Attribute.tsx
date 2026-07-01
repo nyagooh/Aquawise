@@ -1,6 +1,6 @@
 /**
- * Attribute Table — Excel-style view of the Kisumu shapefile .dbf, served from
- * /data/kisumu-pipes-attributes.csv. Row N matches polyline N in the .shp.
+ * Attribute Table — Excel-style view of the Riverton shapefile .dbf, served from
+ * /data/riverton-pipes-attributes.csv. Row N matches polyline N in the .shp.
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Shell } from '../components/Shell';
@@ -54,7 +54,7 @@ export default function Attribute() {
 
   useEffect(() => {
     let alive = true;
-    fetch('/data/kisumu-pipes-attributes.csv')
+    fetch('/data/riverton-pipes-attributes.csv')
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); })
       .then(text => {
         if (!alive) return;
@@ -80,7 +80,7 @@ export default function Attribute() {
   const sub = err
     ? `Failed to load attribute table — ${err}`
     : rows.length
-      ? `${rows.length.toLocaleString()} records · ${headers.length} fields · from Kisumu water supply network.dbf`
+      ? `${rows.length.toLocaleString()} records · ${headers.length} fields · from Riverton water supply network.dbf`
       : 'Loading attribute table…';
 
   return (
@@ -121,8 +121,8 @@ export default function Attribute() {
               style={btnStyle(page >= totalPages - 1)}
             >Next →</button>
             <a
-              href="/data/kisumu-pipes-attributes.csv"
-              download="kisumu-pipes-attributes.csv"
+              href="/data/riverton-pipes-attributes.csv"
+              download="riverton-pipes-attributes.csv"
               style={{ ...btnStyle(false), textDecoration: 'none', display: 'inline-block' }}
             >Download CSV</a>
           </div>

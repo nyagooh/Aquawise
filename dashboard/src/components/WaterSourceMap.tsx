@@ -21,7 +21,7 @@ export default function WaterSourceMap({ selectedRegion }: Props) {
             <h2 className="text-lg font-bold text-txt dark:text-txt-dark">Monitoring Stations</h2>
             <ArrowUpRight size={14} className="text-txt-muted dark:text-txt-dark-muted" />
           </div>
-          <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">{stations.length} station{stations.length !== 1 ? 's' : ''} · Kisumu</p>
+          <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">{stations.length} station{stations.length !== 1 ? 's' : ''} · Riverton</p>
         </div>
         <div className="flex gap-4">
           {(['safe', 'warning', 'danger'] as const).map(r => {

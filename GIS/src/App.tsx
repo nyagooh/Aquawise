@@ -1,7 +1,6 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing';
 import DemoHub from './pages/DemoHub';
-import RequestDemo from './pages/RequestDemo';
 import Dashboard from './pages/Dashboard';
 import GISMap from './pages/GISMap';
 import Alerts from './pages/Alerts';
@@ -15,9 +14,10 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Landing />} />
-      <Route path="/request-demo" element={<RequestDemo />} />
+      {/* View-only demo: lead-capture gate and data upload are disabled — redirect to the open demo. */}
+      <Route path="/request-demo" element={<Navigate to="/demo" replace />} />
       <Route path="/demo" element={<DemoHub />} />
-      <Route path="/demo/upload" element={<DemoHub />} />
+      <Route path="/demo/upload" element={<Navigate to="/demo" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
       <Route path="/gis" element={<GISMap />} />
       <Route path="/alerts" element={<Alerts />} />

@@ -93,7 +93,7 @@ function Dashboard() {
                       <p className="text-sm text-txt-secondary dark:text-txt-dark-secondary">Regions Monitored</p>
                     </div>
                     <p className="text-2xl font-extrabold text-txt dark:text-txt-dark">{totalRegions}</p>
-                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Kisumu sub-regions</p>
+                    <p className="text-xs text-txt-muted dark:text-txt-dark-muted mt-1">Riverton sub-regions</p>
                   </div>
 
                   <div className="card px-6 py-5">
@@ -195,7 +195,7 @@ function Dashboard() {
             )}
 
             <footer className="pb-6 text-center text-xs text-txt-muted dark:text-txt-dark-muted">
-              Uhai WashWise · Water Quality Intelligence · Kisumu, Kenya
+              Uhai WashWise · Water Quality Intelligence · Riverton, Kenya
             </footer>
           </div>
         </main>

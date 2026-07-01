@@ -92,7 +92,7 @@ class Command(BaseCommand):
             ('a2', '07:15 AM',  'Ahero Irrigation Canal', 'r2', 'Nitrates',      '11.2 mg/L', 'warning', 'Increased monitoring at Ahero canal'),
             ('a3', '06:30 AM',  'Kibos River Point',      'r4', 'pH Level',      '8.8 pH',    'warning', 'Treatment chemicals adjusted at Kibos'),
             ('a4', 'Yesterday', 'Dunga Beach Station',    'r1', 'Temperature',   '31.2 °C',   'warning', 'Resolved — temperature normalised at Dunga'),
-            ('a5', 'Yesterday', 'Nyalenda Wetland',       'r3', 'E. coli (Sim)', 'Detected',  'danger',  'Source isolated, samples sent to KIWASCO lab'),
+            ('a5', 'Yesterday', 'Nyalenda Wetland',       'r3', 'E. coli (Sim)', 'Detected',  'danger',  'Source isolated, samples sent to Riverton lab'),
         ]
         for aid, time_label, source, rid, param, value, risk, action in alerts_data:
             Alert.objects.update_or_create(
@@ -119,7 +119,7 @@ class Command(BaseCommand):
              'Kibos River conditions are favourable. Industrial discharge from sugar factories within acceptable limits.',
              [('Mon',25),('Tue',22),('Wed',20),('Thu',18),('Fri',15),('Sat',16),('Sun',14)]),
             ('r5', 31, 'warning', 'stable',  22, 'pH Level',
-             'Moderate pH fluctuations detected at Kondele water points. Pipe corrosion under investigation by KIWASCO.',
+             'Moderate pH fluctuations detected at Kondele water points. Pipe corrosion under investigation by Riverton.',
              [('Mon',28),('Tue',31),('Wed',33),('Thu',30),('Fri',29),('Sat',32),('Sun',30)]),
         ]
         for rid, score, level, next_risk, prob, concern, text, forecast in preds_data:

@@ -1553,36 +1553,36 @@
 159.262710,,,,75,159.263,0.0,0.1,OPEN,PVC,MIL,01.2020,3.00,Distribution Main,2019,In service,Ok,,Major,159.25
 126.042314,,,,50,126.042,0.0,0.1,OPEN,PVC,MIL,01.2020,3.00,Distribution Main,2019,In service,Ok,,Minor,126.03
 38.5048724,,,,150,38.505,0.0,0.1,OPEN,Steel,OBA,01.2020,6.00,Distribution Main,2018,In service,Tank outlets,,Major,38.50
-682.357962,,,,40,682.358,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2019,In service,KIWASCO OBA,,Minor,682.31
-20.6981913,,,,100,20.698,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,20.70
-78.1703424,,,,75,78.170,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,78.16
-1034.47890,,,,40,1034.479,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,KIWASCO OBA,,Minor,1034.40
-612.450743,,,,20,612.451,0.0,0.1,OPEN,HDPE,OBA,01.2020,0.75,Service line,2019,In service,KIWASCO OBA,,Minor,612.41
-239.160179,,,,75,239.160,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,239.14
-295.741877,,,,50,295.742,0.0,0.1,OPEN,HDPE,OBA,01.2020,2.00,Distribution Main,2018,In service,KIWASCO OBA,,Minor,295.72
-241.363780,,,,100,241.364,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,241.34
-675.460917,,,,40,675.461,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,KIWASCO OBA,,Minor,675.41
-335.228521,,,,100,335.229,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,335.20
-1318.48671,,,,40,1318.487,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,KIWASCO OBA,,Minor,1318.38
-318.843283,,,,40,318.843,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,KIWASCO OBA,,Minor,318.82
-129.925254,,,,25,129.925,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,KIWASCO OBA,,Minor,129.91
-168.474654,,,,25,168.475,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,KIWASCO OBA,,Minor,168.46
+682.357962,,,,40,682.358,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2019,In service,Riverton OBA,,Minor,682.31
+20.6981913,,,,100,20.698,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,20.70
+78.1703424,,,,75,78.170,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,Riverton OBA,,Major,78.16
+1034.47890,,,,40,1034.479,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,Riverton OBA,,Minor,1034.40
+612.450743,,,,20,612.451,0.0,0.1,OPEN,HDPE,OBA,01.2020,0.75,Service line,2019,In service,Riverton OBA,,Minor,612.41
+239.160179,,,,75,239.160,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,Riverton OBA,,Major,239.14
+295.741877,,,,50,295.742,0.0,0.1,OPEN,HDPE,OBA,01.2020,2.00,Distribution Main,2018,In service,Riverton OBA,,Minor,295.72
+241.363780,,,,100,241.364,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,241.34
+675.460917,,,,40,675.461,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,Riverton OBA,,Minor,675.41
+335.228521,,,,100,335.229,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,335.20
+1318.48671,,,,40,1318.487,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,Riverton OBA,,Minor,1318.38
+318.843283,,,,40,318.843,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,Riverton OBA,,Minor,318.82
+129.925254,,,,25,129.925,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,Riverton OBA,,Minor,129.91
+168.474654,,,,25,168.475,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,Riverton OBA,,Minor,168.46
 271.085624,,,,20,271.086,0.0,0.1,OPEN,PPR,OBA,01.2020,0.75,Service line,2019,In service,,,Minor,271.06
 179.056396,,,,25,179.056,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,,,Minor,179.04
 177.889270,,,,20,177.889,0.0,0.1,OPEN,PPR,OBA,01.2020,0.75,Service line,2019,In service,,,Minor,177.88
-571.672245,,,,100,571.672,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,571.63
+571.672245,,,,100,571.672,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,571.63
 133.227268,,,,50,133.227,0.0,0.1,OPEN,HDPE,OBA,01.2020,2.00,Distribution Main,2019,In service,,,Minor,133.22
 670.800085,,,,25,670.800,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.00,Distribution Main,2019,In service,,,Minor,670.75
-1125.57990,,,,100,1125.580,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,1125.49
-1052.41357,,,,50,1052.414,0.0,0.1,OPEN,HDPE,OBA,01.2020,2.00,Distribution Main,2018,In service,KIWASCO OBA,,Minor,1052.33
-1203.30832,,,,75,1386.342,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,1386.23
-260.287353,,,,100,260.287,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,KIWASCO OBA,,Major,260.27
-861.992328,,,,40,861.992,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,KIWASCO OBA,,Minor,861.92
+1125.57990,,,,100,1125.580,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,1125.49
+1052.41357,,,,50,1052.414,0.0,0.1,OPEN,HDPE,OBA,01.2020,2.00,Distribution Main,2018,In service,Riverton OBA,,Minor,1052.33
+1203.30832,,,,75,1386.342,0.0,0.1,OPEN,HDPE,OBA,01.2020,3.00,Distribution Main,2018,In service,Riverton OBA,,Major,1386.23
+260.287353,,,,100,260.287,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,In service,Riverton OBA,,Major,260.27
+861.992328,,,,40,861.992,0.0,0.1,OPEN,HDPE,OBA,01.2020,1.50,Distribution Main,2018,In service,Riverton OBA,,Minor,861.92
 4.80137695,,,,150,4.801,0.0,0.1,OPEN,Steel,OBA,01.2020,6.00,Distribution Main,2018,In service,Tank outlets,,Major,4.80
-3074.84171,,,,200,3074.842,0.0,0.1,OPEN,Steel,OBA,01.2020,8.00,Rising main,2018,In service,KIWASCO OBA,,Major,3074.60
-5.73572813,,,,100,5.736,0.0,0.1,OPEN,Steel,OBA,01.2020,4.00,Rising main,2018,In service,KIWASCO OBA,,Major,5.74
+3074.84171,,,,200,3074.842,0.0,0.1,OPEN,Steel,OBA,01.2020,8.00,Rising main,2018,In service,Riverton OBA,,Major,3074.60
+5.73572813,,,,100,5.736,0.0,0.1,OPEN,Steel,OBA,01.2020,4.00,Rising main,2018,In service,Riverton OBA,,Major,5.74
 17.3116014,,,,100,17.312,0.0,0.1,OPEN,Steel,OBA,01.2020,4.00,Rising main,2018,In service,,,Major,17.31
-690.820117,,,,100,690.820,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,Out of service,KIWASCO OBA,,Major,690.77
+690.820117,,,,100,690.820,0.0,0.1,OPEN,HDPE,OBA,01.2020,4.00,Distribution Main,2018,Out of service,Riverton OBA,,Major,690.77
 27.3122040,,,,150,27.312,0.0,0.1,OPEN,PVC,RIAT C,01.2020,6.00,Distribution Main,2018,In service,,,Major,27.31
 3.02435146,,,,150,3.024,0.0,0.1,OPEN,PVC,RIAT C,01.2020,6.00,Distribution Main,2018,In service,,,Major,3.02
 461.489691,,,,225,461.490,0.0,0.1,OPEN,PVC,RIAT C,01.2020,9.00,Distribution Main,2018,In service,,,Major,461.46

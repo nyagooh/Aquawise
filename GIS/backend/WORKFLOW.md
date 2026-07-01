@@ -334,7 +334,7 @@ backend/
 │
 ├── tests/
 │   ├── fixtures/
-│   │   └── kisumu_network.zip   ← integration test shapefile
+│   │   └── riverton_network.zip   ← integration test shapefile
 │   ├── test_networks.py
 │   ├── test_hydraulics.py
 │   ├── test_sensors.py
@@ -345,7 +345,7 @@ backend/
 │   └── docker-compose.yml
 │
 ├── scripts/
-│   └── seed_dev.py         ← loads Kisumu shapefile for local dev
+│   └── seed_dev.py         ← loads Riverton shapefile for local dev
 │
 ├── requirements/
 │   ├── base.txt
@@ -375,4 +375,4 @@ backend/
 9. Engineers and ops staff log in → see their data, no other org's data
 ```
 
-This flow works identically whether the utility is in Kisumu (Kenya), Nairobi, Dar es Salaam, Lagos, or anywhere else — the platform is fully location-agnostic.
+This flow works identically whether the utility is in Riverton (Kenya), Nairobi, Dar es Salaam, Lagos, or anywhere else — the platform is fully location-agnostic.

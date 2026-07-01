@@ -61,7 +61,7 @@ export const UTILITIES: Utility[] = [
     readings: { ph: 7.4, turbidity: 1.4, ecoli: 0, totalColiforms: 1, freeChlorine: 0.5, nitrate: 12.1, fluoride: 0.5, iron: 0.09, manganese: 0.02, conductivity: 520, tds: 290, pressure: 3.8, level: 64, temperature: 24.1 },
   },
   {
-    id: 'kisumu', name: 'Kisumu Water', county: 'Kisumu', lat: -0.092, lng: 34.768,
+    id: 'riverton', name: 'Riverton Water', county: 'Riverton', lat: -0.092, lng: 34.768,
     sensorId: 'ESP32-KSM-007', battery: 67, installed: '21 Feb 2024', lastUpdate: '18 min ago',
     status: 'warning',
     readings: { ph: 7.8, turbidity: 0.9, ecoli: 12, totalColiforms: 24, freeChlorine: 0.18, nitrate: 8.4, fluoride: 0.6, iron: 0.18, manganese: 0.05, conductivity: 580, tds: 320, pressure: 3.4, level: 52, temperature: 26.7 },
@@ -117,7 +117,7 @@ export const ALERTS: Alert[] = [
   { id: 'ALT-2024-0187', utilityId: 'nairobi', parameter: 'nitrate', value: 78.3, threshold: 50,
     severity: 'danger', title: 'Nitrate exceeds WHO limit',
     description: '78.3 mg/L detected (WHO ≤ 50 mg/L)', triggered: '2 min ago', resolved: null },
-  { id: 'ALT-2024-0186', utilityId: 'kisumu', parameter: 'ecoli', value: 12, threshold: 0,
+  { id: 'ALT-2024-0186', utilityId: 'riverton', parameter: 'ecoli', value: 12, threshold: 0,
     severity: 'warning', title: 'E. coli detected in distribution',
     description: '12 CFU/100 mL (WHO 0 / 100 mL)', triggered: '18 min ago', resolved: null },
   { id: 'ALT-2024-0185', utilityId: 'thika', parameter: 'turbidity', value: 1.4, threshold: 1,

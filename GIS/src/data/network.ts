@@ -1,11 +1,11 @@
 /**
- * Network data loader — fetches the real Kisumu shapefile (converted to
+ * Network data loader — fetches the real Riverton shapefile (converted to
  * GeoJSON by scripts/shapefile_to_geojson.py) and exposes typed accessors.
  *
  * Files served as static assets from /public/data/:
- *   - kisumu-pipes.geojson    (3,233 polylines, classified with ui_class)
- *   - kisumu-assets.geojson   (synthesized point telemetry overlay)
- *   - kisumu-meta.json        (rich aggregates: km by class/zone/material,
+ *   - riverton-pipes.geojson    (3,233 polylines, classified with ui_class)
+ *   - riverton-assets.geojson   (synthesized point telemetry overlay)
+ *   - riverton-meta.json        (rich aggregates: km by class/zone/material,
  *                              status counts, age/diameter distribution, bbox)
  */
 
@@ -143,12 +143,12 @@ export function loadNetwork(): Promise<NetworkData> {
     const base = (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL ?? '/';
     const url = (path: string) => `${base.replace(/\/$/, '')}/data/${path}`;
     const [pipesRes, assetsRes, metaRes] = await Promise.all([
-      fetch(url('kisumu-pipes.geojson')),
-      fetch(url('kisumu-assets.geojson')),
-      fetch(url('kisumu-meta.json'))
+      fetch(url('riverton-pipes.geojson')),
+      fetch(url('riverton-assets.geojson')),
+      fetch(url('riverton-meta.json'))
     ]);
     if (!pipesRes.ok || !assetsRes.ok || !metaRes.ok) {
-      throw new Error('Failed to load Kisumu network dataset.');
+      throw new Error('Failed to load Riverton network dataset.');
     }
     const pipesFc = await pipesRes.json();
     const assetsFc = await assetsRes.json();
@@ -228,7 +228,7 @@ export function loadUploadedNetwork(): NetworkData | null {
 }
 
 /**
- * Real Kisumu telemetry covers flow + pressure only. Water utilities also
+ * Real Riverton telemetry covers flow + pressure only. Water utilities also
  * monitor water-quality sensors (pH, turbidity) at reservoirs and key
  * distribution points — we synthesize a representative set here so the
  * Sensors page can demo them alongside the real flow/pressure nodes.
@@ -384,30 +384,33 @@ export const ASSET_STYLE: Record<AssetKind, {
   shortLabel: string;
   description: string;
 }> = {
+  // Each asset kind is a distinct category — give it its own hue so icons
+  // read apart from the blue (#1FA2FF) pipe network and from each other.
+  // Status semantics (green/amber/red) stay on the separate status dot.
   tank: {
-    color: '#1FA2FF',          // shiny blue — reservoir / tank node
-    ring: '#BFDBFE',
+    color: '#8B5CF6',          // violet — reservoir / tank node
+    ring: '#DDD6FE',
     label: 'Reservoir / tank',
     shortLabel: 'Reservoirs',
     description: 'Reservoir level-sensor telemetry'
   },
   pressure_valve: {
-    color: '#1FA2FF',          // shiny blue — pressure valve
-    ring: '#BFE5FF',
+    color: '#14B8A6',          // teal — pressure valve
+    ring: '#99F6E4',
     label: 'Valve (PRV)',
     shortLabel: 'Valves',
     description: 'Pressure-reducing valve · live drift'
   },
   meter_valve: {
-    color: '#1FA2FF',          // shiny blue — bulk meter / pump
-    ring: '#BFE5FF',
+    color: '#EC4899',          // magenta — bulk meter / pump
+    ring: '#FBCFE8',
     label: 'Meter / pump',
     shortLabel: 'Meters',
     description: 'Consumption-metered valve assembly'
   },
   sensor: {
-    color: '#1FA2FF',          // shiny blue — sensor node (telemetry)
-    ring: '#BFE5FF',
+    color: '#F97316',          // orange — sensor node (telemetry)
+    ring: '#FED7AA',
     label: 'Flow + pressure sensor',
     shortLabel: 'Sensors',
     description: 'Live flow & pressure telemetry node'
@@ -435,15 +438,15 @@ export const MATERIAL_TINT: Record<string, string> = {
 
 /** Zone display names (curated). Falls back to raw key for unknowns. */
 export const ZONE_LABELS: Record<string, string> = {
-  MIL: 'Milimani',
-  MYT: 'Mamboleo · Tom Mboya',
-  KREKAJ: 'Kibos · Kajulu',
-  CBD: 'Central Business District',
-  ME: 'Manyatta East',
-  OBA: 'Obaria',
-  KRE: 'Kibos',
-  'RIAT C': 'Riat Centre',
-  MTY: 'Mamboleo (legacy)',
+  MIL: 'Riverside',
+  MYT: 'Northgate',
+  KREKAJ: 'East Meadows',
+  CBD: 'Downtown Central',
+  ME: 'Millbrook East',
+  OBA: 'Westhaven',
+  KRE: 'Millwood',
+  'RIAT C': 'Hillcrest',
+  MTY: 'Northgate (legacy)',
   HDPE: 'Unclassified',
   CDD: 'Unclassified'
 };

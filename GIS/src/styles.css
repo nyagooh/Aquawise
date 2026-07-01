@@ -2140,7 +2140,7 @@ button { font-family: inherit; }
 }
 
 /* ============================================================
-   Real Kisumu network map — controls, legend, asset markers
+   Real Riverton network map — controls, legend, asset markers
    ============================================================ */
 .gis-canvas--real .leaflet-control-zoom {
   margin-left: var(--s4) !important;
@@ -3004,18 +3004,6 @@ button { font-family: inherit; }
   overflow: hidden;
 }
 .ops-kpi:disabled { cursor: default; }
-.ops-kpi::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: hsl(var(--primary));
-  opacity: 0.85;
-}
-.ops-kpi.tone-safe::before    { background: hsl(var(--safe)); }
-.ops-kpi.tone-warn::before    { background: hsl(var(--warning)); }
-.ops-kpi.tone-danger::before  { background: hsl(var(--danger)); }
-.ops-kpi.tone-info::before    { background: hsl(var(--info)); }
 .ops-kpi:hover:not(:disabled) { border-color: hsl(var(--primary) / 0.5); transform: translateY(-1px); }
 
 .ops-kpi-label {
@@ -4350,3 +4338,22 @@ button { font-family: inherit; }
   .demo-hub-pill { display: none; }
   .landing-nav .btn-lg { padding: 8px 14px; font-size: 0.8125rem; }
 }
+
+/* ── App footer (view-only demo contact strip) ── */
+.app-footer {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 14px 24px;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.5;
+}
+.app-footer-contact { flex: 1 1 auto; min-width: 0; }
+.app-footer a { color: inherit; text-decoration: none; }
+.app-footer a:hover { color: hsl(var(--foreground)); text-decoration: underline; }
+.app-footer-copy { flex: 0 0 auto; opacity: 0.8; }

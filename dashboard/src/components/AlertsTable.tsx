@@ -39,7 +39,7 @@ export default function AlertsTable({ selectedRegion }: Props) {
             <ArrowUpRight size={14} className="text-txt-muted dark:text-txt-dark-muted" />
           </div>
           <p className="text-sm text-txt-muted dark:text-txt-dark-muted mt-0.5">
-            {regionAlerts.length} alert{regionAlerts.length !== 1 ? 's' : ''}{selectedRegion !== 'all' ? ' in this region' : ' · Kisumu stations'}
+            {regionAlerts.length} alert{regionAlerts.length !== 1 ? 's' : ''}{selectedRegion !== 'all' ? ' in this region' : ' · Riverton stations'}
           </p>
         </div>
         <div className="hidden sm:flex gap-1.5">

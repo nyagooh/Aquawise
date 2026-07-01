@@ -1,6 +1,6 @@
 # Uhai WashWise
 
-A real-time water quality monitoring dashboard for Kisumu, Kenya. Built to help water operators and communities track contamination risk, sensor readings, and safety alerts across five sub-regions near key water bodies.
+A real-time water quality monitoring dashboard for Riverton, Kenya. Built to help water operators and communities track contamination risk, sensor readings, and safety alerts across five sub-regions near key water bodies.
 
 ![Dashboard Preview](Uhaiwashwise1_page-0001%201.png)
 
